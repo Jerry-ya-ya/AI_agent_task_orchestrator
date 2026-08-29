@@ -1,0 +1,73 @@
+{
+  "name": "ai-agent-task-orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first desktop task orchestrator for Codex CLI",
+  "main": "dist/main/electron/main.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "pnpm desktop:dev",
+    "dev:web": "concurrently --kill-others-on-fail \"cross-env ORCHESTRATOR_PORT=4317 tsx src/backend/standalone.ts\" \"ng serve --host 127.0.0.1 --port 4200\"",
+    "desktop:dev": "pnpm build:main && concurrently --kill-others-on-fail \"ng serve --host 127.0.0.1 --port 4200\" \"wait-on http://127.0.0.1:4200 && cross-env ORCHESTRATOR_DEV_URL=http://127.0.0.1:4200 electron .\"",
+    "build": "pnpm build:frontend && pnpm build:main",
+    "build:frontend": "ng build",
+    "build:main": "tsc -p tsconfig.electron.json",
+    "start": "electron .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke:electron-runtime": "cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/electron-runtime-smoke.mjs",
+    "package": "pnpm build && electron-builder --dir",
+    "dist": "pnpm build && electron-builder"
+  },
+  "dependencies": {
+    "@angular/common": "22.1.4",
+    "@angular/compiler": "22.1.4",
+    "@angular/core": "22.1.4",
+    "@angular/forms": "22.1.4",
+    "@angular/platform-browser": "22.1.4",
+    "express": "5.2.1",
+    "rxjs": "7.8.2",
+    "zod": "4.5.2",
+    "zone.js": "0.16.2"
+  },
+  "devDependencies": {
+    "@angular/build": "22.1.6",
+    "@angular/cli": "22.1.6",
+    "@angular/compiler-cli": "22.1.4",
+    "@types/express": "5.0.6",
+    "@types/node": "26.4.0",
+    "@types/supertest": "6.0.3",
+    "concurrently": "10.0.5",
+    "cross-env": "10.1.0",
+    "electron": "44.0.0",
+    "electron-builder": "26.15.3",
+    "supertest": "7.2.2",
+    "tsx": "4.23.12",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11",
+    "wait-on": "9.1.0"
+  },
+  "build": {
+    "appId": "dev.local.ai-agent-task-orchestrator",
+    "productName": "AI Agent Task Orchestrator",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

@@ -1,0 +1,485 @@
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand-block">
+      <div class="brand-mark" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div>
+        <p class="eyebrow">Local task orchestration</p>
+        <h1>Agentboard</h1>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <div class="runtime-states">
+        <div
+          class="connection-state"
+          [class.connection-state--online]="connected"
+          [title]="connected ? 'Connected to ' + apiBaseUrl : 'Backend unavailable at ' + apiBaseUrl"
+        >
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span>{{ connected ? 'Backend online' : 'Offline' }}</span>
+        </div>
+        <div
+          class="worker-state"
+          [class.worker-state--ready]="workerStatus?.agentAvailable && workerStatus.running"
+          [class.worker-state--warning]="workerStatus && (!workerStatus.agentAvailable || !workerStatus.running)"
+          [title]="workerStateTitle()"
+        >
+          <span class="worker-state__dot" aria-hidden="true"></span>
+          <span>{{ workerStateLabel() }}</span>
+        </div>
+      </div>
+      <button class="button button--quiet" type="button" (click)="openProjectEditor()">
+        New project
+      </button>
+      <button
+        class="button button--primary"
+        type="button"
+        (click)="openCreateTask()"
+        [attr.aria-describedby]="projects.length === 0 ? 'create-task-hint' : null"
+      >
+        <span aria-hidden="true">＋</span> New task
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="board-heading" aria-labelledby="board-title">
+      <div>
+        <div class="board-title-row">
+          <h2 id="board-title">Taskboard</h2>
+          <span class="task-total">{{ tasks.length }} {{ tasks.length === 1 ? 'task' : 'tasks' }}</span>
+        </div>
+        <p>
+          The worker moves one task at a time. Completed work waits in Review until you approve it.
+        </p>
+      </div>
+      <div class="project-summary">
+        <span>{{ projects.length }} {{ projects.length === 1 ? 'project' : 'projects' }}</span>
+        <span *ngIf="lastUpdated">Updated {{ lastUpdated | date: 'HH:mm:ss' }}</span>
+      </div>
+    </section>
+
+    <p id="create-task-hint" class="sr-only" *ngIf="projects.length === 0">
+      Creating a task will first prompt you to create a project.
+    </p>
+
+    <div class="alert alert--error" role="alert" *ngIf="apiError">
+      <span aria-hidden="true">!</span>
+      <p>{{ apiError }}</p>
+      <button type="button" aria-label="Dismiss error" (click)="apiError = ''">×</button>
+    </div>
+
+    <div class="alert alert--warning" role="status" *ngIf="workerWarning() as warning">
+      <span aria-hidden="true">!</span>
+      <p><strong>Worker paused.</strong> {{ warning }}</p>
+    </div>
+
+    <div class="empty-workspace" *ngIf="!loading && projects.length === 0 && tasks.length === 0">
+      <div class="empty-workspace__icon" aria-hidden="true">⌁</div>
+      <h2>Connect your first repository</h2>
+      <p>Create a project with the path to a local Git repository, then queue work for Codex.</p>
+      <button class="button button--primary" type="button" (click)="openProjectEditor()">
+        Create a project
+      </button>
+    </div>
+
+    <section class="kanban" aria-label="Task status board" [attr.aria-busy]="loading">
+      <article
+        class="kanban-column"
+        *ngFor="let column of columns"
+        [attr.data-status]="column.status"
+        [attr.aria-labelledby]="'column-' + column.status"
+      >
+        <header class="column-header">
+          <div>
+            <span class="status-indicator" aria-hidden="true"></span>
+            <h3 [id]="'column-' + column.status">{{ column.label }}</h3>
+            <span class="column-count">{{ tasksFor(column.status).length }}</span>
+          </div>
+          <p>{{ column.hint }}</p>
+        </header>
+
+        <div class="task-list">
+          <article
+            class="task-card"
+            *ngFor="let task of tasksFor(column.status); trackBy: trackTask"
+            [class.task-card--pending]="isTaskPending(task.id)"
+          >
+            <button class="task-card__main" type="button" (click)="openTaskDetail(task)">
+              <span class="task-card__topline">
+                <span class="priority" [attr.data-priority]="task.priority">
+                  <span class="priority-dot" aria-hidden="true"></span>
+                  {{ task.priority | titlecase }}
+                </span>
+                <span class="task-number">#{{ task.id }}</span>
+              </span>
+              <strong>{{ task.title }}</strong>
+              <span class="project-name" [title]="projectName(task.project_id)">
+                {{ projectName(task.project_id) }}
+              </span>
+              <span class="latest-result">
+                <span class="sr-only">Latest run result: </span>{{ latestResult(task) }}
+              </span>
+              <span class="status-chip" [attr.data-status]="task.status">
+                {{ statusLabel(task.status) }}
+              </span>
+            </button>
+
+            <div class="task-card__actions" *ngIf="task.status === 'IN_REVIEW' || task.status === 'FAILED'">
+              <button
+                *ngIf="task.status === 'IN_REVIEW'"
+                class="inline-action inline-action--approve"
+                type="button"
+                [disabled]="isTaskPending(task.id)"
+                (click)="approveTask(task, $event)"
+              >
+                {{ isTaskPending(task.id) ? 'Approving…' : 'Approve' }}
+              </button>
+              <button
+                *ngIf="task.status === 'FAILED'"
+                class="inline-action inline-action--retry"
+                type="button"
+                [disabled]="isTaskPending(task.id)"
+                (click)="retryTask(task, $event)"
+              >
+                {{ isTaskPending(task.id) ? 'Queuing…' : 'Retry' }}
+              </button>
+            </div>
+          </article>
+
+          <div class="column-empty" *ngIf="tasksFor(column.status).length === 0">
+            <span aria-hidden="true">—</span>
+            <p>No tasks</p>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+</div>
+
+<div class="toast" role="status" aria-live="polite" *ngIf="notice">{{ notice }}</div>
+
+<!-- Project editor -->
+<div class="modal" *ngIf="showProjectEditor" (click)="closeModal()">
+  <section
+    #modalSurface
+    class="modal__surface modal__surface--form"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="project-dialog-title"
+    tabindex="-1"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal__header">
+      <div>
+        <p class="eyebrow">Repository workspace</p>
+        <h2 id="project-dialog-title">Create project</h2>
+      </div>
+      <button class="icon-button" type="button" aria-label="Close project form" (click)="closeModal()">×</button>
+    </header>
+
+    <form #projectForm="ngForm" (ngSubmit)="saveProject(projectForm)" novalidate>
+      <div class="form-field">
+        <label for="project-name">Project name</label>
+        <input
+          id="project-name"
+          name="projectName"
+          type="text"
+          required
+          maxlength="120"
+          autocomplete="off"
+          [(ngModel)]="projectDraft.name"
+          #projectName="ngModel"
+        />
+        <small *ngIf="projectName.invalid && projectName.touched" class="field-error">Enter a project name.</small>
+      </div>
+
+      <div class="form-field">
+        <label for="repository-path">Repository path</label>
+        <input
+          id="repository-path"
+          name="repositoryPath"
+          type="text"
+          required
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="C:\\Projects\\my-repository"
+          [(ngModel)]="projectDraft.repository_path"
+          #repositoryPath="ngModel"
+        />
+        <small>Use an absolute path to an existing local Git repository.</small>
+        <small *ngIf="repositoryPath.invalid && repositoryPath.touched" class="field-error">Enter a repository path.</small>
+      </div>
+
+      <div class="form-field">
+        <label for="project-context">Project context <span>Optional</span></label>
+        <textarea
+          id="project-context"
+          name="projectContext"
+          rows="4"
+          maxlength="10000"
+          placeholder="Architecture notes or guidance Codex should know…"
+          [(ngModel)]="projectDraft.context"
+        ></textarea>
+      </div>
+
+      <div class="form-error" role="alert" *ngIf="apiError">{{ apiError }}</div>
+      <footer class="modal__footer">
+        <button class="button button--quiet" type="button" (click)="closeModal()">Cancel</button>
+        <button class="button button--primary" type="submit" [disabled]="saving">
+          {{ saving ? 'Creating…' : 'Create project' }}
+        </button>
+      </footer>
+    </form>
+  </section>
+</div>
+
+<!-- Task create / edit -->
+<div class="modal" *ngIf="taskEditorMode" (click)="closeModal()">
+  <section
+    #modalSurface
+    class="modal__surface modal__surface--form"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-labelledby]="'task-dialog-title'"
+    tabindex="-1"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal__header">
+      <div>
+        <p class="eyebrow">{{ taskEditorMode === 'edit' ? 'Update instructions' : 'Queue agent work' }}</p>
+        <h2 id="task-dialog-title">{{ taskEditorMode === 'edit' ? 'Edit task' : 'Create task' }}</h2>
+      </div>
+      <button class="icon-button" type="button" aria-label="Close task form" (click)="closeModal()">×</button>
+    </header>
+
+    <form #taskForm="ngForm" (ngSubmit)="saveTask(taskForm)" novalidate>
+      <div class="form-grid">
+        <div class="form-field form-field--wide">
+          <label for="task-title">Title</label>
+          <input
+            id="task-title"
+            name="taskTitle"
+            type="text"
+            required
+            maxlength="200"
+            autocomplete="off"
+            placeholder="Implement login API"
+            [(ngModel)]="taskDraft.title"
+            #taskTitle="ngModel"
+          />
+          <small *ngIf="taskTitle.invalid && taskTitle.touched" class="field-error">Enter a task title.</small>
+        </div>
+
+        <div class="form-field">
+          <label for="task-project">Project</label>
+          <select id="task-project" name="taskProject" required [(ngModel)]="taskDraft.project_id">
+            <option [ngValue]="null" disabled>Select project</option>
+            <option *ngFor="let project of projects" [ngValue]="project.id">{{ project.name }}</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="task-priority">Priority</label>
+          <select id="task-priority" name="taskPriority" required [(ngModel)]="taskDraft.priority">
+            <option *ngFor="let priority of priorities" [ngValue]="priority">{{ priority | titlecase }}</option>
+          </select>
+        </div>
+
+        <div class="form-field form-field--wide">
+          <label for="task-description">Description</label>
+          <textarea
+            id="task-description"
+            name="taskDescription"
+            rows="8"
+            maxlength="30000"
+            placeholder="Describe the outcome, constraints, and acceptance criteria…"
+            [(ngModel)]="taskDraft.description"
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="form-error" role="alert" *ngIf="apiError">{{ apiError }}</div>
+      <footer class="modal__footer">
+        <button class="button button--quiet" type="button" (click)="closeModal()">Cancel</button>
+        <button class="button button--primary" type="submit" [disabled]="saving">
+          {{ saving ? 'Saving…' : taskEditorMode === 'edit' ? 'Save changes' : 'Create task' }}
+        </button>
+      </footer>
+    </form>
+  </section>
+</div>
+
+<!-- Task detail -->
+<div class="modal" *ngIf="selectedTaskId !== null" (click)="closeModal()">
+  <section
+    #modalSurface
+    class="modal__surface modal__surface--detail"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="detail-dialog-title"
+    tabindex="-1"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal__header detail-header">
+      <div *ngIf="taskForDetail() as task">
+        <div class="detail-kicker">
+          <span class="status-chip" [attr.data-status]="task.status">{{ statusLabel(task.status) }}</span>
+          <span class="priority" [attr.data-priority]="task.priority">
+            <span class="priority-dot" aria-hidden="true"></span>{{ task.priority | titlecase }}
+          </span>
+          <span>#{{ task.id }}</span>
+        </div>
+        <h2 id="detail-dialog-title">{{ task.title }}</h2>
+        <p>{{ projectName(task.project_id) }}</p>
+      </div>
+      <div class="detail-header__actions" *ngIf="taskForDetail() as task">
+        <button
+          class="button button--quiet button--small"
+          type="button"
+          [disabled]="!canModifyTask(task)"
+          [title]="canModifyTask(task) ? 'Edit task' : 'Active tasks cannot be edited'"
+          (click)="openEditTask(task)"
+        >
+          Edit
+        </button>
+        <button
+          class="button button--danger-quiet button--small"
+          type="button"
+          [disabled]="isTaskPending(task.id) || !canModifyTask(task)"
+          [title]="canModifyTask(task) ? 'Delete task' : 'Active tasks cannot be deleted'"
+          (click)="deleteTask(task, $event)"
+        >
+          Delete
+        </button>
+        <button class="icon-button" type="button" aria-label="Close task details" (click)="closeModal()">×</button>
+      </div>
+    </header>
+
+    <div class="detail-loading" *ngIf="detailLoading && !selectedTaskDetail" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span> Loading task details…
+    </div>
+
+    <ng-container *ngIf="taskForDetail() as task">
+      <div class="detail-actions" *ngIf="task.status === 'IN_REVIEW' || task.status === 'FAILED'">
+        <div>
+          <strong>{{ task.status === 'IN_REVIEW' ? 'Agent work is ready' : 'This run needs attention' }}</strong>
+          <p>
+            {{
+              task.status === 'IN_REVIEW'
+                ? 'Inspect the changes and logs, then approve when satisfied.'
+                : 'Review the failure below before placing the task back in Todo.'
+            }}
+          </p>
+        </div>
+        <button
+          *ngIf="task.status === 'IN_REVIEW'"
+          class="button button--approve"
+          type="button"
+          [disabled]="isTaskPending(task.id)"
+          (click)="approveTask(task, $event)"
+        >
+          {{ isTaskPending(task.id) ? 'Approving…' : 'Approve task' }}
+        </button>
+        <button
+          *ngIf="task.status === 'FAILED'"
+          class="button button--retry"
+          type="button"
+          [disabled]="isTaskPending(task.id)"
+          (click)="retryTask(task, $event)"
+        >
+          {{ isTaskPending(task.id) ? 'Queuing…' : 'Retry task' }}
+        </button>
+      </div>
+
+      <div class="detail-body">
+        <div class="form-error detail-error" role="alert" *ngIf="apiError">{{ apiError }}</div>
+        <section class="detail-section" aria-labelledby="description-title">
+          <h3 id="description-title">Description</h3>
+          <p class="description-text" *ngIf="task.description; else noDescription">{{ task.description }}</p>
+          <ng-template #noDescription><p class="empty-copy">No description provided.</p></ng-template>
+        </section>
+
+        <section class="detail-section" aria-labelledby="workspace-title">
+          <h3 id="workspace-title">Workspace</h3>
+          <dl class="metadata-grid">
+            <div>
+              <dt>Branch</dt>
+              <dd><code>{{ task.branch_name || 'Assigned when claimed' }}</code></dd>
+            </div>
+            <div>
+              <dt>Worktree</dt>
+              <dd><code>{{ task.worktree_path || 'Assigned when claimed' }}</code></dd>
+            </div>
+            <div>
+              <dt>Created</dt>
+              <dd>{{ task.created_at | date: 'medium' }}</dd>
+            </div>
+            <div>
+              <dt>Last updated</dt>
+              <dd>{{ task.updated_at | date: 'medium' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="detail-section runs-section" aria-labelledby="runs-title">
+          <div class="section-title-row">
+            <h3 id="runs-title">Execution runs</h3>
+            <span *ngIf="selectedTaskDetail">{{ selectedTaskDetail.runs.length }} total</span>
+          </div>
+
+          <div class="runs-empty" *ngIf="selectedTaskDetail && selectedTaskDetail.runs.length === 0">
+            <span aria-hidden="true">›_</span>
+            <p>No runs yet. The worker will create one after claiming this task.</p>
+          </div>
+
+          <div class="runs" *ngIf="selectedTaskDetail as detail">
+            <details
+              class="run"
+              *ngFor="let run of detail.runs; let index = index; trackBy: trackRun"
+              [open]="index === 0"
+            >
+              <summary>
+                <span class="run-chevron" aria-hidden="true">›</span>
+                <span class="run-name">{{ runLabel(run, index, detail.runs.length) }}</span>
+                <span class="run-time">{{ run.started_at | date: 'medium' }}</span>
+                <span
+                  class="exit-code"
+                  [class.exit-code--success]="run.exit_code === 0"
+                  [class.exit-code--failed]="run.exit_code !== null && run.exit_code !== 0"
+                >
+                  {{ run.exit_code === null ? 'Running' : 'Exit ' + run.exit_code }}
+                </span>
+              </summary>
+
+              <div class="run-content">
+                <div class="result-summary">
+                  <span>Result</span>
+                  <p>{{ run.result_summary || 'No result summary.' }}</p>
+                </div>
+
+                <div class="log-block">
+                  <div class="log-title">
+                    <span>stdout</span>
+                    <small>{{ hasOutput(run.stdout) ? 'Captured output' : 'Empty' }}</small>
+                  </div>
+                  <pre>{{ hasOutput(run.stdout) ? run.stdout : 'No stdout captured.' }}</pre>
+                </div>
+
+                <div class="log-block log-block--stderr">
+                  <div class="log-title">
+                    <span>stderr</span>
+                    <small>{{ hasOutput(run.stderr) ? 'Captured output' : 'Empty' }}</small>
+                  </div>
+                  <pre>{{ hasOutput(run.stderr) ? run.stderr : 'No stderr captured.' }}</pre>
+                </div>
+              </div>
+            </details>
+          </div>
+        </section>
+      </div>
+    </ng-container>
+  </section>
+</div>

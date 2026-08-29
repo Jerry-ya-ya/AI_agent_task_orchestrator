@@ -1,0 +1,12 @@
+node_modules/
+dist/
+release/
+.angular/
+.data/
+.pnpm-store/
+coverage/
+*.log
+.DS_Store
+
+# Task worktrees live inside each managed repository and are intentionally local.
+.worktrees/

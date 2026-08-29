@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/app",
+    "types": [],
+    "module": "ES2022",
+    "moduleResolution": "bundler"
+  },
+  "files": [
+    "src/frontend/main.ts"
+  ],
+  "include": [
+    "src/frontend/**/*.d.ts"
+  ]
+}
