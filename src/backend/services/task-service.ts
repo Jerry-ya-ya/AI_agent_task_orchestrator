@@ -107,6 +107,24 @@ export class TaskService {
     return updated;
   }
 
+  public pause(id: number): Task {
+    this.requireTask(id);
+    const updated = this.tasks.setPaused(id, true);
+    if (updated === null) {
+      throw new ConflictError('Only an active TODO task can be paused.');
+    }
+    return updated;
+  }
+
+  public resume(id: number): Task {
+    this.requireTask(id);
+    const updated = this.tasks.setPaused(id, false);
+    if (updated === null) {
+      throw new ConflictError('Only a paused TODO task can be resumed.');
+    }
+    return updated;
+  }
+
   private requireTask(id: number): Task {
     const task = this.tasks.findById(id);
     if (task === null) {

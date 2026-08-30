@@ -14,6 +14,8 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from './api.service';
 import {
+  AgentUsage,
+  AgentUsageWindow,
   Project,
   ProjectDraft,
   SaveTaskInput,
@@ -70,6 +72,7 @@ export class AppComponent implements OnInit, OnDestroy {
   projects: Project[] = [];
   tasks: Task[] = [];
   workerStatus: WorkerStatus | null = null;
+  agentUsage: AgentUsage | null = null;
   connected = false;
   loading = true;
   saving = false;
@@ -87,9 +90,11 @@ export class AppComponent implements OnInit, OnDestroy {
   taskDraft: TaskDraft = this.emptyTaskDraft();
 
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
+  private usagePollingTimer: ReturnType<typeof setInterval> | null = null;
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
   private refreshInFlight = false;
   private healthRefreshInFlight = false;
+  private usageRefreshInFlight = false;
   private pendingTaskIds = new Set<number>();
   private restoreFocusTo: HTMLElement | null = null;
 
@@ -102,14 +107,21 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     void this.refreshBoard(false);
+    void this.refreshAgentUsage();
     this.pollingTimer = setInterval(() => {
       void this.refreshBoard(true);
     }, 2_000);
+    this.usagePollingTimer = setInterval(() => {
+      void this.refreshAgentUsage();
+    }, 60_000);
   }
 
   ngOnDestroy(): void {
     if (this.pollingTimer !== null) {
       clearInterval(this.pollingTimer);
+    }
+    if (this.usagePollingTimer !== null) {
+      clearInterval(this.usagePollingTimer);
     }
     if (this.noticeTimer !== null) {
       clearTimeout(this.noticeTimer);
@@ -320,6 +332,31 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  async toggleTaskPause(task: Task, event?: Event): Promise<void> {
+    event?.stopPropagation();
+    if (task.status !== 'TODO' || this.isTaskPending(task.id)) {
+      return;
+    }
+
+    this.setTaskPending(task.id, true);
+    this.clearError();
+    try {
+      if (task.is_paused) {
+        await firstValueFrom(this.api.resumeTask(task.id));
+        this.showNotice(`“${task.title}” resumed.`);
+      } else {
+        await firstValueFrom(this.api.pauseTask(task.id));
+        this.showNotice(`“${task.title}” paused in Todo.`);
+      }
+      await this.refreshBoard(false);
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.setTaskPending(task.id, false);
+      this.changeDetector.markForCheck();
+    }
+  }
+
   async deleteTask(task: Task, event?: Event): Promise<void> {
     event?.stopPropagation();
     if (this.isTaskPending(task.id)) {
@@ -359,6 +396,9 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   latestResult(task: Task): string {
+    if (task.status === 'TODO' && task.is_paused) {
+      return 'Paused — the worker will skip this task.';
+    }
     const summary = task.latest_run?.result_summary?.trim();
     if (summary) {
       return summary;
@@ -412,6 +452,24 @@ export class AppComponent implements OnInit, OnDestroy {
       return this.workerStatus?.message ?? '';
     }
     return this.workerStatus.agentAvailable ? '' : this.workerStatus.message;
+  }
+
+  usageWindowLabel(window: AgentUsageWindow): string {
+    if (window.windowDurationMins === null) {
+      return 'Usage window';
+    }
+    if (window.windowDurationMins >= 1_440 && window.windowDurationMins % 1_440 === 0) {
+      const days = window.windowDurationMins / 1_440;
+      return `${days}-day window`;
+    }
+    if (window.windowDurationMins >= 60 && window.windowDurationMins % 60 === 0) {
+      return `${window.windowDurationMins / 60}-hour window`;
+    }
+    return `${window.windowDurationMins}-minute window`;
+  }
+
+  usageResetDate(window: AgentUsageWindow): Date | null {
+    return window.resetsAt === null ? null : new Date(window.resetsAt * 1_000);
   }
 
   runLabel(run: TaskRun, index: number, total: number): string {
@@ -476,6 +534,29 @@ export class AppComponent implements OnInit, OnDestroy {
       this.workerStatus = null;
     } finally {
       this.healthRefreshInFlight = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  private async refreshAgentUsage(): Promise<void> {
+    if (this.usageRefreshInFlight) {
+      return;
+    }
+    this.usageRefreshInFlight = true;
+    try {
+      this.agentUsage = await firstValueFrom(this.api.getAgentUsage());
+    } catch (error: unknown) {
+      this.agentUsage = {
+        available: false,
+        planType: null,
+        primary: null,
+        secondary: null,
+        resetCredits: null,
+        checkedAt: new Date().toISOString(),
+        message: this.errorMessage(error),
+      };
+    } finally {
+      this.usageRefreshInFlight = false;
       this.changeDetector.markForCheck();
     }
   }

@@ -12,7 +12,11 @@ import type {
 import { type Clock, OrchestratorDatabase, systemClock } from './database.js';
 import { TaskRunRepository } from './task-run-repository.js';
 
-interface TaskListRow extends Task {
+interface StoredTask extends Omit<Task, 'is_paused'> {
+  is_paused: number;
+}
+
+interface TaskListRow extends StoredTask {
   project_name: string;
   run_id: number | null;
   run_task_id: number | null;
@@ -85,7 +89,7 @@ export class TaskRepository {
 
   public findById(id: number): Task | null {
     const row = this.database.connection.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-    return (row as unknown as Task | undefined) ?? null;
+    return row === undefined ? null : this.mapStoredTask(row as unknown as StoredTask);
   }
 
   public findListItemById(id: number): TaskListItem | null {
@@ -98,8 +102,8 @@ export class TaskRepository {
     const result = this.database.connection.prepare(`
       INSERT INTO tasks (
         project_id, title, description, status, priority,
-        branch_name, worktree_path, created_at, updated_at
-      ) VALUES (?, ?, ?, 'TODO', ?, NULL, NULL, ?, ?)
+        branch_name, worktree_path, is_paused, created_at, updated_at
+      ) VALUES (?, ?, ?, 'TODO', ?, NULL, NULL, 0, ?, ?)
     `).run(input.project_id, input.title, input.description, input.priority, now, now);
     return this.findById(Number(result.lastInsertRowid)) as Task;
   }
@@ -147,7 +151,7 @@ export class TaskRepository {
         SET status = 'CLAIMED', updated_at = ?
         WHERE id = (
           SELECT id FROM tasks
-          WHERE status = 'TODO'
+          WHERE status = 'TODO' AND is_paused = 0
           ORDER BY
             CASE priority
               WHEN 'URGENT' THEN 4
@@ -159,9 +163,9 @@ export class TaskRepository {
             id ASC
           LIMIT 1
         )
-        AND status = 'TODO'
+        AND status = 'TODO' AND is_paused = 0
         RETURNING *
-      `).get(now) as unknown as Task | undefined;
+      `).get(now) as unknown as StoredTask | undefined;
 
       if (row === undefined) {
         return null;
@@ -171,8 +175,16 @@ export class TaskRepository {
         .prepare('SELECT * FROM projects WHERE id = ?')
         .get(row.project_id) as unknown as Project;
       const run = this.runs.create(row.id);
-      return { ...row, project, run_id: run.id };
+      return { ...this.mapStoredTask(row), project, run_id: run.id };
     });
+  }
+
+  public setPaused(id: number, paused: boolean): Task | null {
+    const result = this.database.connection.prepare(`
+      UPDATE tasks SET is_paused = ?, updated_at = ?
+      WHERE id = ? AND status = 'TODO' AND is_paused = ?
+    `).run(paused ? 1 : 0, this.clock(), id, paused ? 0 : 1);
+    return result.changes > 0 ? this.findById(id) : null;
   }
 
   public setArtifacts(
@@ -259,6 +271,10 @@ export class TaskRepository {
       result_summary: run_result_summary ?? ''
     };
 
-    return { ...task, latest_run: latestRun };
+    return { ...task, is_paused: task.is_paused === 1, latest_run: latestRun };
+  }
+
+  private mapStoredTask(task: StoredTask): Task {
+    return { ...task, is_paused: task.is_paused === 1 };
   }
 }

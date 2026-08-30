@@ -46,7 +46,8 @@ describe('TaskService state rules', () => {
       status: 'TODO',
       priority: 'MEDIUM',
       branch_name: null,
-      worktree_path: null
+      worktree_path: null,
+      is_paused: false
     });
 
     const updated = service.update(task.id, {
@@ -114,6 +115,17 @@ describe('TaskService state rules', () => {
     expect(() => service.approve(review.id)).toThrow(ConflictError);
     expect(() => service.approve(todo.id)).toThrow(ConflictError);
     expect(tasks.findById(todo.id)?.status).toBe('TODO');
+  });
+
+  it('pauses and resumes only TODO tasks', () => {
+    const task = createTask('Hold this task');
+
+    expect(service.pause(task.id).is_paused).toBe(true);
+    expect(tasks.claimNext()).toBeNull();
+    expect(() => service.pause(task.id)).toThrow(ConflictError);
+    expect(service.resume(task.id).is_paused).toBe(false);
+    expect(tasks.claimNext()?.id).toBe(task.id);
+    expect(() => service.resume(task.id)).toThrow(ConflictError);
   });
 
   it('deletes inactive tasks and reports missing task ids', () => {

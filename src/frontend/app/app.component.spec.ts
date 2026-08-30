@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ApiService } from './api.service';
 import { AppComponent } from './app.component';
-import type { Project, Task, WorkerStatus } from './models';
+import type { AgentUsage, Project, Task, WorkerStatus } from './models';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -23,11 +23,21 @@ describe('AppComponent initialization', () => {
       agentAvailable: true,
       message: 'Worker idle.'
     };
+    const usage: AgentUsage = {
+      available: true,
+      planType: 'plus',
+      primary: { remainingPercent: 75, usedPercent: 25, windowDurationMins: 300, resetsAt: null },
+      secondary: null,
+      resetCredits: 0,
+      checkedAt: '2026-08-31T00:00:00.000Z',
+      message: 'Codex usage is available.'
+    };
     const api = {
       baseUrl: 'http://127.0.0.1:4317',
       getProjects: vi.fn(() => of([project])),
       getTasks: vi.fn(() => of([task])),
-      getHealth: vi.fn(() => of({ ok: true, worker }))
+      getHealth: vi.fn(() => of({ ok: true, worker })),
+      getAgentUsage: vi.fn(() => of(usage))
     } as unknown as ApiService;
     const markForCheck = vi.fn();
     const changeDetector = { markForCheck } as unknown as ChangeDetectorRef;
@@ -42,6 +52,7 @@ describe('AppComponent initialization', () => {
       expect(component.projects).toEqual([project]);
       expect(component.tasks).toEqual([task]);
       expect(component.workerStatus).toEqual(worker);
+      expect(component.agentUsage).toEqual(usage);
       expect(component.loading).toBe(false);
       expect(component.connected).toBe(true);
       expect(markForCheck).toHaveBeenCalled();
@@ -70,6 +81,7 @@ function exampleTask(): Task {
     priority: 'MEDIUM',
     branch_name: null,
     worktree_path: null,
+    is_paused: false,
     created_at: '2026-08-31T00:00:00.000Z',
     updated_at: '2026-08-31T00:00:00.000Z',
     latest_run: null

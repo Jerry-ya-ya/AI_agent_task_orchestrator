@@ -61,6 +61,41 @@
       </div>
     </section>
 
+    <section class="usage-card" aria-labelledby="usage-title">
+      <div class="usage-card__heading">
+        <div>
+          <p class="eyebrow">Codex allowance</p>
+          <h2 id="usage-title">Remaining usage</h2>
+        </div>
+        <span class="usage-plan" *ngIf="agentUsage?.planType as plan">{{ plan | titlecase }}</span>
+      </div>
+
+      <div class="usage-card__loading" *ngIf="agentUsage === null">
+        Checking Codex usage…
+      </div>
+      <div class="usage-card__unavailable" *ngIf="agentUsage && !agentUsage.available">
+        <strong>Usage unavailable</strong>
+        <span>{{ agentUsage.message }}</span>
+      </div>
+      <div class="usage-windows" *ngIf="agentUsage?.available">
+        <div class="usage-window" *ngFor="let window of [agentUsage.primary, agentUsage.secondary]">
+          <ng-container *ngIf="window">
+            <div class="usage-window__label">
+              <span>{{ usageWindowLabel(window) }}</span>
+              <strong>{{ window.remainingPercent }}% left</strong>
+            </div>
+            <div class="usage-meter" role="meter" aria-label="Codex remaining usage" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="window.remainingPercent">
+              <span [style.width.%]="window.remainingPercent"></span>
+            </div>
+            <small *ngIf="usageResetDate(window) as resetAt">Resets {{ resetAt | date: 'MMM d, HH:mm' }}</small>
+          </ng-container>
+        </div>
+        <div class="usage-reset-credits" *ngIf="agentUsage.resetCredits !== null">
+          {{ agentUsage.resetCredits }} reset {{ agentUsage.resetCredits === 1 ? 'credit' : 'credits' }} available
+        </div>
+      </div>
+    </section>
+
     <p id="create-task-hint" class="sr-only" *ngIf="projects.length === 0">
       Creating a task will first prompt you to create a project.
     </p>
@@ -122,12 +157,21 @@
               <span class="latest-result">
                 <span class="sr-only">Latest run result: </span>{{ latestResult(task) }}
               </span>
-              <span class="status-chip" [attr.data-status]="task.status">
-                {{ statusLabel(task.status) }}
+              <span class="status-chip" [attr.data-status]="task.status" [class.status-chip--paused]="task.is_paused">
+                {{ task.is_paused ? 'Paused' : statusLabel(task.status) }}
               </span>
             </button>
 
-            <div class="task-card__actions" *ngIf="task.status === 'IN_REVIEW' || task.status === 'FAILED'">
+            <div class="task-card__actions" *ngIf="task.status === 'TODO' || task.status === 'IN_REVIEW' || task.status === 'FAILED'">
+              <button
+                *ngIf="task.status === 'TODO'"
+                class="inline-action inline-action--pause"
+                type="button"
+                [disabled]="isTaskPending(task.id)"
+                (click)="toggleTaskPause(task, $event)"
+              >
+                {{ isTaskPending(task.id) ? 'Updating…' : (task.is_paused ? 'Resume' : 'Pause') }}
+              </button>
               <button
                 *ngIf="task.status === 'IN_REVIEW'"
                 class="inline-action inline-action--approve"

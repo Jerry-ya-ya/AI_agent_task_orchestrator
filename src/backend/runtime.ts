@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { CodexAgentExecutor } from './agents/codex-agent-executor.js';
+import { CodexUsageService } from './agents/codex-usage-service.js';
 import type { AgentExecutor } from './agents/agent-executor.js';
 import { createApi } from './api/create-api.js';
 import { OrchestratorDatabase } from './database/database.js';
@@ -45,6 +46,7 @@ export class OrchestratorRuntime {
     const git = options.gitService ?? new GitService(processRunner);
     const tests = options.testService ?? new TestService(processRunner);
     const agent = options.agent ?? new CodexAgentExecutor(processRunner);
+    const agentUsage = new CodexUsageService();
     const projects = new ProjectRepository(this.database);
     const runs = new TaskRunRepository(this.database);
     const tasks = new TaskRepository(this.database, runs);
@@ -58,7 +60,8 @@ export class OrchestratorRuntime {
     const api = createApi({
       projectService: this.projectService,
       taskService: this.taskService,
-      workerStatus: () => this.worker.getStatus()
+      workerStatus: () => this.worker.getStatus(),
+      agentUsage: () => agentUsage.read()
     });
     if (options.uiPath !== undefined && existsSync(options.uiPath)) {
       api.use(express.static(options.uiPath));

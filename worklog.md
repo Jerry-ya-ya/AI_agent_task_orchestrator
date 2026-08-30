@@ -7,3 +7,7 @@
 ## 2026/08/30
 
 - Build local-first AI agent task orchestrator MVP
+
+## 2026/08/31
+
+- feat: add Codex usage and pausable TODO tasks

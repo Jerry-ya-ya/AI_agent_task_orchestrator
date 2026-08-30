@@ -46,6 +46,20 @@ describe('backend API', () => {
         activeTaskId: null,
         agentAvailable: true,
         message: 'Codex CLI is available.'
+      }),
+      agentUsage: async () => ({
+        available: true,
+        planType: 'plus',
+        primary: {
+          remainingPercent: 75,
+          usedPercent: 25,
+          windowDurationMins: 300,
+          resetsAt: 1_788_108_000
+        },
+        secondary: null,
+        resetCredits: 1,
+        checkedAt: '2026-08-31T00:00:00.000Z',
+        message: 'Codex usage is available.'
       })
     });
   });
@@ -89,6 +103,15 @@ describe('backend API', () => {
     });
 
     const taskId = Number(taskResponse.body.id);
+    await request(app)
+      .post(`/tasks/${taskId}/pause`)
+      .expect(200)
+      .expect((response) => expect(response.body.is_paused).toBe(true));
+    expect(tasks.claimNext()).toBeNull();
+    await request(app)
+      .post(`/tasks/${taskId}/resume`)
+      .expect(200)
+      .expect((response) => expect(response.body.is_paused).toBe(false));
     const listResponse = await request(app)
       .get('/tasks')
       .query({ project_id: projectResponse.body.id, status: 'TODO' })
@@ -109,6 +132,10 @@ describe('backend API', () => {
       });
 
     await request(app).get(`/tasks/${taskId}/runs`).expect(200, []);
+    await request(app)
+      .get('/agent/usage')
+      .expect(200)
+      .expect((response) => expect(response.body.primary.remainingPercent).toBe(75));
     await request(app).post(`/tasks/${taskId}/retry`).expect(409);
 
     expect(tasks.transition(taskId, 'TODO', 'IN_REVIEW')).not.toBeNull();

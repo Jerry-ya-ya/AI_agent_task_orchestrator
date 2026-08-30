@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -86,6 +87,32 @@ describe('OrchestratorDatabase schema', () => {
     expect(tasks.delete(task.id)).toBe(true);
     expect(runs.listForTask(task.id)).toEqual([]);
   });
+
+  it('adds the pause flag to databases created by earlier releases', async () => {
+    const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'orchestrator-migrate-'));
+    const databasePath = path.join(temporaryRoot, 'legacy.sqlite');
+    const legacy = new DatabaseSync(databasePath);
+    legacy.exec(`
+      CREATE TABLE projects (
+        id INTEGER PRIMARY KEY, name TEXT NOT NULL, repository_path TEXT NOT NULL,
+        context TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE tasks (
+        id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, title TEXT NOT NULL,
+        description TEXT NOT NULL, status TEXT NOT NULL, priority TEXT NOT NULL,
+        branch_name TEXT, worktree_path TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+    `);
+    legacy.close();
+
+    database = new OrchestratorDatabase(databasePath);
+    const columns = database.connection.prepare('PRAGMA table_info(tasks)').all();
+
+    expect(columns.some((column) => column['name'] === 'is_paused')).toBe(true);
+    database.close();
+    database = undefined;
+    await rm(temporaryRoot, { recursive: true, force: true });
+  });
 });
 
 describe('TaskRepository.claimNext', () => {
@@ -140,14 +167,16 @@ describe('TaskRepository.claimNext', () => {
       description: '',
       priority: 'URGENT'
     });
+    firstTasks.setPaused(urgentFirst.id, true);
 
     const firstClaim = firstTasks.claimNext();
+    expect(firstClaim?.id).toBe(urgentSecond.id);
+    firstTasks.setPaused(urgentFirst.id, false);
     const secondClaim = secondTasks.claimNext();
     const thirdClaim = firstTasks.claimNext();
     const noFourthClaim = secondTasks.claimNext();
 
-    expect(firstClaim?.id).toBe(urgentFirst.id);
-    expect(secondClaim?.id).toBe(urgentSecond.id);
+    expect(secondClaim?.id).toBe(urgentFirst.id);
     expect(thirdClaim?.id).toBe(low.id);
     expect(noFourthClaim).toBeNull();
     expect(new Set([firstClaim?.id, secondClaim?.id, thirdClaim?.id]).size).toBe(3);

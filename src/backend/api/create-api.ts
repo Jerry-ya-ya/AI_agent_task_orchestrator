@@ -1,7 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z, ZodError } from 'zod';
 import { AppError } from '../domain/errors.js';
-import { TASK_PRIORITIES, TASK_STATUSES, type WorkerStatus } from '../domain/types.js';
+import { TASK_PRIORITIES, TASK_STATUSES, type AgentUsage, type WorkerStatus } from '../domain/types.js';
 import { ProjectService } from '../services/project-service.js';
 import { TaskService } from '../services/task-service.js';
 
@@ -9,6 +9,7 @@ export interface ApiDependencies {
   projectService: ProjectService;
   taskService: TaskService;
   workerStatus: () => WorkerStatus;
+  agentUsage: () => Promise<AgentUsage>;
 }
 
 const idSchema = z.coerce.number().int().positive();
@@ -57,6 +58,10 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     response.json({ ok: true, worker: dependencies.workerStatus() });
   });
 
+  app.get('/agent/usage', async (_request, response) => {
+    response.json(await dependencies.agentUsage());
+  });
+
   app.get('/projects', (_request, response) => {
     response.json(dependencies.projectService.list());
   });
@@ -103,6 +108,14 @@ export function createApi(dependencies: ApiDependencies): express.Express {
 
   app.post('/tasks/:id/approve', (request, response) => {
     response.json(dependencies.taskService.approve(idSchema.parse(request.params.id)));
+  });
+
+  app.post('/tasks/:id/pause', (request, response) => {
+    response.json(dependencies.taskService.pause(idSchema.parse(request.params.id)));
+  });
+
+  app.post('/tasks/:id/resume', (request, response) => {
+    response.json(dependencies.taskService.resume(idSchema.parse(request.params.id)));
   });
 
   app.get('/tasks/:id/runs', (request, response) => {

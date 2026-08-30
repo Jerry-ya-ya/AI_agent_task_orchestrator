@@ -42,6 +42,7 @@ export interface Task {
   priority: TaskPriority;
   branch_name: string | null;
   worktree_path: string | null;
+  is_paused: boolean;
   created_at: string;
   updated_at: string;
   latest_run: TaskRun | null;
@@ -63,6 +64,23 @@ export interface WorkerStatus {
 export interface HealthResponse {
   ok: boolean;
   worker: WorkerStatus;
+}
+
+export interface AgentUsageWindow {
+  remainingPercent: number;
+  usedPercent: number;
+  windowDurationMins: number | null;
+  resetsAt: number | null;
+}
+
+export interface AgentUsage {
+  available: boolean;
+  planType: string | null;
+  primary: AgentUsageWindow | null;
+  secondary: AgentUsageWindow | null;
+  resetCredits: number | null;
+  checkedAt: string;
+  message: string;
 }
 
 export interface CreateProjectInput {

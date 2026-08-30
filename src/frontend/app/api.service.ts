@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import {
   CreateProjectInput,
+  AgentUsage,
   HealthResponse,
   Project,
   SaveTaskInput,
@@ -58,6 +59,10 @@ export class ApiService {
     return this.http.get<HealthResponse>(`${this.baseUrl}/health`);
   }
 
+  getAgentUsage(): Observable<AgentUsage> {
+    return this.http.get<AgentUsage>(`${this.baseUrl}/agent/usage`);
+  }
+
   getProjects(): Observable<Project[]> {
     return this.http.get<Project[]>(`${this.baseUrl}/projects`);
   }
@@ -92,6 +97,14 @@ export class ApiService {
 
   retryTask(taskId: number): Observable<Task> {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry`, {});
+  }
+
+  pauseTask(taskId: number): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/pause`, {});
+  }
+
+  resumeTask(taskId: number): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/resume`, {});
   }
 
   getTaskRuns(taskId: number): Observable<TaskRun[]> {

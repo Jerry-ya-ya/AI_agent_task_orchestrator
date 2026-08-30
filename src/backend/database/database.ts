@@ -23,6 +23,7 @@ const SCHEMA = `
       CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
     branch_name TEXT,
     worktree_path TEXT,
+    is_paused INTEGER NOT NULL DEFAULT 0 CHECK (is_paused IN (0, 1)),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -72,6 +73,17 @@ export class OrchestratorDatabase {
   public migrate(): void {
     this.assertOpen();
     this.connection.exec(SCHEMA);
+    const taskColumns = this.connection.prepare('PRAGMA table_info(tasks)').all();
+    if (!taskColumns.some((column) => column['name'] === 'is_paused')) {
+      this.connection.exec(`
+        ALTER TABLE tasks
+        ADD COLUMN is_paused INTEGER NOT NULL DEFAULT 0 CHECK (is_paused IN (0, 1));
+      `);
+    }
+    this.connection.exec(`
+      CREATE INDEX IF NOT EXISTS idx_tasks_claimable
+        ON tasks(status, is_paused, priority, created_at, id);
+    `);
   }
 
   public transaction<T>(operation: () => T): T {
