@@ -9,6 +9,7 @@ import type { ProcessRunOptions, ProcessRunnerLike } from '../infra/process-runn
 import {
   CodexAgentExecutor,
   buildCodexPrompt,
+  normalizeWindowsVerificationShellFailure,
   summarizeCodexResult
 } from './codex-agent-executor.js';
 
@@ -60,6 +61,42 @@ describe('CodexAgentExecutor', () => {
     );
 
     expect(summarizeCodexResult(result)).toBe('Implemented the feature.');
+  });
+
+  it('accepts a completed file change when only Microsoft Store pwsh verification is denied', () => {
+    const result: ProcessResult = {
+      exitCode: 1,
+      stdout: [
+        JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'file_change', status: 'completed', changes: [{ path: 'hello.txt' }] }
+        }),
+        JSON.stringify({ type: 'turn.completed' })
+      ].join('\n'),
+      stderr: 'C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.5.0_x64__8wekyb3d8bbwe\\pwsh.exe: CreateProcessAsUserW failed: 5 (Access denied)',
+      timedOut: false,
+      aborted: false
+    };
+
+    expect(normalizeWindowsVerificationShellFailure(result).exitCode).toBe(0);
+  });
+
+  it('does not hide a failed Codex turn even after a completed file change', () => {
+    const result: ProcessResult = {
+      exitCode: 1,
+      stdout: [
+        JSON.stringify({
+          type: 'item.completed',
+          item: { type: 'file_change', status: 'completed', changes: [{ path: 'hello.txt' }] }
+        }),
+        JSON.stringify({ type: 'turn.failed', error: { message: 'Agent failed.' } })
+      ].join('\n'),
+      stderr: 'C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.5.0_x64__8wekyb3d8bbwe\\pwsh.exe: CreateProcessAsUserW failed: 5 (Access denied)',
+      timedOut: false,
+      aborted: false
+    };
+
+    expect(normalizeWindowsVerificationShellFailure(result).exitCode).toBe(1);
   });
 
   it('checks CLI authentication without running an agent', async () => {

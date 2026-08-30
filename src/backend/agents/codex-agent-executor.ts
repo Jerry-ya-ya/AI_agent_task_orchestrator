@@ -125,9 +125,10 @@ export class CodexAgentExecutor implements AgentExecutor {
       };
     }
 
+    const normalizedResult = normalizeWindowsVerificationShellFailure(result);
     return {
-      ...result,
-      summary: summarizeCodexResult(result)
+      ...normalizedResult,
+      summary: summarizeCodexResult(normalizedResult)
     };
   }
 
@@ -219,6 +220,51 @@ export function summarizeCodexResult(result: ProcessResult): string {
     finalAgentMessage ??
     `Codex exited with code ${result.exitCode}.`;
   return truncateSummary(`Codex failed (exit code ${result.exitCode}): ${detail}`);
+}
+
+/**
+ * Codex can finish a file edit and its turn, then fail to launch the Microsoft
+ * Store PowerShell alias for a final read-only verification under the native
+ * Windows sandbox. Recover only that exact terminal condition; timeouts,
+ * cancellations, failed turns, agent errors, and ordinary command failures
+ * retain their original non-zero exit code.
+ */
+export function normalizeWindowsVerificationShellFailure(result: ProcessResult): ProcessResult {
+  if (
+    result.exitCode === 0 ||
+    result.timedOut ||
+    result.aborted ||
+    !isMicrosoftStorePwshAccessDenied(result.stderr)
+  ) {
+    return result;
+  }
+
+  const events = parseJsonLines(result.stdout);
+  const turnCompleted = events.some((event) => stringField(event, 'type') === 'turn.completed');
+  const terminalFailure = events.some((event) => {
+    const type = stringField(event, 'type');
+    return type === 'turn.failed' || type === 'error';
+  });
+  const completedFileChange = events.some((event) => {
+    if (stringField(event, 'type') !== 'item.completed') {
+      return false;
+    }
+    const item = recordField(event, 'item');
+    return item !== undefined &&
+      stringField(item, 'type') === 'file_change' &&
+      stringField(item, 'status') === 'completed';
+  });
+
+  return turnCompleted && completedFileChange && !terminalFailure
+    ? { ...result, exitCode: 0 }
+    : result;
+}
+
+function isMicrosoftStorePwshAccessDenied(stderr: string): boolean {
+  const normalized = stderr.replaceAll('/', '\\').toLowerCase();
+  return normalized.includes('\\program files\\windowsapps\\microsoft.powershell_') &&
+    normalized.includes('\\pwsh.exe') &&
+    normalized.includes('createprocessasuserw failed: 5');
 }
 
 function parseJsonLines(output: string): Record<string, unknown>[] {

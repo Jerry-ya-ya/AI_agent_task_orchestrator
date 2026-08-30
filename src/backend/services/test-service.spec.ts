@@ -34,7 +34,8 @@ describe('TestService', () => {
     expect(result.exitCode).toBe(0);
     if (process.platform === 'win32') {
       expect(path.basename(runner.lastOptions?.command ?? '').toLowerCase()).toBe('cmd.exe');
-      expect(runner.lastOptions?.args?.at(-1)).toContain('pnpm.cmd');
+      const windowsCommandLine = (runner.lastOptions?.args?.at(-1) ?? '').toLowerCase();
+      expect(windowsCommandLine).toContain('pnpm.cmd');
       expect(runner.lastOptions?.args?.at(-1)).toContain('--watch=false');
     } else {
       expect(runner.lastOptions?.command).toBe('pnpm');
