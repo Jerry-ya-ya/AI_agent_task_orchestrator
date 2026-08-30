@@ -1,4 +1,4 @@
-import { appendFile, lstat, mkdir, readFile, realpath, stat } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import { ConflictError, ValidationError } from '../domain/errors.js';
@@ -7,18 +7,16 @@ import { ProcessRunner, type ProcessRunnerLike } from '../infra/process-runner.j
 
 const GIT_TIMEOUT_MS = 60_000;
 const GIT_OUTPUT_LIMIT_BYTES = 1024 * 1024;
-const LOCAL_WORKTREE_EXCLUDE = '/.worktrees/';
+const AGENT_BRANCH_PATTERN = /^agent\//u;
 
-export interface PreparedWorktree {
+export interface PreparedBranch {
   branchName: string;
-  worktreePath: string;
+  workspacePath: string;
+  originalBranch: string;
 }
 
 export class GitCommandError extends Error {
-  public constructor(
-    message: string,
-    public readonly result: ProcessResult
-  ) {
+  public constructor(message: string, public readonly result: ProcessResult) {
     super(message);
     this.name = 'GitCommandError';
   }
@@ -27,11 +25,7 @@ export class GitCommandError extends Error {
 export class GitService {
   public constructor(private readonly processRunner: ProcessRunnerLike = new ProcessRunner()) {}
 
-  /** Resolves a user-selected directory to the canonical root of a non-bare Git worktree. */
-  public async validateRepository(
-    repositoryPath: string,
-    signal?: AbortSignal
-  ): Promise<string> {
+  public async validateRepository(repositoryPath: string, signal?: AbortSignal): Promise<string> {
     if (repositoryPath.trim().length === 0 || repositoryPath.includes('\0')) {
       throw new ValidationError('Repository path is required.');
     }
@@ -51,22 +45,12 @@ export class GitService {
       throw new ValidationError(`Repository path does not exist or cannot be read: ${requestedPath}`);
     }
 
-    const insideResult = await this.runGit(
-      canonicalPath,
-      ['rev-parse', '--is-inside-work-tree'],
-      signal,
-      true
-    );
+    const insideResult = await this.runGit(canonicalPath, ['rev-parse', '--is-inside-work-tree'], signal, true);
     if (insideResult.exitCode !== 0 || insideResult.stdout.trim() !== 'true') {
       throw new ValidationError(`Path is not a Git working tree: ${canonicalPath}`);
     }
 
-    const rootResult = await this.runGit(
-      canonicalPath,
-      ['rev-parse', '--show-toplevel'],
-      signal,
-      true
-    );
+    const rootResult = await this.runGit(canonicalPath, ['rev-parse', '--show-toplevel'], signal, true);
     if (rootResult.exitCode !== 0) {
       throw new ValidationError(`Unable to find the Git repository root: ${formatFailure(rootResult)}`);
     }
@@ -78,143 +62,119 @@ export class GitService {
     }
   }
 
-  /**
-   * Creates a task branch and linked worktree without checking out or modifying
-   * the repository's current branch. A retry reuses only an exact, safe match.
-   */
-  public async prepareWorktree(
+  /** Checks out a deterministic task branch. Retries reuse an existing branch. */
+  public async prepareBranch(
     task: Task,
     repositoryPath: string,
     signal?: AbortSignal
-  ): Promise<PreparedWorktree> {
+  ): Promise<PreparedBranch> {
     const repositoryRoot = await this.validateRepository(repositoryPath, signal);
-    const identifiers = deriveIdentifiers(task, repositoryRoot);
+    const branchName = deriveBranchName(task);
+    await this.requireCleanCheckout(repositoryRoot, signal);
 
-    await this.ensureLocalWorktreesAreExcluded(repositoryRoot, signal);
-    await ensureSafeWorktreeContainer(path.dirname(identifiers.worktreePath));
-
-    if (await pathExists(identifiers.worktreePath)) {
-      await this.validateExistingWorktree(
-        repositoryRoot,
-        identifiers.worktreePath,
-        identifiers.branchName,
-        signal
-      );
-      return identifiers;
-    }
-
-    const registrations = await this.listWorktrees(repositoryRoot, signal);
-    const registeredBranch = registrations.find(
-      (entry) => entry.branchName === identifiers.branchName
-    );
-    if (registeredBranch !== undefined) {
+    const originalBranch = await this.currentBranch(repositoryRoot, signal);
+    if (AGENT_BRANCH_PATTERN.test(originalBranch)) {
       throw new ConflictError(
-        `Branch ${identifiers.branchName} is already checked out at ${registeredBranch.worktreePath}.`
+        `Repository is already on agent branch ${originalBranch}. Check out its base branch before running the Worker.`
       );
     }
 
-    const registeredPath = registrations.find((entry) =>
-      samePath(entry.worktreePath, identifiers.worktreePath)
-    );
-    if (registeredPath !== undefined) {
-      throw new ConflictError(
-        `Git still has ${identifiers.worktreePath} registered for ${registeredPath.branchName ?? 'a detached HEAD'}.`
-      );
-    }
-
-    const branchExists = await this.localBranchExists(
+    const branchExists = await this.localBranchExists(repositoryRoot, branchName, signal);
+    const switched = await this.runGit(
       repositoryRoot,
-      identifiers.branchName,
-      signal
-    );
-    const args = branchExists
-      ? ['worktree', 'add', identifiers.worktreePath, identifiers.branchName]
-      : [
-          'worktree',
-          'add',
-          '-b',
-          identifiers.branchName,
-          identifiers.worktreePath,
-          'HEAD'
-        ];
-
-    const result = await this.runGit(repositoryRoot, args, signal, true);
-    if (result.exitCode !== 0) {
-      throw new GitCommandError(
-        `Unable to create worktree for ${identifiers.branchName}: ${formatFailure(result)}`,
-        result
-      );
-    }
-
-    await this.validateExistingWorktree(
-      repositoryRoot,
-      identifiers.worktreePath,
-      identifiers.branchName,
-      signal
-    );
-    return identifiers;
-  }
-
-  /** Alias retained for composition code that uses the longer operation name. */
-  public async prepareTaskWorktree(
-    task: Task,
-    repositoryPath: string,
-    signal?: AbortSignal
-  ): Promise<PreparedWorktree> {
-    return await this.prepareWorktree(task, repositoryPath, signal);
-  }
-
-  private async validateExistingWorktree(
-    repositoryRoot: string,
-    worktreePath: string,
-    branchName: string,
-    signal?: AbortSignal
-  ): Promise<void> {
-    const metadata = await lstat(worktreePath);
-    if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
-      throw new ConflictError(`Expected worktree path is not a real directory: ${worktreePath}`);
-    }
-
-    const canonicalWorktree = await realpath(worktreePath);
-    const topLevel = await this.runGit(
-      canonicalWorktree,
-      ['rev-parse', '--show-toplevel'],
+      branchExists ? ['switch', branchName] : ['switch', '-c', branchName],
       signal,
       true
     );
-    if (topLevel.exitCode !== 0) {
-      throw new ConflictError(`Existing path is not a Git worktree: ${worktreePath}`);
+    if (switched.exitCode !== 0) {
+      throw new GitCommandError(`Unable to check out task branch ${branchName}: ${formatFailure(switched)}`, switched);
     }
 
-    let canonicalTopLevel: string;
-    try {
-      canonicalTopLevel = await realpath(path.resolve(topLevel.stdout.trim()));
-    } catch {
-      throw new ConflictError(`Existing worktree root cannot be resolved: ${worktreePath}`);
-    }
-    if (!samePath(canonicalTopLevel, canonicalWorktree)) {
-      throw new ConflictError(`Existing path is nested inside a different Git worktree: ${worktreePath}`);
+    if (await this.currentBranch(repositoryRoot, signal) !== branchName) {
+      throw new ConflictError(`Git did not check out the expected task branch ${branchName}.`);
     }
 
-    const branch = await this.runGit(
-      canonicalWorktree,
+    return { branchName, workspacePath: repositoryRoot, originalBranch };
+  }
+
+  /** Checkpoints task changes locally and restores the branch active before the task. */
+  public async completeBranch(prepared: PreparedBranch, taskId: number): Promise<boolean> {
+    const currentBranch = await this.currentBranch(prepared.workspacePath);
+    if (currentBranch !== prepared.branchName) {
+      throw new ConflictError(
+        `Cannot finalize task branch ${prepared.branchName}; repository is on ${currentBranch}.`
+      );
+    }
+
+    const statusResult = await this.runGit(
+      prepared.workspacePath,
+      ['status', '--porcelain=v1', '--untracked-files=all'],
+      undefined,
+      false
+    );
+    const hasChanges = statusResult.stdout.trim().length > 0;
+
+    if (hasChanges) {
+      await this.runGit(prepared.workspacePath, ['add', '--all'], undefined, false);
+      const commit = await this.runGit(
+        prepared.workspacePath,
+        [
+          '-c', 'user.name=AI Agent Task Orchestrator',
+          '-c', 'user.email=agent@localhost',
+          'commit', '-m', `chore(agent): checkpoint task #${taskId}`
+        ],
+        undefined,
+        true
+      );
+      if (commit.exitCode !== 0) {
+        throw new GitCommandError(
+          `Unable to checkpoint task branch ${prepared.branchName}: ${formatFailure(commit)}`,
+          commit
+        );
+      }
+    }
+
+    const restored = await this.runGit(
+      prepared.workspacePath,
+      ['switch', prepared.originalBranch],
+      undefined,
+      true
+    );
+    if (restored.exitCode !== 0) {
+      throw new GitCommandError(
+        `Task branch was saved, but Git could not restore ${prepared.originalBranch}: ${formatFailure(restored)}`,
+        restored
+      );
+    }
+    return hasChanges;
+  }
+
+  private async requireCleanCheckout(repositoryRoot: string, signal?: AbortSignal): Promise<void> {
+    const result = await this.runGit(
+      repositoryRoot,
+      ['status', '--porcelain=v1', '--untracked-files=all'],
+      signal,
+      false
+    );
+    if (result.stdout.trim().length > 0) {
+      throw new ConflictError(
+        'Repository has uncommitted changes. Commit, stash, or discard them before the Worker switches branches.'
+      );
+    }
+  }
+
+  private async currentBranch(repositoryRoot: string, signal?: AbortSignal): Promise<string> {
+    const result = await this.runGit(
+      repositoryRoot,
       ['symbolic-ref', '--quiet', '--short', 'HEAD'],
       signal,
       true
     );
-    if (branch.exitCode !== 0 || branch.stdout.trim() !== branchName) {
-      throw new ConflictError(
-        `Existing worktree is not on the expected branch ${branchName}: ${worktreePath}`
-      );
+    const branch = result.stdout.trim();
+    if (result.exitCode !== 0 || branch.length === 0) {
+      throw new ConflictError('Repository must be on a named branch; detached HEAD is not supported.');
     }
-
-    const [sourceCommonDir, worktreeCommonDir] = await Promise.all([
-      this.getCommonGitDirectory(repositoryRoot, signal),
-      this.getCommonGitDirectory(canonicalWorktree, signal)
-    ]);
-    if (!samePath(sourceCommonDir, worktreeCommonDir)) {
-      throw new ConflictError(`Existing worktree belongs to a different Git repository: ${worktreePath}`);
-    }
+    return branch;
   }
 
   private async localBranchExists(
@@ -228,86 +188,9 @@ export class GitService {
       signal,
       true
     );
-    if (result.exitCode === 0) {
-      return true;
-    }
-    if (result.exitCode === 1) {
-      return false;
-    }
+    if (result.exitCode === 0) return true;
+    if (result.exitCode === 1) return false;
     throw new GitCommandError(`Unable to inspect branch ${branchName}: ${formatFailure(result)}`, result);
-  }
-
-  private async listWorktrees(
-    repositoryRoot: string,
-    signal?: AbortSignal
-  ): Promise<WorktreeRegistration[]> {
-    const result = await this.runGit(
-      repositoryRoot,
-      ['-c', 'core.quotePath=false', 'worktree', 'list', '--porcelain', '-z'],
-      signal,
-      true
-    );
-    if (result.exitCode !== 0) {
-      throw new GitCommandError(`Unable to list Git worktrees: ${formatFailure(result)}`, result);
-    }
-
-    return parseWorktreeList(result.stdout);
-  }
-
-  private async ensureLocalWorktreesAreExcluded(
-    repositoryRoot: string,
-    signal?: AbortSignal
-  ): Promise<void> {
-    const commonDirectory = await this.getCommonGitDirectory(repositoryRoot, signal);
-    const infoDirectory = path.join(commonDirectory, 'info');
-    const excludePath = path.join(infoDirectory, 'exclude');
-    await mkdir(infoDirectory, { recursive: true });
-
-    let existing = '';
-    try {
-      existing = await readFile(excludePath, 'utf8');
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'ENOENT') {
-        throw error;
-      }
-    }
-
-    const hasEntry = existing
-      .split(/\r?\n/u)
-      .map((line) => line.trim())
-      .includes(LOCAL_WORKTREE_EXCLUDE);
-    if (hasEntry) {
-      return;
-    }
-
-    const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-    await appendFile(excludePath, `${prefix}${LOCAL_WORKTREE_EXCLUDE}\n`, 'utf8');
-  }
-
-  private async getCommonGitDirectory(
-    repositoryRoot: string,
-    signal?: AbortSignal
-  ): Promise<string> {
-    const result = await this.runGit(
-      repositoryRoot,
-      ['rev-parse', '--git-common-dir'],
-      signal,
-      true
-    );
-    if (result.exitCode !== 0) {
-      throw new GitCommandError(`Unable to locate Git metadata: ${formatFailure(result)}`, result);
-    }
-
-    const rawPath = result.stdout.trim();
-    const resolvedPath = path.isAbsolute(rawPath)
-      ? path.resolve(rawPath)
-      : path.resolve(repositoryRoot, rawPath);
-    try {
-      return await realpath(resolvedPath);
-    } catch {
-      throw new ValidationError('Git common directory cannot be read.');
-    }
   }
 
   private async runGit(
@@ -323,12 +206,8 @@ export class GitService {
       signal,
       timeoutMs: GIT_TIMEOUT_MS,
       maxOutputBytes: GIT_OUTPUT_LIMIT_BYTES,
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: '0'
-      }
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
     });
-
     if (!allowFailure && result.exitCode !== 0) {
       throw new GitCommandError(`Git command failed: ${formatFailure(result)}`, result);
     }
@@ -348,107 +227,24 @@ export function slugifyTaskTitle(title: string): string {
   return slug.length > 0 ? slug : 'task';
 }
 
-function deriveIdentifiers(task: Task, repositoryRoot: string): PreparedWorktree {
+function deriveBranchName(task: Task): string {
   if (!Number.isSafeInteger(task.id) || task.id <= 0) {
-    throw new ValidationError('Task must have a positive integer id before preparing a worktree.');
+    throw new ValidationError('Task must have a positive integer id before preparing a branch.');
   }
-
-  const defaultBranchName = `agent/${task.id}-${slugifyTaskTitle(task.title)}`;
-  const branchName = task.branch_name ?? defaultBranchName;
-  const branchPattern = new RegExp(`^agent/${task.id}-([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)$`, 'u');
-  const match = branchPattern.exec(branchName);
-  if (match === null) {
+  const branchName = task.branch_name ?? `agent/${task.id}-${slugifyTaskTitle(task.title)}`;
+  const branchPattern = new RegExp(
+    `^agent/${task.id}-([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)$`,
+    'u'
+  );
+  if (!branchPattern.test(branchName)) {
     throw new ValidationError(`Task branch is not a safe orchestrator branch: ${branchName}`);
   }
-
-  const suffix = `${task.id}-${match[1]}`;
-  const expectedPath = path.resolve(repositoryRoot, '.worktrees', suffix);
-  ensureDescendant(repositoryRoot, expectedPath);
-
-  if (task.worktree_path !== null && !samePath(path.resolve(task.worktree_path), expectedPath)) {
-    throw new ValidationError('Task worktree path does not match its safe branch identifier.');
-  }
-
-  return { branchName, worktreePath: expectedPath };
-}
-
-function ensureDescendant(parentPath: string, candidatePath: string): void {
-  const relative = path.relative(parentPath, candidatePath);
-  if (relative === '' || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    throw new ValidationError('Task worktree path must remain inside the repository.');
-  }
-}
-
-async function ensureSafeWorktreeContainer(containerPath: string): Promise<void> {
-  try {
-    const metadata = await lstat(containerPath);
-    if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
-      throw new ValidationError(`Worktree container must be a real directory: ${containerPath}`);
-    }
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== 'ENOENT') {
-      throw error;
-    }
-    await mkdir(containerPath, { recursive: false });
-  }
-}
-
-interface WorktreeRegistration {
-  worktreePath: string;
-  branchName: string | null;
-}
-
-function parseWorktreeList(output: string): WorktreeRegistration[] {
-  const registrations: WorktreeRegistration[] = [];
-  const blocks = output.includes('\0')
-    ? output.split('\0\0')
-    : output.trim().split(/\r?\n\r?\n/u);
-  for (const block of blocks) {
-    if (block.trim().length === 0) {
-      continue;
-    }
-    const lines = block.split(output.includes('\0') ? '\0' : /\r?\n/u);
-    const worktreeLine = lines.find((line) => line.startsWith('worktree '));
-    if (worktreeLine === undefined) {
-      continue;
-    }
-    const branchLine = lines.find((line) => line.startsWith('branch refs/heads/'));
-    registrations.push({
-      worktreePath: path.resolve(worktreeLine.slice('worktree '.length)),
-      branchName: branchLine?.slice('branch refs/heads/'.length) ?? null
-    });
-  }
-  return registrations;
-}
-
-async function pathExists(candidatePath: string): Promise<boolean> {
-  try {
-    await lstat(candidatePath);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return false;
-    }
-    throw error;
-  }
-}
-
-function samePath(first: string, second: string): boolean {
-  const normalizedFirst = path.normalize(first);
-  const normalizedSecond = path.normalize(second);
-  return process.platform === 'win32'
-    ? normalizedFirst.toLowerCase() === normalizedSecond.toLowerCase()
-    : normalizedFirst === normalizedSecond;
+  return branchName;
 }
 
 function formatFailure(result: ProcessResult): string {
-  if (result.timedOut) {
-    return 'operation timed out';
-  }
-  if (result.aborted) {
-    return 'operation was cancelled';
-  }
+  if (result.timedOut) return 'operation timed out';
+  if (result.aborted) return 'operation was cancelled';
   const detail = result.stderr.trim() || result.stdout.trim();
   return detail.length > 0 ? detail : `git exited with code ${result.exitCode}`;
 }

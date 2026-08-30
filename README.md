@@ -1,6 +1,6 @@
 # AI Agent Task Orchestrator
 
-A local-first desktop MVP that queues coding tasks, gives each task an isolated Git branch/worktree, runs Codex CLI, executes a detected project test command, and leaves successful work in `IN_REVIEW` until a person approves it.
+A local-first desktop MVP that queues coding tasks, runs each one on an isolated Git branch, executes Codex CLI and a detected project test command, and leaves successful work in `IN_REVIEW` until a person approves it.
 
 ## Stack
 
@@ -69,17 +69,16 @@ For a production-UI browser smoke test, set `ORCHESTRATOR_UI_PATH=dist/frontend/
 2. Optionally add project context for Codex.
 3. Create one or more Tasks and set priority.
 4. Leave the desktop app running. The Worker claims one `TODO` task at a time in `URGENT`, `HIGH`, `MEDIUM`, `LOW` order, then oldest first.
-5. Open task cards to inspect branch, worktree, result, stdout, stderr, and all run attempts.
+5. Open task cards to inspect branch, workspace, result, stdout, stderr, and all run attempts.
 6. Approve an `IN_REVIEW` task to move it to `DONE`, or retry a `FAILED` task after reviewing its logs.
 
-For task `101` titled `Login API`, the generated Git locations are:
+For task `101` titled `Login API`, the generated branch is:
 
 ```text
 agent/101-login-api
-<repository>/.worktrees/101-login-api
 ```
 
-Retries reuse and verify the existing task branch/worktree. The application never checks out, modifies, merges, or pushes the repository's main branch.
+The sequential Worker requires a clean repository, creates or reuses the task branch, runs Codex and tests in the configured repository, checkpoints task changes on that branch, and restores the original branch. It never merges or pushes automatically.
 
 ## Test detection
 
@@ -105,6 +104,6 @@ Automated tests do not invoke real Codex or consume an authenticated session.
 - Project repositories are trusted local code: their test suite executes locally.
 - Codex runs with workspace-write sandboxing and approval policy `never`; it receives the prompt over stdin.
 - Logs are capped by the process runner before they are persisted.
-- Deleting an inactive task removes its database record and run history but deliberately leaves any Git branch/worktree intact to avoid destroying work.
-- Approval changes state only; it does not merge, commit, push, or open a pull request.
+- Deleting an inactive task removes its database record and run history but deliberately leaves its Git branch intact to avoid destroying work.
+- Approval changes state only; it does not merge, push, or open a pull request.
 - No accounts, cloud sync, LAN binding, multi-user features, parallel workers, DAGs, notifications, remote access, or GitHub automation are included.

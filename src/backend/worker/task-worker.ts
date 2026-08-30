@@ -130,50 +130,62 @@ export class TaskWorker {
     let summary = 'Task pipeline failed.';
 
     try {
-      this.runs.appendOutput(claimed.run_id, '[git] Preparing isolated branch and worktree...\n', '');
-      const prepared = await this.git.prepareWorktree(claimed, claimed.project.repository_path, signal);
-      const task = this.tasks.setArtifacts(claimed.id, prepared.branchName, prepared.worktreePath);
-      if (task === null || this.tasks.transition(task.id, 'CLAIMED', 'IN_PROGRESS') === null) {
-        throw new PipelineFailure('Task state changed while preparing the worktree.', 1);
-      }
+      this.runs.appendOutput(claimed.run_id, '[git] Checking out isolated task branch...\n', '');
+      const prepared = await this.git.prepareBranch(claimed, claimed.project.repository_path, signal);
       this.runs.appendOutput(
         claimed.run_id,
-        `[git] Branch: ${prepared.branchName}\n[git] Worktree: ${prepared.worktreePath}\n`,
+        `[git] Branch: ${prepared.branchName}\n[git] Workspace: ${prepared.workspacePath}\n`,
         ''
       );
 
-      const agentTask: Task & { project: ClaimedTask['project'] } = {
-        ...task,
-        branch_name: prepared.branchName,
-        worktree_path: prepared.worktreePath,
-        status: 'IN_PROGRESS',
-        project: claimed.project
-      };
-      const agentResult = await this.agent.execute(agentTask, prepared.worktreePath, signal);
-      this.appendAgentResult(claimed.run_id, agentResult);
-      if (agentResult.exitCode !== 0) {
-        throw new PipelineFailure(
-          agentResult.timedOut ? 'Codex execution timed out.' : 'Codex execution failed.',
-          agentResult.exitCode,
-          '',
+      let agentResult: AgentExecutionResult | undefined;
+      let testResult: TestExecutionResult | undefined;
+      try {
+        const task = this.tasks.setArtifacts(claimed.id, prepared.branchName, prepared.workspacePath);
+        if (task === null || this.tasks.transition(task.id, 'CLAIMED', 'IN_PROGRESS') === null) {
+          throw new PipelineFailure('Task state changed while preparing its branch.', 1);
+        }
+
+        const agentTask: Task & { project: ClaimedTask['project'] } = {
+          ...task,
+          branch_name: prepared.branchName,
+          worktree_path: prepared.workspacePath,
+          status: 'IN_PROGRESS',
+          project: claimed.project
+        };
+        agentResult = await this.agent.execute(agentTask, prepared.workspacePath, signal);
+        this.appendAgentResult(claimed.run_id, agentResult);
+        if (agentResult.exitCode !== 0) {
+          throw new PipelineFailure(
+            agentResult.timedOut ? 'Codex execution timed out.' : 'Codex execution failed.',
+            agentResult.exitCode
+          );
+        }
+
+        if (this.tasks.transition(claimed.id, 'IN_PROGRESS', 'TESTING') === null) {
+          throw new PipelineFailure('Task state changed before testing.', 1);
+        }
+        testResult = await this.tests.execute(prepared.workspacePath, signal);
+        this.appendTestResult(claimed.run_id, testResult);
+        if (testResult.exitCode !== 0) {
+          throw new PipelineFailure(testResult.summary || 'Project tests failed.', testResult.exitCode);
+        }
+      } finally {
+        const checkpointed = await this.git.completeBranch(prepared, claimed.id);
+        this.runs.appendOutput(
+          claimed.run_id,
+          checkpointed
+            ? `[git] Checkpointed ${prepared.branchName} and restored ${prepared.originalBranch}.\n`
+            : `[git] No file changes to checkpoint; restored ${prepared.originalBranch}.\n`,
           ''
         );
-      }
-
-      if (this.tasks.transition(claimed.id, 'IN_PROGRESS', 'TESTING') === null) {
-        throw new PipelineFailure('Task state changed before testing.', 1);
-      }
-      const testResult = await this.tests.execute(prepared.worktreePath, signal);
-      this.appendTestResult(claimed.run_id, testResult);
-      if (testResult.exitCode !== 0) {
-        throw new PipelineFailure(testResult.summary || 'Project tests failed.', testResult.exitCode);
       }
 
       if (this.tasks.transition(claimed.id, 'TESTING', 'IN_REVIEW') === null) {
         throw new PipelineFailure('Task state changed after testing.', 1);
       }
       exitCode = 0;
-      summary = agentResult.summary || testResult.summary || 'Codex completed the task and tests passed.';
+      summary = agentResult?.summary || testResult?.summary || 'Codex completed the task and tests passed.';
     } catch (error) {
       const failure = this.normalizeFailure(error, signal);
       exitCode = failure.exitCode;

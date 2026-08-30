@@ -15,36 +15,43 @@ afterEach(async () => {
 });
 
 describe('GitService', () => {
-  it('creates and idempotently reuses a task worktree without switching main', async () => {
-    const repository = await mkdtemp(path.join(tmpdir(), 'orchestrator-git-'));
-    temporaryPaths.push(repository);
-    const runner = new ProcessRunner();
-    await git(runner, repository, ['init', '-b', 'main']);
-    await git(runner, repository, ['config', 'user.name', 'Test User']);
-    await git(runner, repository, ['config', 'user.email', 'test@example.invalid']);
-    await writeFile(path.join(repository, 'README.md'), 'main\n');
-    await git(runner, repository, ['add', 'README.md']);
-    await git(runner, repository, ['commit', '-m', 'initial']);
-    const originalHead = (await git(runner, repository, ['rev-parse', 'HEAD'])).trim();
+  it('checkpoints a task branch, restores the source branch, and reuses it on retry', async () => {
+    const { repository, runner } = await temporaryRepository();
     const service = new GitService(runner);
     const task = exampleTask();
 
-    const prepared = await service.prepareWorktree(task, repository);
-    const reused = await service.prepareWorktree(
-      { ...task, branch_name: prepared.branchName, worktree_path: prepared.worktreePath },
+    const prepared = await service.prepareBranch(task, repository);
+    expect(prepared).toEqual({
+      branchName: 'agent/101-login-api-rm-rf',
+      workspacePath: await realRepositoryPath(runner, repository),
+      originalBranch: 'main'
+    });
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe(prepared.branchName);
+
+    await writeFile(path.join(repository, 'feature.txt'), 'agent result\n');
+    await expect(service.completeBranch(prepared, task.id)).resolves.toBe(true);
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
+    await expect(readFile(path.join(repository, 'feature.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await git(runner, repository, ['show', `${prepared.branchName}:feature.txt`])).trim()).toBe('agent result');
+
+    const reused = await service.prepareBranch(
+      { ...task, branch_name: prepared.branchName, worktree_path: prepared.workspacePath },
       repository
     );
+    expect(reused.branchName).toBe(prepared.branchName);
+    expect((await readFile(path.join(repository, 'feature.txt'), 'utf8')).trim()).toBe('agent result');
+    await expect(service.completeBranch(reused, task.id)).resolves.toBe(false);
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
+  });
 
-    expect(prepared).toEqual(reused);
-    expect(prepared.branchName).toBe('agent/101-login-api-rm-rf');
-    expect((await git(runner, prepared.worktreePath, ['branch', '--show-current'])).trim()).toBe(
-      prepared.branchName
+  it('refuses to switch branches when the repository has user changes', async () => {
+    const { repository, runner } = await temporaryRepository();
+    await writeFile(path.join(repository, 'notes.txt'), 'uncommitted\n');
+
+    await expect(new GitService(runner).prepareBranch(exampleTask(), repository)).rejects.toThrow(
+      'Repository has uncommitted changes'
     );
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
-    expect((await git(runner, repository, ['rev-parse', 'HEAD'])).trim()).toBe(originalHead);
-    expect(await readFile(path.join(repository, '.git', 'info', 'exclude'), 'utf8')).toContain(
-      '/.worktrees/'
-    );
   });
 
   it('turns unsafe or non-ASCII-only titles into safe deterministic slugs', () => {
@@ -53,15 +60,28 @@ describe('GitService', () => {
   });
 });
 
-async function git(
-  runner: ProcessRunner,
-  cwd: string,
-  args: readonly string[]
-): Promise<string> {
+async function temporaryRepository(): Promise<{ repository: string; runner: ProcessRunner }> {
+  const repository = await mkdtemp(path.join(tmpdir(), 'orchestrator-git-'));
+  temporaryPaths.push(repository);
+  const runner = new ProcessRunner();
+  await git(runner, repository, ['init', '-b', 'main']);
+  await writeFile(path.join(repository, 'README.md'), 'main\n');
+  await git(runner, repository, ['add', 'README.md']);
+  await git(runner, repository, [
+    '-c', 'user.name=Test User',
+    '-c', 'user.email=test@example.invalid',
+    'commit', '-m', 'initial'
+  ]);
+  return { repository, runner };
+}
+
+async function realRepositoryPath(runner: ProcessRunner, repository: string): Promise<string> {
+  return path.resolve((await git(runner, repository, ['rev-parse', '--show-toplevel'])).trim());
+}
+
+async function git(runner: ProcessRunner, cwd: string, args: readonly string[]): Promise<string> {
   const result = await runner.run({ command: 'git', args, cwd, timeoutMs: 10_000 });
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr || result.stdout);
-  }
+  if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout);
   return result.stdout;
 }
 

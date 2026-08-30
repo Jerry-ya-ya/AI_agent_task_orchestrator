@@ -13,7 +13,7 @@ import type {
   Task,
   TestExecutionResult
 } from '../domain/types.js';
-import type { GitService, PreparedWorktree } from '../services/git-service.js';
+import type { GitService, PreparedBranch } from '../services/git-service.js';
 import type { TestService } from '../services/test-service.js';
 import { TaskWorker } from './task-worker.js';
 
@@ -42,9 +42,10 @@ describe('TaskWorker', () => {
 
   it('runs the isolated pipeline and stops at IN_REVIEW rather than DONE', async () => {
     const task = createTask('Implement search');
-    const prepareWorktree = vi.fn(async (claimed: Task): Promise<PreparedWorktree> => ({
+    const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
       branchName: `agent/${claimed.id}-implement-search`,
-      worktreePath: path.resolve('fake-worktrees', String(claimed.id))
+      workspacePath: project.repository_path,
+      originalBranch: 'main'
     }));
     const executeAgent = vi.fn(async (agentTask: Task): Promise<AgentExecutionResult> => {
       expect(agentTask.status).toBe('IN_PROGRESS');
@@ -56,7 +57,7 @@ describe('TaskWorker', () => {
       expect(tasks.findById(task.id)?.status).toBe('TESTING');
       return successfulTests();
     });
-    const worker = createWorker(prepareWorktree, executeAgent, executeTests);
+    const { worker, completeBranch } = createWorker(prepareBranch, executeAgent, executeTests);
 
     await expect(worker.processNext()).resolves.toBe(true);
 
@@ -64,10 +65,10 @@ describe('TaskWorker', () => {
     expect(completed).toMatchObject({
       status: 'IN_REVIEW',
       branch_name: `agent/${task.id}-implement-search`,
-      worktree_path: path.resolve('fake-worktrees', String(task.id))
+      worktree_path: project.repository_path
     });
     expect(completed?.status).not.toBe('DONE');
-    expect(prepareWorktree).toHaveBeenCalledWith(
+    expect(prepareBranch).toHaveBeenCalledWith(
       expect.objectContaining({ id: task.id, status: 'CLAIMED' }),
       project.repository_path,
       expect.any(AbortSignal)
@@ -77,10 +78,14 @@ describe('TaskWorker', () => {
         id: task.id,
         project: expect.objectContaining({ id: project.id, context: project.context })
       }),
-      path.resolve('fake-worktrees', String(task.id)),
+      project.repository_path,
       expect.any(AbortSignal)
     );
     expect(executeTests).toHaveBeenCalledOnce();
+    expect(completeBranch).toHaveBeenCalledWith(
+      expect.objectContaining({ branchName: `agent/${task.id}-implement-search` }),
+      task.id
+    );
 
     const taskRuns = runs.listForTask(task.id);
     expect(taskRuns).toHaveLength(1);
@@ -89,7 +94,8 @@ describe('TaskWorker', () => {
       result_summary: 'Implemented search and updated its tests.'
     });
     expect(taskRuns[0]?.finished_at).not.toBeNull();
-    expect(taskRuns[0]?.stdout).toContain('[git] Preparing isolated branch and worktree...');
+    expect(taskRuns[0]?.stdout).toContain('[git] Checking out isolated task branch...');
+    expect(taskRuns[0]?.stdout).toContain('[git] Checkpointed');
     expect(taskRuns[0]?.stdout).toContain('[agent]\nAgent stdout');
     expect(taskRuns[0]?.stdout).toContain('[test] pnpm test\nTest stdout');
     expect(worker.getStatus()).toMatchObject({ busy: false, activeTaskId: null });
@@ -102,9 +108,10 @@ describe('TaskWorker', () => {
       failedAgent(23, 'Agent failed to edit the project.'),
       successfulAgent('Second task completed.')
     ];
-    const prepareWorktree = vi.fn(async (task: Task): Promise<PreparedWorktree> => ({
+    const prepareBranch = vi.fn(async (task: Task): Promise<PreparedBranch> => ({
       branchName: `agent/${task.id}-task`,
-      worktreePath: path.resolve('fake-worktrees', String(task.id))
+      workspacePath: project.repository_path,
+      originalBranch: 'main'
     }));
     const executeAgent = vi.fn(async (): Promise<AgentExecutionResult> => {
       const result = agentResults.shift();
@@ -114,7 +121,7 @@ describe('TaskWorker', () => {
       return result;
     });
     const executeTests = vi.fn(async (): Promise<TestExecutionResult> => successfulTests());
-    const worker = createWorker(prepareWorktree, executeAgent, executeTests);
+    const { worker, completeBranch } = createWorker(prepareBranch, executeAgent, executeTests);
 
     await expect(worker.processNext()).resolves.toBe(true);
     expect(tasks.findById(first.id)?.status).toBe('FAILED');
@@ -131,13 +138,15 @@ describe('TaskWorker', () => {
     expect(tasks.findById(second.id)?.status).not.toBe('DONE');
     expect(executeAgent).toHaveBeenCalledTimes(2);
     expect(executeTests).toHaveBeenCalledOnce();
+    expect(completeBranch).toHaveBeenCalledTimes(2);
   });
 
   it('marks a task FAILED when project tests fail and persists test output', async () => {
     const task = createTask('Break a test');
-    const prepareWorktree = vi.fn(async (claimed: Task): Promise<PreparedWorktree> => ({
+    const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
       branchName: `agent/${claimed.id}-break-a-test`,
-      worktreePath: path.resolve('fake-worktrees', String(claimed.id))
+      workspacePath: project.repository_path,
+      originalBranch: 'main'
     }));
     const executeAgent = vi.fn(async (): Promise<AgentExecutionResult> => successfulAgent());
     const executeTests = vi.fn(async (): Promise<TestExecutionResult> => ({
@@ -149,7 +158,7 @@ describe('TaskWorker', () => {
       summary: 'Unit tests failed.',
       commandDescription: 'pnpm test'
     }));
-    const worker = createWorker(prepareWorktree, executeAgent, executeTests);
+    const { worker, completeBranch } = createWorker(prepareBranch, executeAgent, executeTests);
 
     await expect(worker.processNext()).resolves.toBe(true);
 
@@ -159,6 +168,7 @@ describe('TaskWorker', () => {
     expect(run?.stdout).toContain('[test] pnpm test\n2 tests passed, 1 failed');
     expect(run?.stderr).toContain('[test]\nAssertionError: expected true to be false');
     expect(run?.stderr).toContain('[orchestrator] Unit tests failed.');
+    expect(completeBranch).toHaveBeenCalledOnce();
   });
 
   it('does not claim a TODO task while the configured agent is unavailable', async () => {
@@ -170,7 +180,8 @@ describe('TaskWorker', () => {
     const execute = vi.fn(async (): Promise<AgentExecutionResult> => successfulAgent());
     const agent: AgentExecutor = { checkAvailability, execute };
     const git = {
-      prepareWorktree: vi.fn()
+      prepareBranch: vi.fn(),
+      completeBranch: vi.fn()
     } as unknown as GitService;
     const tests = {
       execute: vi.fn()
@@ -198,17 +209,21 @@ describe('TaskWorker', () => {
   }
 
   function createWorker(
-    prepareWorktree: (task: Task) => Promise<PreparedWorktree>,
+    prepareBranch: (task: Task) => Promise<PreparedBranch>,
     executeAgent: (task: Task) => Promise<AgentExecutionResult>,
     executeTests: () => Promise<TestExecutionResult>
-  ): TaskWorker {
-    const git = { prepareWorktree } as unknown as GitService;
+  ): { worker: TaskWorker; completeBranch: ReturnType<typeof vi.fn> } {
+    const completeBranch = vi.fn(async () => true);
+    const git = { prepareBranch, completeBranch } as unknown as GitService;
     const agent: AgentExecutor = {
       checkAvailability: async () => ({ available: true, message: 'Codex CLI is available.' }),
       execute: executeAgent
     };
     const testService = { execute: executeTests } as unknown as TestService;
-    return new TaskWorker(tasks, runs, git, agent, testService, { pollIntervalMs: 1 });
+    return {
+      worker: new TaskWorker(tasks, runs, git, agent, testService, { pollIntervalMs: 1 }),
+      completeBranch
+    };
   }
 });
 

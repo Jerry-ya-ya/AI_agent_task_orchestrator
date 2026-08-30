@@ -83,24 +83,24 @@ describe('TaskService state rules', () => {
       context: ''
     });
     expect(tasks.transition(task.id, 'TODO', 'CLAIMED')).not.toBeNull();
-    tasks.setArtifacts(task.id, 'agent/1-prepared-task', '/example/.worktrees/1-prepared-task');
+    tasks.setArtifacts(task.id, 'agent/1-prepared-task', '/example/repository');
     expect(tasks.transition(task.id, 'CLAIMED', 'FAILED')).not.toBeNull();
 
     expect(() => service.update(task.id, { project_id: otherProject.id })).toThrow(ConflictError);
     expect(tasks.findById(task.id)?.project_id).toBe(project.id);
   });
 
-  it('retries only FAILED tasks and preserves their branch and worktree', () => {
+  it('retries only FAILED tasks and preserves their branch and workspace', () => {
     const failed = createTask('Retry me');
     expect(tasks.transition(failed.id, 'TODO', 'CLAIMED')).not.toBeNull();
-    tasks.setArtifacts(failed.id, 'agent/1-retry-me', '/example/.worktrees/1-retry-me');
+    tasks.setArtifacts(failed.id, 'agent/1-retry-me', '/example/repository');
     expect(tasks.transition(failed.id, 'CLAIMED', 'FAILED')).not.toBeNull();
 
     const retried = service.retry(failed.id);
     expect(retried).toMatchObject({
       status: 'TODO',
       branch_name: 'agent/1-retry-me',
-      worktree_path: '/example/.worktrees/1-retry-me'
+      worktree_path: '/example/repository'
     });
     expect(() => service.retry(failed.id)).toThrow(ConflictError);
   });

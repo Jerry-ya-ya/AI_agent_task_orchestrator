@@ -146,7 +146,7 @@ export function buildCodexPrompt(task: AgentTask): string {
   const description = task.description.trim() || 'No additional task description was provided.';
 
   return [
-    `You are implementing orchestrator task #${task.id} in an isolated Git worktree.`,
+    `You are implementing orchestrator task #${task.id} on an isolated Git task branch.`,
     '',
     `Project: ${projectName}`,
     'Project context:',
@@ -157,11 +157,11 @@ export function buildCodexPrompt(task: AgentTask): string {
     description,
     '',
     'Execution constraints:',
-    '- Work only inside the current worktree.',
+    '- Work only inside the current repository workspace and checked-out task branch.',
     '- Do not create, check out, switch, delete, or rewrite Git branches or worktrees.',
-    '- Do not commit, push, merge, rebase, or fetch from remotes.',
+    '- Do not commit, push, merge, rebase, or fetch from remotes; the orchestrator creates the checkpoint commit.',
     '- Do not change Git remotes or Git configuration.',
-    '- Do not modify the parent repository or its main branch.',
+    '- Do not modify, merge into, or rewrite the base branch.',
     '- Do not require interactive input or approval.',
     '- Implement the requested change completely and keep unrelated user changes intact.',
     '- Finish with a concise summary of the implementation and any checks you ran.'

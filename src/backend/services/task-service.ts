@@ -67,7 +67,7 @@ export class TaskService {
     if (input.project_id !== undefined) {
       this.requireProject(input.project_id);
       if (existing.branch_name !== null && input.project_id !== existing.project_id) {
-        throw new ConflictError('A task with an existing worktree cannot move to another project.');
+        throw new ConflictError('A task with an existing Git branch cannot move to another project.');
       }
     }
     const updated = this.tasks.update(id, {

@@ -319,7 +319,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     const confirmed = window.confirm(
-      `Delete “${task.title}”? Its database history will be removed, but any Git worktree is retained.`,
+      `Delete “${task.title}”? Its database history will be removed, but its Git branch is retained.`,
     );
     if (!confirmed) {
       return;

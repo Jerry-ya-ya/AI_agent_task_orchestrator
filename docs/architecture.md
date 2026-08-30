@@ -43,7 +43,7 @@ The renderer never launches processes or receives a generic command-execution en
 | --- | --- | --- |
 | `id` | INTEGER PK | Auto-incrementing |
 | `name` | TEXT | User-facing name |
-| `repository_path` | TEXT UNIQUE | Normalized absolute path to a validated local Git worktree |
+| `repository_path` | TEXT UNIQUE | Normalized absolute path to a validated local Git checkout |
 | `context` | TEXT | Optional instructions passed to the agent |
 | `created_at` | TEXT | UTC ISO-8601 |
 | `updated_at` | TEXT | UTC ISO-8601 |
@@ -52,14 +52,14 @@ The renderer never launches processes or receives a generic command-execution en
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | INTEGER PK | Auto-incrementing; used in branch/worktree names |
+| `id` | INTEGER PK | Auto-incrementing; used in task branch names |
 | `project_id` | INTEGER FK | References `projects(id)` |
 | `title` | TEXT | Required |
 | `description` | TEXT | Task instructions |
 | `status` | TEXT | `TODO`, `CLAIMED`, `IN_PROGRESS`, `TESTING`, `IN_REVIEW`, `DONE`, `FAILED` |
 | `priority` | TEXT | `LOW`, `MEDIUM`, `HIGH`, `URGENT` |
 | `branch_name` | TEXT | Assigned once as `agent/{id}-{slug}` |
-| `worktree_path` | TEXT | Assigned once under `<repo>/.worktrees/{id}-{slug}` |
+| `worktree_path` | TEXT | Legacy-compatible column containing the active repository workspace path |
 | `created_at` | TEXT | UTC ISO-8601 |
 | `updated_at` | TEXT | UTC ISO-8601 |
 
@@ -88,12 +88,13 @@ TODO --atomic claim--> CLAIMED --> IN_PROGRESS --> TESTING --> IN_REVIEW --appro
 
 1. In a SQLite `BEGIN IMMEDIATE` transaction, select the highest-priority oldest `TODO` task and update it to `CLAIMED` with an `UPDATE ... RETURNING` guard.
 2. Create a `TaskRun`.
-3. Validate the repository and prepare `agent/{task-id}-{slug}` plus `.worktrees/{task-id}-{slug}`. Retry reuses a valid existing branch/worktree.
-4. Persist branch/worktree fields and set `IN_PROGRESS`.
+3. Validate that the repository is clean, record its current branch, then create or reuse and check out `agent/{task-id}-{slug}`.
+4. Persist the branch/workspace fields and set `IN_PROGRESS`.
 5. Call `AgentExecutor.execute(task, workspace, signal)` with a backend-generated prompt and a timeout.
 6. On agent success, set `TESTING`; `TestService` detects a supported project type and generates a fixed executable/argument list.
-7. Test success sets `IN_REVIEW`. A missing supported test configuration is reported as a test failure rather than silently treating untested code as verified. Any Git, agent, timeout, or test failure sets `FAILED` and finalizes the run.
-8. The Worker immediately polls for the next task; review is not part of the worker loop.
+7. The backend checkpoints any file changes on the task branch and restores the original branch, whether execution succeeded or failed. It never merges or pushes.
+8. Test success sets `IN_REVIEW`. A missing supported test configuration is reported as a test failure rather than silently treating untested code as verified. Any Git, agent, timeout, or test failure sets `FAILED` and finalizes the run.
+9. The Worker immediately polls for the next task; review is not part of the worker loop.
 
 On application restart, orphaned `CLAIMED`, `IN_PROGRESS`, and `TESTING` tasks are marked `FAILED` rather than silently rerun. A user can then inspect logs and explicitly retry.
 
@@ -106,7 +107,8 @@ On application restart, orphaned `CLAIMED`, `IN_PROGRESS`, and `TESTING` tasks a
 - Project paths are canonicalized and Git-validated by the backend.
 - Git, test, and Codex executions use fixed commands plus argument arrays and never use `shell: true`.
 - Authentication remains the responsibility of the installed Codex CLI; this application stores no token or password.
-- The worker never checks out or modifies the repository's main branch. All agent work occurs in the task worktree.
+- The worker requires a clean checkout, switches to the task branch before Codex runs, checkpoints task changes there, and restores the original branch afterward.
+- The worker never merges task changes into the base branch and never pushes.
 - Approval changes only task state; it does not merge branches.
 
 ## 6. API surface
@@ -127,4 +129,4 @@ The Angular board polls `GET /tasks` so worker-driven state changes appear witho
 - One local Worker and one task at a time.
 - No automatic merge, PR, remote access, authentication, notifications, dependency graph, or cloud state.
 - Test commands are detected from known project files; arbitrary command strings are not accepted from the UI/API. A repository with no recognized test runner goes to `FAILED` for explicit review.
-- Deleting a task is blocked while it is executing. Git worktrees/branches are retained to avoid destructive loss of agent work.
+- Deleting a task is blocked while it is executing. Git task branches are retained to avoid destructive loss of agent work.
