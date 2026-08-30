@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
+  ChangeDetectorRef,
   Component,
   ElementRef,
   HostListener,
@@ -92,7 +93,10 @@ export class AppComponent implements OnInit, OnDestroy {
   private pendingTaskIds = new Set<number>();
   private restoreFocusTo: HTMLElement | null = null;
 
-  constructor(private readonly api: ApiService) {
+  constructor(
+    private readonly api: ApiService,
+    private readonly changeDetector: ChangeDetectorRef,
+  ) {
     this.apiBaseUrl = api.baseUrl;
   }
 
@@ -239,6 +243,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.setError(this.errorMessage(error));
     } finally {
       this.saving = false;
+      this.changeDetector.markForCheck();
     }
   }
 
@@ -271,6 +276,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.setError(this.errorMessage(error));
     } finally {
       this.saving = false;
+      this.changeDetector.markForCheck();
     }
   }
 
@@ -290,6 +296,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.setError(this.errorMessage(error));
     } finally {
       this.setTaskPending(task.id, false);
+      this.changeDetector.markForCheck();
     }
   }
 
@@ -309,6 +316,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.setError(this.errorMessage(error));
     } finally {
       this.setTaskPending(task.id, false);
+      this.changeDetector.markForCheck();
     }
   }
 
@@ -338,6 +346,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.setError(this.errorMessage(error));
     } finally {
       this.setTaskPending(task.id, false);
+      this.changeDetector.markForCheck();
     }
   }
 
@@ -449,6 +458,7 @@ export class AppComponent implements OnInit, OnDestroy {
     } finally {
       this.loading = false;
       this.refreshInFlight = false;
+      this.changeDetector.markForCheck();
     }
   }
 
@@ -466,6 +476,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.workerStatus = null;
     } finally {
       this.healthRefreshInFlight = false;
+      this.changeDetector.markForCheck();
     }
   }
 
@@ -487,6 +498,7 @@ export class AppComponent implements OnInit, OnDestroy {
       if (this.selectedTaskId === taskId) {
         this.detailLoading = false;
       }
+      this.changeDetector.markForCheck();
     }
   }
 
@@ -567,6 +579,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }
     this.noticeTimer = setTimeout(() => {
       this.notice = '';
+      this.changeDetector.markForCheck();
     }, 4_000);
   }
 
