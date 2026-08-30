@@ -7,6 +7,7 @@ import {
   type ProcessRunnerLike
 } from '../infra/process-runner.js';
 import type { AgentExecutor, AgentTask } from './agent-executor.js';
+import { resolveCodexCommand } from './codex-command-resolver.js';
 
 const DEFAULT_EXECUTION_TIMEOUT_MS = 30 * 60 * 1_000;
 const AVAILABILITY_TIMEOUT_MS = 15_000;
@@ -15,12 +16,14 @@ const SUMMARY_LIMIT_CHARACTERS = 4_000;
 
 export interface CodexAgentExecutorOptions {
   command?: string;
+  commandResolver?: () => Promise<string>;
   timeoutMs?: number;
   maxOutputBytes?: number;
 }
 
 export class CodexAgentExecutor implements AgentExecutor {
-  private readonly command: string;
+  private readonly configuredCommand: string | undefined;
+  private readonly commandResolver: () => Promise<string>;
   private readonly timeoutMs: number;
   private readonly maxOutputBytes: number;
 
@@ -28,15 +31,17 @@ export class CodexAgentExecutor implements AgentExecutor {
     private readonly processRunner: ProcessRunnerLike = new ProcessRunner(),
     options: CodexAgentExecutorOptions = {}
   ) {
-    this.command = options.command ?? (process.env['CODEX_BIN']?.trim() || 'codex');
+    this.configuredCommand = options.command;
+    this.commandResolver = options.commandResolver ?? resolveCodexCommand;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_EXECUTION_TIMEOUT_MS;
     this.maxOutputBytes = options.maxOutputBytes ?? AGENT_OUTPUT_LIMIT_BYTES;
   }
 
   public async checkAvailability(): Promise<AgentAvailability> {
     try {
+      const command = await this.resolveCommand();
       const result = await this.processRunner.run({
-        command: this.command,
+        command,
         args: ['login', 'status'],
         timeoutMs: AVAILABILITY_TIMEOUT_MS,
         maxOutputBytes: 256 * 1024
@@ -79,8 +84,9 @@ export class CodexAgentExecutor implements AgentExecutor {
 
     let result: ProcessResult;
     try {
+      const command = await this.resolveCommand();
       result = await this.processRunner.run({
-        command: this.command,
+        command,
         // --ask-for-approval is a global option and must precede `exec` on Codex.
         // Prompt content is deliberately supplied on stdin via the final `-`.
         args: [
@@ -123,6 +129,13 @@ export class CodexAgentExecutor implements AgentExecutor {
       ...result,
       summary: summarizeCodexResult(result)
     };
+  }
+
+  private async resolveCommand(): Promise<string> {
+    // The Windows Codex updater replaces its versioned installation directory.
+    // Resolve on every run so a long-lived desktop process never retains a path
+    // that disappeared after an automatic CLI update.
+    return this.configuredCommand ?? await this.commandResolver();
   }
 }
 

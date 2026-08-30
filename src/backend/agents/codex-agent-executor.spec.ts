@@ -23,7 +23,7 @@ describe('CodexAgentExecutor', () => {
     const workspace = await mkdtemp(path.join(tmpdir(), 'orchestrator-codex-'));
     temporaryPaths.push(workspace);
     const runner = new RecordingRunner(successResult());
-    const executor = new CodexAgentExecutor(runner);
+    const executor = new CodexAgentExecutor(runner, { command: 'codex' });
     const task = exampleTask();
 
     await executor.execute(task, workspace);
@@ -64,13 +64,27 @@ describe('CodexAgentExecutor', () => {
 
   it('checks CLI authentication without running an agent', async () => {
     const runner = new RecordingRunner(successResult('Logged in using ChatGPT'));
-    const executor = new CodexAgentExecutor(runner);
+    const executor = new CodexAgentExecutor(runner, { command: 'codex' });
 
     await expect(executor.checkAvailability()).resolves.toEqual({
       available: true,
       message: 'Logged in using ChatGPT'
     });
     expect(runner.lastOptions?.args).toEqual(['login', 'status']);
+  });
+
+  it('resolves the CLI path again after an in-place Codex update', async () => {
+    const runner = new RecordingRunner(successResult('Logged in using ChatGPT'));
+    const commands = ['C:\\Codex\\old\\codex.exe', 'C:\\Codex\\new\\codex.exe'];
+    const executor = new CodexAgentExecutor(runner, {
+      commandResolver: async () => commands.shift() ?? 'codex'
+    });
+
+    await executor.checkAvailability();
+    expect(runner.lastOptions?.command).toBe('C:\\Codex\\old\\codex.exe');
+
+    await executor.checkAvailability();
+    expect(runner.lastOptions?.command).toBe('C:\\Codex\\new\\codex.exe');
   });
 });
 
