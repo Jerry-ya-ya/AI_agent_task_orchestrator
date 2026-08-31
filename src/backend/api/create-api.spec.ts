@@ -184,8 +184,8 @@ describe('backend API', () => {
   it('only reflects explicitly allowed local UI origins', async () => {
     await request(app)
       .get('/health')
-      .set('Origin', 'http://127.0.0.1:4200')
-      .expect('Access-Control-Allow-Origin', 'http://127.0.0.1:4200')
+      .set('Origin', 'http://127.0.0.1:4300')
+      .expect('Access-Control-Allow-Origin', 'http://127.0.0.1:4300')
       .expect(200);
 
     const untrusted = await request(app)

@@ -12,3 +12,4 @@
 
 - feat: add Codex usage and pausable TODO tasks
 - feat: add completed and failed task history
+- chore: move development UI to port 4300

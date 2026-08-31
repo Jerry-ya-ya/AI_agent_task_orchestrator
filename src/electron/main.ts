@@ -81,7 +81,7 @@ async function createWindow(apiUrl: string): Promise<void> {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowedOrigins = [new URL(apiUrl).origin, 'http://127.0.0.1:4200'];
+    const allowedOrigins = [new URL(apiUrl).origin, 'http://127.0.0.1:4300'];
     if (!allowedOrigins.includes(new URL(url).origin)) {
       event.preventDefault();
     }

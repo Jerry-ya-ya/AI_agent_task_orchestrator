@@ -37,7 +37,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` builds the Electron main process, starts Angular on `127.0.0.1:4200`, starts the backend/SQLite/Worker inside Electron, and opens the desktop window.
+`pnpm dev` builds the Electron main process, starts Angular on `127.0.0.1:4300`, starts the backend/SQLite/Worker inside Electron, and opens the desktop window.
 
 For a browser-only development session:
 

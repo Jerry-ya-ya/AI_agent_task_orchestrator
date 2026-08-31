@@ -39,8 +39,8 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     const origin = request.headers.origin;
     if (
       origin === 'null' ||
-      origin === 'http://127.0.0.1:4200' ||
-      origin === 'http://localhost:4200'
+      origin === 'http://127.0.0.1:4300' ||
+      origin === 'http://localhost:4300'
     ) {
       response.setHeader('Access-Control-Allow-Origin', origin);
       response.setHeader('Vary', 'Origin');

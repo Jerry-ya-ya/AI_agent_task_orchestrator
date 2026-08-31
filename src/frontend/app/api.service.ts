@@ -37,7 +37,7 @@ export function resolveApiBaseUrl(locationRef: Location = window.location): stri
 
   const isAngularDevServer =
     (locationRef.hostname === '127.0.0.1' || locationRef.hostname === 'localhost') &&
-    locationRef.port === '4200';
+    locationRef.port === '4300';
   if (
     !isAngularDevServer &&
     locationRef.origin !== 'null' &&

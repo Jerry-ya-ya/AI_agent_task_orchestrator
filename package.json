@@ -10,8 +10,8 @@
   },
   "scripts": {
     "dev": "pnpm desktop:dev",
-    "dev:web": "concurrently --kill-others-on-fail \"cross-env ORCHESTRATOR_PORT=4317 tsx src/backend/standalone.ts\" \"ng serve --host 127.0.0.1 --port 4200\"",
-    "desktop:dev": "pnpm build:main && concurrently --kill-others-on-fail \"ng serve --host 127.0.0.1 --port 4200\" \"wait-on http://127.0.0.1:4200 && cross-env ORCHESTRATOR_DEV_URL=http://127.0.0.1:4200 electron .\"",
+    "dev:web": "concurrently --kill-others-on-fail \"cross-env ORCHESTRATOR_PORT=4317 tsx src/backend/standalone.ts\" \"ng serve --host 127.0.0.1 --port 4300\"",
+    "desktop:dev": "pnpm build:main && concurrently --kill-others-on-fail \"ng serve --host 127.0.0.1 --port 4300\" \"wait-on http://127.0.0.1:4300 && cross-env ORCHESTRATOR_DEV_URL=http://127.0.0.1:4300 electron .\"",
     "build": "pnpm build:frontend && pnpm build:main",
     "build:frontend": "ng build",
     "build:main": "tsc -p tsconfig.electron.json",
