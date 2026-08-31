@@ -155,6 +155,15 @@ export class AppComponent implements OnInit, OnDestroy {
       });
   }
 
+  taskHistory(): Task[] {
+    return this.tasks
+      .filter((task) => task.status === 'DONE' || task.status === 'FAILED')
+      .sort((left, right) => {
+        const updatedDifference = right.updated_at.localeCompare(left.updated_at);
+        return updatedDifference || right.id - left.id;
+      });
+  }
+
   projectName(projectId: number): string {
     return this.projects.find((project) => project.id === projectId)?.name ?? 'Unknown project';
   }

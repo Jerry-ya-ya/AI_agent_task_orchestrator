@@ -11,3 +11,4 @@
 ## 2026/08/31
 
 - feat: add Codex usage and pausable TODO tasks
+- feat: add completed and failed task history

@@ -58,6 +58,20 @@ describe('AppComponent initialization', () => {
       expect(markForCheck).toHaveBeenCalled();
     });
   });
+
+  it('shows only completed and failed tasks in newest-first history order', () => {
+    const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
+    const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
+    const component = new AppComponent(api, changeDetector);
+    component.tasks = [
+      exampleTask({ id: 1, status: 'DONE', updated_at: '2026-08-30T08:00:00.000Z' }),
+      exampleTask({ id: 2, status: 'TODO', updated_at: '2026-08-31T09:00:00.000Z' }),
+      exampleTask({ id: 3, status: 'FAILED', updated_at: '2026-08-31T08:00:00.000Z' }),
+      exampleTask({ id: 4, status: 'IN_REVIEW', updated_at: '2026-08-31T10:00:00.000Z' }),
+    ];
+
+    expect(component.taskHistory().map((task) => task.id)).toEqual([3, 1]);
+  });
 });
 
 function exampleProject(): Project {
@@ -71,7 +85,7 @@ function exampleProject(): Project {
   };
 }
 
-function exampleTask(): Task {
+function exampleTask(overrides: Partial<Task> = {}): Task {
   return {
     id: 7,
     project_id: 1,
@@ -84,6 +98,7 @@ function exampleTask(): Task {
     is_paused: false,
     created_at: '2026-08-31T00:00:00.000Z',
     updated_at: '2026-08-31T00:00:00.000Z',
-    latest_run: null
+    latest_run: null,
+    ...overrides
   };
 }
