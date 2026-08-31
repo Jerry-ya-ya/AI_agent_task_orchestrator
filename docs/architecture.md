@@ -91,9 +91,9 @@ TODO --atomic claim--> CLAIMED --> IN_PROGRESS --> TESTING --> IN_REVIEW --appro
 3. Validate that the repository is clean, record its current branch, then create or reuse and check out `agent/{task-id}-{slug}`.
 4. Persist the branch/workspace fields and set `IN_PROGRESS`.
 5. Call `AgentExecutor.execute(task, workspace, signal)` with a backend-generated prompt and a timeout.
-6. On agent success, set `TESTING`; `TestService` detects a supported project type and generates a fixed executable/argument list.
+6. On agent success, set `TESTING`; `TestService` prefers a recognized test command and falls back to a recognized build command, using only backend-generated executable/argument lists.
 7. The backend checkpoints any file changes on the task branch and restores the original branch, whether execution succeeded or failed. It never merges or pushes.
-8. Test success sets `IN_REVIEW`. A missing supported test configuration is reported as a test failure rather than silently treating untested code as verified. Any Git, agent, timeout, or test failure sets `FAILED` and finalizes the run.
+8. Successful verification sets `IN_REVIEW`. If neither tests nor a build are available—or a detected command cannot be started—the task still enters `IN_REVIEW` with an `UNVERIFIED` warning. Only a verification command that actually runs and returns non-zero sets `FAILED`; Git or agent pipeline failures also remain failures.
 9. The Worker immediately polls for the next task; review is not part of the worker loop.
 
 On application restart, orphaned `CLAIMED`, `IN_PROGRESS`, and `TESTING` tasks are marked `FAILED` rather than silently rerun. A user can then inspect logs and explicitly retry.

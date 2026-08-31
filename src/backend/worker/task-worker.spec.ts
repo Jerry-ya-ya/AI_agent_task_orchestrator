@@ -155,6 +155,8 @@ describe('TaskWorker', () => {
       stderr: 'AssertionError: expected true to be false\n',
       timedOut: false,
       aborted: false,
+      executed: true,
+      verificationKind: 'test',
       summary: 'Unit tests failed.',
       commandDescription: 'pnpm test'
     }));
@@ -169,6 +171,37 @@ describe('TaskWorker', () => {
     expect(run?.stderr).toContain('[test]\nAssertionError: expected true to be false');
     expect(run?.stderr).toContain('[orchestrator] Unit tests failed.');
     expect(completeBranch).toHaveBeenCalledOnce();
+  });
+
+  it('moves an unverified task to IN_REVIEW with a visible warning', async () => {
+    const task = createTask('Documentation-only change');
+    const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
+      branchName: `agent/${claimed.id}-documentation-only-change`,
+      workspacePath: project.repository_path,
+      originalBranch: 'main'
+    }));
+    const executeAgent = vi.fn(async (): Promise<AgentExecutionResult> =>
+      successfulAgent('Updated the documentation.'));
+    const executeVerification = vi.fn(async (): Promise<TestExecutionResult> => ({
+      exitCode: 0,
+      stdout: 'UNVERIFIED: No supported test or build command was detected.\n',
+      stderr: '',
+      timedOut: false,
+      aborted: false,
+      executed: false,
+      verificationKind: 'none',
+      summary: 'UNVERIFIED: No supported test or build command was detected.',
+      commandDescription: 'No verification command executed'
+    }));
+    const { worker } = createWorker(prepareBranch, executeAgent, executeVerification);
+
+    await expect(worker.processNext()).resolves.toBe(true);
+
+    expect(tasks.findById(task.id)?.status).toBe('IN_REVIEW');
+    const run = runs.listForTask(task.id)[0];
+    expect(run).toMatchObject({ exit_code: 0 });
+    expect(run?.result_summary).toContain('UNVERIFIED');
+    expect(run?.stdout).toContain('[verification] No verification command executed');
   });
 
   it('does not claim a TODO task while the configured agent is unavailable', async () => {
@@ -256,6 +289,8 @@ function successfulTests(): TestExecutionResult {
     stderr: '',
     timedOut: false,
     aborted: false,
+    executed: true,
+    verificationKind: 'test',
     summary: 'Tests passed.',
     commandDescription: 'pnpm test'
   };

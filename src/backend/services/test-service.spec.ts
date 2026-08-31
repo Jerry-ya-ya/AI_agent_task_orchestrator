@@ -63,7 +63,54 @@ describe('TestService', () => {
     expect(await service.detectCommand(dotnet)).toMatchObject({ command: 'dotnet' });
   });
 
-  it('returns a failing result when no supported runner exists', async () => {
+  it('runs a package build when no test command is available', async () => {
+    const workspace = await temporaryWorkspace();
+    await writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          test: 'echo "Error: no test specified" && exit 1',
+          build: 'vite build'
+        },
+        packageManager: 'pnpm@10.0.0'
+      })
+    );
+    const runner = new RecordingRunner(successResult());
+    const service = new TestService(runner);
+
+    const result = await service.execute(workspace);
+
+    expect(result).toMatchObject({
+      exitCode: 0,
+      executed: true,
+      verificationKind: 'build',
+      summary: 'Build passed.'
+    });
+    if (process.platform === 'win32') {
+      expect((runner.lastOptions?.args?.at(-1) ?? '').toLowerCase()).toContain('"run" "build"');
+    } else {
+      expect(runner.lastOptions?.args).toEqual(['run', 'build']);
+    }
+  });
+
+  it('prefers a declared Angular test target over its build target', async () => {
+    const workspace = await temporaryWorkspace();
+    await writeFile(path.join(workspace, 'package.json'), JSON.stringify({}));
+    await writeFile(
+      path.join(workspace, 'angular.json'),
+      JSON.stringify({ projects: { app: { architect: { build: {}, test: {} } } } })
+    );
+    const service = new TestService(new RecordingRunner(successResult()));
+
+    const command = await service.detectCommand(workspace);
+
+    expect(command).toMatchObject({
+      kind: 'test',
+      description: expect.stringContaining('Angular CLI tests')
+    });
+  });
+
+  it('returns an UNVERIFIED success when no supported command exists', async () => {
     const workspace = await temporaryWorkspace();
     await mkdir(path.join(workspace, 'src'));
     const runner = new RecordingRunner(successResult());
@@ -71,9 +118,36 @@ describe('TestService', () => {
 
     const result = await service.execute(workspace);
 
-    expect(result.exitCode).toBe(127);
-    expect(result.summary).toContain('No supported test runner');
+    expect(result).toMatchObject({
+      exitCode: 0,
+      executed: false,
+      verificationKind: 'none'
+    });
+    expect(result.summary).toContain('UNVERIFIED');
+    expect(result.summary).toContain('No supported test or build command');
     expect(runner.lastOptions).toBeUndefined();
+  });
+
+  it('returns UNVERIFIED when a detected command cannot be started', async () => {
+    const workspace = await temporaryWorkspace();
+    await writeFile(
+      path.join(workspace, 'package.json'),
+      JSON.stringify({ scripts: { build: 'vite build' } })
+    );
+    const runner: ProcessRunnerLike = {
+      run: async () => { throw new Error('spawn npm ENOENT'); }
+    };
+    const service = new TestService(runner);
+
+    const result = await service.execute(workspace);
+
+    expect(result).toMatchObject({
+      exitCode: 0,
+      executed: false,
+      verificationKind: 'none'
+    });
+    expect(result.summary).toContain('UNVERIFIED');
+    expect(result.summary).toContain('could not be started');
   });
 
   it.runIf(process.platform === 'win32')(

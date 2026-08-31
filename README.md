@@ -78,11 +78,11 @@ For task `101` titled `Login API`, the generated branch is:
 agent/101-login-api
 ```
 
-The sequential Worker requires a clean repository, creates or reuses the task branch, runs Codex and tests in the configured repository, checkpoints task changes on that branch, and restores the original branch. It never merges or pushes automatically.
+The sequential Worker requires a clean repository, creates or reuses the task branch, runs Codex and project verification in the configured repository, checkpoints task changes on that branch, and restores the original branch. It never merges or pushes automatically.
 
 ## Test detection
 
-The backend generates test commands from repository files; the frontend cannot submit command text. The MVP recognizes common JavaScript package managers and project scripts plus Python/pytest, Cargo, Go, .NET, Maven, and Gradle layouts. Angular tests are forced into non-watch mode and other runners receive CI-safe arguments/environment where applicable.
+The backend generates verification commands from repository files; the frontend cannot submit command text. The MVP prefers tests, falls back to a recognized build command, and otherwise sends the task to review with an `UNVERIFIED` warning. Only an executed verification command returning non-zero fails the task. It recognizes common JavaScript package managers and project scripts plus Python/pytest, Cargo, Go, .NET, Maven, and Gradle layouts. Angular tests are forced into non-watch mode and other runners receive CI-safe arguments/environment where applicable.
 
 If there is no recognized test runner, the task becomes `FAILED` with a clear result instead of treating untested code as successful.
 

@@ -15,6 +15,7 @@ export interface DetectedTestCommand {
   command: string;
   args: readonly string[];
   description: string;
+  kind: 'test' | 'build';
   windowsVerbatimArguments?: boolean;
 }
 
@@ -22,7 +23,7 @@ export interface TestServiceOptions {
   timeoutMs?: number;
 }
 
-/** Detects and runs one conservative, repository-defined test entry point. */
+/** Runs one conservative test/build command, or reports that review is unverified. */
 export class TestService {
   private readonly timeoutMs: number;
 
@@ -39,14 +40,12 @@ export class TestService {
       command = await this.detectCommand(workspace);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return failedWithoutProcess('Test configuration inspection', 2, message);
+      return unverifiedWithoutProcess(`Verification configuration could not be inspected: ${message}`);
     }
 
     if (command === null) {
-      return failedWithoutProcess(
-        'No supported test command detected',
-        127,
-        'No supported test runner was detected. Configure a recognized project test entry point.'
+      return unverifiedWithoutProcess(
+        'No supported test or build command was detected. Review the changes manually.'
       );
     }
 
@@ -71,13 +70,17 @@ export class TestService {
       result = await this.processRunner.run(options);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return failedWithoutProcess(command.description, 127, message);
+      return unverifiedWithoutProcess(
+        `${command.description} was detected but could not be started: ${message}`
+      );
     }
 
     return {
       ...result,
+      executed: true,
+      verificationKind: command.kind,
       commandDescription: command.description,
-      summary: summarizeTestResult(result)
+      summary: summarizeVerificationResult(result, command.kind)
     };
   }
 
@@ -102,11 +105,22 @@ export class TestService {
         if (packageMetadata.hasTestScript) {
           return packageScriptCommand(packageManager, true);
         }
-        return angularCliCommand(packageManager);
+        if (await angularHasTarget(path.join(root, 'angular.json'), 'test')) {
+          return angularCliTestCommand(packageManager);
+        }
+        if (packageMetadata.hasBuildScript) {
+          return packageBuildCommand(packageManager);
+        }
+        if (await angularHasTarget(path.join(root, 'angular.json'), 'build')) {
+          return angularCliBuildCommand(packageManager);
+        }
       }
 
       if (packageMetadata.hasTestScript) {
         return packageScriptCommand(packageManager, false);
+      }
+      if (packageMetadata.hasBuildScript) {
+        return packageBuildCommand(packageManager);
       }
     }
 
@@ -124,16 +138,17 @@ export class TestService {
       return {
         command: await pythonExecutable(root),
         args: ['-m', 'pytest'],
-        description: 'pytest'
+        description: 'pytest',
+        kind: 'test'
       };
     }
 
     if (await fileExists(path.join(root, 'Cargo.toml'))) {
-      return { command: 'cargo', args: ['test'], description: 'Cargo tests' };
+      return { command: 'cargo', args: ['test'], description: 'Cargo tests', kind: 'test' };
     }
 
     if (await fileExists(path.join(root, 'go.mod'))) {
-      return { command: 'go', args: ['test', './...'], description: 'Go tests' };
+      return { command: 'go', args: ['test', './...'], description: 'Go tests', kind: 'test' };
     }
 
     const dotnetTarget = await findDotnetTarget(root);
@@ -141,7 +156,8 @@ export class TestService {
       return {
         command: 'dotnet',
         args: ['test', dotnetTarget, '--nologo'],
-        description: `dotnet test ${path.basename(dotnetTarget)}`
+        description: `dotnet test ${path.basename(dotnetTarget)}`,
+        kind: 'test'
       };
     }
 
@@ -151,6 +167,7 @@ export class TestService {
 
 interface PackageMetadata {
   hasTestScript: boolean;
+  hasBuildScript: boolean;
   packageManager: string | undefined;
 }
 
@@ -171,11 +188,43 @@ async function readPackageMetadata(packageJsonPath: string): Promise<PackageMeta
 
   const scripts = isRecord(parsed['scripts']) ? parsed['scripts'] : undefined;
   const testScript = scripts?.['test'];
+  const buildScript = scripts?.['build'];
   return {
-    hasTestScript: typeof testScript === 'string' && testScript.trim().length > 0,
+    hasTestScript: isUsableTestScript(testScript),
+    hasBuildScript: typeof buildScript === 'string' && buildScript.trim().length > 0,
     packageManager:
       typeof parsed['packageManager'] === 'string' ? parsed['packageManager'] : undefined
   };
+}
+
+function isUsableTestScript(value: unknown): boolean {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return false;
+  }
+  return !/no test specified/iu.test(value);
+}
+
+async function angularHasTarget(
+  angularJsonPath: string,
+  targetName: 'test' | 'build'
+): Promise<boolean> {
+  const source = await readFile(angularJsonPath, 'utf8');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    throw new Error('angular.json is not valid JSON.');
+  }
+  const projects = asRecord(parsed)?.['projects'];
+  const projectMap = asRecord(projects);
+  if (projectMap === null) {
+    return false;
+  }
+  return Object.values(projectMap).some((project) => {
+    const projectRecord = asRecord(project);
+    const targets = asRecord(projectRecord?.['targets']) ?? asRecord(projectRecord?.['architect']);
+    return targets !== null && targetName in targets;
+  });
 }
 
 async function detectPackageManager(
@@ -217,55 +266,89 @@ function packageScriptCommand(
       return {
         command: 'pnpm',
         args: ['run', 'test', ...(angular ? ['--', ...extraArgs] : [])],
-        description: angular ? 'Angular tests (pnpm, non-watch)' : 'Package tests (pnpm)'
+        description: angular ? 'Angular tests (pnpm, non-watch)' : 'Package tests (pnpm)',
+        kind: 'test'
       };
     case 'yarn':
       return {
         command: 'yarn',
         args: ['run', 'test', ...extraArgs],
-        description: angular ? 'Angular tests (Yarn, non-watch)' : 'Package tests (Yarn)'
+        description: angular ? 'Angular tests (Yarn, non-watch)' : 'Package tests (Yarn)',
+        kind: 'test'
       };
     case 'bun':
       return {
         command: 'bun',
         args: ['run', 'test', ...extraArgs],
-        description: angular ? 'Angular tests (Bun, non-watch)' : 'Package tests (Bun)'
+        description: angular ? 'Angular tests (Bun, non-watch)' : 'Package tests (Bun)',
+        kind: 'test'
       };
     case 'npm':
       return {
         command: 'npm',
         args: ['run', 'test', ...(angular ? ['--', ...extraArgs] : [])],
-        description: angular ? 'Angular tests (npm, non-watch)' : 'Package tests (npm)'
+        description: angular ? 'Angular tests (npm, non-watch)' : 'Package tests (npm)',
+        kind: 'test'
       };
   }
 }
 
-function angularCliCommand(manager: PackageManager): DetectedTestCommand {
+function packageBuildCommand(manager: PackageManager): DetectedTestCommand {
   switch (manager) {
     case 'pnpm':
       return {
         command: 'pnpm',
-        args: ['exec', 'ng', 'test', '--watch=false'],
-        description: 'Angular CLI tests (pnpm, non-watch)'
+        args: ['run', 'build'],
+        description: 'Package build (pnpm)',
+        kind: 'build'
       };
     case 'yarn':
       return {
         command: 'yarn',
-        args: ['exec', 'ng', 'test', '--watch=false'],
-        description: 'Angular CLI tests (Yarn, non-watch)'
+        args: ['run', 'build'],
+        description: 'Package build (Yarn)',
+        kind: 'build'
       };
     case 'bun':
       return {
         command: 'bun',
-        args: ['run', 'ng', 'test', '--watch=false'],
-        description: 'Angular CLI tests (Bun, non-watch)'
+        args: ['run', 'build'],
+        description: 'Package build (Bun)',
+        kind: 'build'
       };
     case 'npm':
       return {
         command: 'npm',
-        args: ['exec', '--offline', '--', 'ng', 'test', '--watch=false'],
-        description: 'Angular CLI tests (npm, non-watch)'
+        args: ['run', 'build'],
+        description: 'Package build (npm)',
+        kind: 'build'
       };
+  }
+}
+
+function angularCliTestCommand(manager: PackageManager): DetectedTestCommand {
+  switch (manager) {
+    case 'pnpm':
+      return { command: 'pnpm', args: ['exec', 'ng', 'test', '--watch=false'], description: 'Angular CLI tests (pnpm, non-watch)', kind: 'test' };
+    case 'yarn':
+      return { command: 'yarn', args: ['exec', 'ng', 'test', '--watch=false'], description: 'Angular CLI tests (Yarn, non-watch)', kind: 'test' };
+    case 'bun':
+      return { command: 'bun', args: ['run', 'ng', 'test', '--watch=false'], description: 'Angular CLI tests (Bun, non-watch)', kind: 'test' };
+    case 'npm':
+      return { command: 'npm', args: ['exec', '--offline', '--', 'ng', 'test', '--watch=false'], description: 'Angular CLI tests (npm, non-watch)', kind: 'test' };
+  }
+}
+
+function angularCliBuildCommand(manager: PackageManager): DetectedTestCommand {
+  switch (manager) {
+    case 'pnpm':
+      return { command: 'pnpm', args: ['exec', 'ng', 'build'], description: 'Angular CLI build (pnpm)', kind: 'build' };
+    case 'yarn':
+      return { command: 'yarn', args: ['exec', 'ng', 'build'], description: 'Angular CLI build (Yarn)', kind: 'build' };
+    case 'bun':
+      return { command: 'bun', args: ['run', 'ng', 'build'], description: 'Angular CLI build (Bun)', kind: 'build' };
+    case 'npm':
+      return { command: 'npm', args: ['exec', '--offline', '--', 'ng', 'build'], description: 'Angular CLI build (npm)', kind: 'build' };
   }
 }
 
@@ -275,7 +358,7 @@ async function detectGradleWrapper(root: string): Promise<DetectedTestCommand | 
   if (!(await fileExists(wrapperPath))) {
     return null;
   }
-  return wrapperCommand(wrapperPath, ['test', '--no-daemon'], 'Gradle wrapper tests');
+  return wrapperCommand(wrapperPath, ['test', '--no-daemon'], 'Gradle wrapper tests', 'test');
 }
 
 async function detectMavenWrapper(root: string): Promise<DetectedTestCommand | null> {
@@ -284,19 +367,20 @@ async function detectMavenWrapper(root: string): Promise<DetectedTestCommand | n
   if (!(await fileExists(wrapperPath))) {
     return null;
   }
-  return wrapperCommand(wrapperPath, ['test', '--batch-mode'], 'Maven wrapper tests');
+  return wrapperCommand(wrapperPath, ['test', '--batch-mode'], 'Maven wrapper tests', 'test');
 }
 
 function wrapperCommand(
   wrapperPath: string,
   args: readonly string[],
-  description: string
+  description: string,
+  kind: 'test' | 'build'
 ): DetectedTestCommand {
   if (process.platform !== 'win32') {
-    return { command: '/bin/sh', args: [wrapperPath, ...args], description };
+    return { command: '/bin/sh', args: [wrapperPath, ...args], description, kind };
   }
 
-  return windowsCommandShim(wrapperPath, args, description);
+  return windowsCommandShim(wrapperPath, args, description, kind);
 }
 
 /**
@@ -316,7 +400,7 @@ async function resolvePlatformCommand(
     : await resolveFromWindowsPath(command.command);
   const extension = path.extname(resolvedCommand).toLowerCase();
   if (extension === '.cmd' || extension === '.bat') {
-    return windowsCommandShim(resolvedCommand, command.args, command.description);
+    return windowsCommandShim(resolvedCommand, command.args, command.description, command.kind);
   }
   return { ...command, command: resolvedCommand };
 }
@@ -355,7 +439,8 @@ async function resolveFromWindowsPath(command: string): Promise<string> {
 function windowsCommandShim(
   scriptPath: string,
   args: readonly string[],
-  description: string
+  description: string,
+  kind: 'test' | 'build'
 ): DetectedTestCommand {
   const tokens = [scriptPath, ...args];
   if (tokens.some((token) => /["&|<>^%!\r\n\0]/u.test(token))) {
@@ -367,6 +452,7 @@ function windowsCommandShim(
     command: safeComSpec(),
     args: ['/d', '/v:off', '/s', '/c', `"${commandLine}"`],
     description,
+    kind,
     windowsVerbatimArguments: true
   };
 }
@@ -437,35 +523,38 @@ async function findDotnetTarget(root: string): Promise<string | null> {
   return null;
 }
 
-function summarizeTestResult(result: ProcessResult): string {
+function summarizeVerificationResult(
+  result: ProcessResult,
+  kind: 'test' | 'build'
+): string {
+  const label = kind === 'test' ? 'Tests' : 'Build';
   if (result.timedOut) {
-    return 'Tests timed out.';
+    return `${label} timed out.`;
   }
   if (result.aborted) {
-    return 'Tests were cancelled.';
+    return `${label} was cancelled.`;
   }
   if (result.exitCode === 0) {
-    return 'Tests passed.';
+    return kind === 'test' ? 'Tests passed.' : 'Build passed.';
   }
 
   const detail = lastNonEmptyLine(result.stderr) ?? lastNonEmptyLine(result.stdout);
   const suffix = detail === undefined ? '' : ` ${truncate(detail, 300)}`;
-  return `Tests failed with exit code ${result.exitCode}.${suffix}`;
+  return `${label} failed with exit code ${result.exitCode}.${suffix}`;
 }
 
-function failedWithoutProcess(
-  commandDescription: string,
-  exitCode: number,
-  message: string
-): TestExecutionResult {
+function unverifiedWithoutProcess(message: string): TestExecutionResult {
+  const warning = `UNVERIFIED: ${message}`;
   return {
-    exitCode,
-    stdout: '',
-    stderr: message,
+    exitCode: 0,
+    stdout: `${warning}\n`,
+    stderr: '',
     timedOut: false,
     aborted: false,
-    summary: message,
-    commandDescription
+    executed: false,
+    verificationKind: 'none',
+    summary: warning,
+    commandDescription: 'No verification command executed'
   };
 }
 
@@ -483,6 +572,10 @@ function truncate(value: string, length: number): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
 }
 
 async function fileExists(candidatePath: string): Promise<boolean> {

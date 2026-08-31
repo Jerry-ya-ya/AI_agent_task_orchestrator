@@ -167,8 +167,11 @@ export class TaskWorker {
         }
         testResult = await this.tests.execute(prepared.workspacePath, signal);
         this.appendTestResult(claimed.run_id, testResult);
-        if (testResult.exitCode !== 0) {
-          throw new PipelineFailure(testResult.summary || 'Project tests failed.', testResult.exitCode);
+        if (testResult.executed && testResult.exitCode !== 0) {
+          throw new PipelineFailure(
+            testResult.summary || 'Project verification failed.',
+            testResult.exitCode
+          );
         }
       } finally {
         const checkpointed = await this.git.completeBranch(prepared, claimed.id);
@@ -185,7 +188,10 @@ export class TaskWorker {
         throw new PipelineFailure('Task state changed after testing.', 1);
       }
       exitCode = 0;
-      summary = agentResult?.summary || testResult?.summary || 'Codex completed the task and tests passed.';
+      const agentSummary = agentResult?.summary || 'Codex completed the task.';
+      summary = testResult?.executed === false
+        ? `${agentSummary}\n\n${testResult.summary}`
+        : agentSummary || testResult?.summary || 'Codex completed the task and verification passed.';
     } catch (error) {
       const failure = this.normalizeFailure(error, signal);
       exitCode = failure.exitCode;
@@ -211,11 +217,16 @@ export class TaskWorker {
   }
 
   private appendTestResult(runId: number, result: TestExecutionResult): void {
+    const label = result.verificationKind === 'test'
+      ? 'test'
+      : result.verificationKind === 'build'
+        ? 'build'
+        : 'verification';
     this.runs.appendOutput(
       runId,
-      `[test] ${result.commandDescription}\n${result.stdout}${result.stdout.endsWith('\n') ? '' : '\n'}`,
+      `[${label}] ${result.commandDescription}\n${result.stdout}${result.stdout.endsWith('\n') ? '' : '\n'}`,
       result.stderr.length > 0
-        ? `[test]\n${result.stderr}${result.stderr.endsWith('\n') ? '' : '\n'}`
+        ? `[${label}]\n${result.stderr}${result.stderr.endsWith('\n') ? '' : '\n'}`
         : ''
     );
   }

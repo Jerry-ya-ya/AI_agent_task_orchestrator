@@ -95,6 +95,8 @@ export interface AgentExecutionResult extends ProcessResult {
 }
 
 export interface TestExecutionResult extends ProcessResult {
+  executed: boolean;
+  verificationKind: 'test' | 'build' | 'none';
   summary: string;
   commandDescription: string;
 }
