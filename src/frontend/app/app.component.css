@@ -20,6 +20,12 @@
   background: #11151a;
   color: #fff;
   box-shadow: 0 4px 22px rgba(17, 21, 26, 0.14);
+  -webkit-app-region: drag;
+}
+
+.topbar button,
+.topbar [title] {
+  -webkit-app-region: no-drag;
 }
 
 .brand-block,
@@ -82,6 +88,40 @@
 
 .topbar-actions {
   gap: 9px;
+}
+
+.window-close {
+  display: grid;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  margin-left: 5px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.72);
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.window-close svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+
+.window-close:hover {
+  border-color: #d94c4c;
+  background: #c42b2b;
+  color: #fff;
+}
+
+.window-close:active {
+  background: #a92323;
 }
 
 .runtime-states {

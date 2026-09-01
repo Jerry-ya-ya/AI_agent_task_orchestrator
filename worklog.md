@@ -21,3 +21,7 @@
 - feat: adopt balanced task verification policy
 
 - feat: add review-gated task publishing with canonical agent commit summaries.
+
+## 2026/09/02
+
+- Remove the Electron application menu and add a draggable custom title bar with a secure close control.

@@ -130,6 +130,10 @@ export class AppComponent implements OnInit, OnDestroy {
     document.body.classList.remove('modal-open');
   }
 
+  closeApplication(): void {
+    window.desktopWindow?.close();
+  }
+
   @HostListener('document:keydown', ['$event'])
   handleDocumentKeydown(event: KeyboardEvent): void {
     if (!this.hasOpenModal()) {

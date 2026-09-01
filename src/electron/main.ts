@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OrchestratorRuntime } from '../backend/runtime.js';
@@ -8,6 +8,14 @@ let runtime: OrchestratorRuntime | null = null;
 let mainWindow: BrowserWindow | null = null;
 let quittingAfterShutdown = false;
 let shutdownPromise: Promise<void> | null = null;
+
+Menu.setApplicationMenu(null);
+
+ipcMain.on('window:close', (event) => {
+  if (mainWindow !== null && event.sender === mainWindow.webContents) {
+    mainWindow.close();
+  }
+});
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -67,8 +75,11 @@ async function createWindow(apiUrl: string): Promise<void> {
     minWidth: 980,
     minHeight: 680,
     title: 'AI Agent Task Orchestrator',
+    frame: false,
+    autoHideMenuBar: true,
     backgroundColor: '#f4f6f8',
     webPreferences: {
+      preload: join(currentDirectory, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true
