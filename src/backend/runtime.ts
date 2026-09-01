@@ -51,7 +51,7 @@ export class OrchestratorRuntime {
     const runs = new TaskRunRepository(this.database);
     const tasks = new TaskRepository(this.database, runs);
     this.projectService = new ProjectService(projects, git);
-    this.taskService = new TaskService(tasks, projects, runs);
+    this.taskService = new TaskService(tasks, projects, runs, git);
     tasks.recoverInterrupted();
     this.worker = new TaskWorker(tasks, runs, git, agent, tests, {
       pollIntervalMs: options.pollIntervalMs

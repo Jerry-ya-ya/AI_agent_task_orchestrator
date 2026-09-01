@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { OrchestratorDatabase } from '../database/database.js';
 import { ProjectRepository } from '../database/project-repository.js';
@@ -6,6 +6,7 @@ import { TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
 import { ConflictError, NotFoundError, ValidationError } from '../domain/errors.js';
 import type { Project, Task } from '../domain/types.js';
+import type { GitService } from './git-service.js';
 import { TaskService } from './task-service.js';
 
 describe('TaskService state rules', () => {
@@ -15,13 +16,16 @@ describe('TaskService state rules', () => {
   let runs: TaskRunRepository;
   let service: TaskService;
   let project: Project;
+  let publishBranch: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     database = new OrchestratorDatabase(':memory:');
     projects = new ProjectRepository(database);
     runs = new TaskRunRepository(database);
     tasks = new TaskRepository(database, runs);
-    service = new TaskService(tasks, projects, runs);
+    publishBranch = vi.fn(async () => ({ baseBranch: 'main' }));
+    const git = { publishBranch } as unknown as GitService;
+    service = new TaskService(tasks, projects, runs, git);
     project = projects.create({
       name: 'Example',
       repository_path: '/example',
@@ -47,6 +51,8 @@ describe('TaskService state rules', () => {
       priority: 'MEDIUM',
       branch_name: null,
       worktree_path: null,
+      base_branch: null,
+      commit_summary: null,
       is_paused: false
     });
 
@@ -64,7 +70,7 @@ describe('TaskService state rules', () => {
     expect(() => service.create({ project_id: 9999, title: 'Orphan' })).toThrow(ValidationError);
   });
 
-  it.each(['CLAIMED', 'IN_PROGRESS', 'TESTING'] as const)(
+  it.each(['CLAIMED', 'IN_PROGRESS', 'TESTING', 'PENDING_PUSH'] as const)(
     'rejects edits and deletion while a task is %s',
     (activeStatus) => {
       const task = createTask(`Task in ${activeStatus}`);
@@ -84,7 +90,7 @@ describe('TaskService state rules', () => {
       context: ''
     });
     expect(tasks.transition(task.id, 'TODO', 'CLAIMED')).not.toBeNull();
-    tasks.setArtifacts(task.id, 'agent/1-prepared-task', '/example/repository');
+    tasks.setArtifacts(task.id, 'agent/1-prepared-task', '/example/repository', 'main');
     expect(tasks.transition(task.id, 'CLAIMED', 'FAILED')).not.toBeNull();
 
     expect(() => service.update(task.id, { project_id: otherProject.id })).toThrow(ConflictError);
@@ -94,7 +100,7 @@ describe('TaskService state rules', () => {
   it('retries only FAILED tasks and preserves their branch and workspace', () => {
     const failed = createTask('Retry me');
     expect(tasks.transition(failed.id, 'TODO', 'CLAIMED')).not.toBeNull();
-    tasks.setArtifacts(failed.id, 'agent/1-retry-me', '/example/repository');
+    tasks.setArtifacts(failed.id, 'agent/1-retry-me', '/example/repository', 'main');
     expect(tasks.transition(failed.id, 'CLAIMED', 'FAILED')).not.toBeNull();
 
     const retried = service.retry(failed.id);
@@ -106,15 +112,43 @@ describe('TaskService state rules', () => {
     expect(() => service.retry(failed.id)).toThrow(ConflictError);
   });
 
-  it('approves only IN_REVIEW tasks and never auto-approves another status', () => {
+  it('approves only IN_REVIEW tasks into PENDING_PUSH', () => {
     const review = createTask('Review me');
     const todo = createTask('Still queued');
     expect(tasks.transition(review.id, 'TODO', 'IN_REVIEW')).not.toBeNull();
 
-    expect(service.approve(review.id).status).toBe('DONE');
+    expect(service.approve(review.id).status).toBe('PENDING_PUSH');
     expect(() => service.approve(review.id)).toThrow(ConflictError);
     expect(() => service.approve(todo.id)).toThrow(ConflictError);
     expect(tasks.findById(todo.id)?.status).toBe('TODO');
+  });
+
+  it('publishes only approved tasks and marks them DONE after Git push succeeds', async () => {
+    const review = createTask('Publish me');
+    expect(tasks.transition(review.id, 'TODO', 'CLAIMED')).not.toBeNull();
+    tasks.setArtifacts(review.id, `agent/${review.id}-publish-me`, '/example/repository', 'main');
+    expect(tasks.transition(review.id, 'CLAIMED', 'IN_REVIEW')).not.toBeNull();
+    service.approve(review.id);
+
+    await expect(service.push(review.id)).resolves.toMatchObject({ status: 'DONE' });
+    expect(publishBranch).toHaveBeenCalledWith(
+      '/example',
+      `agent/${review.id}-publish-me`,
+      'main'
+    );
+    await expect(service.push(review.id)).rejects.toThrow(ConflictError);
+  });
+
+  it('keeps a task PENDING_PUSH when Git publishing fails', async () => {
+    const review = createTask('Retry publishing');
+    expect(tasks.transition(review.id, 'TODO', 'CLAIMED')).not.toBeNull();
+    tasks.setArtifacts(review.id, `agent/${review.id}-retry-publishing`, '/example/repository', 'main');
+    expect(tasks.transition(review.id, 'CLAIMED', 'IN_REVIEW')).not.toBeNull();
+    service.approve(review.id);
+    publishBranch.mockRejectedValueOnce(new Error('origin rejected the push'));
+
+    await expect(service.push(review.id)).rejects.toThrow('origin rejected the push');
+    expect(tasks.findById(review.id)?.status).toBe('PENDING_PUSH');
   });
 
   it('pauses and resumes only TODO tasks', () => {

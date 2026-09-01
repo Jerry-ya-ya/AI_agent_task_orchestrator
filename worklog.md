@@ -11,9 +11,13 @@
 ## 2026/08/31
 
 - feat: add Codex usage and pausable TODO tasks
+
 - feat: add completed and failed task history
+
 - chore: move development UI to port 4300
 
 ## 2026/09/01
 
 - feat: adopt balanced task verification policy
+
+- feat: add review-gated task publishing with canonical agent commit summaries.

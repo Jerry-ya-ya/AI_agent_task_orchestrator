@@ -282,6 +282,16 @@ function terminateProcessTree(child: ChildProcess, force: boolean): void {
     killer.on('error', () => {
       child.kill(force ? 'SIGKILL' : 'SIGTERM');
     });
+    killer.on('close', (exitCode) => {
+      if (exitCode !== 0 && child.exitCode === null && child.signalCode === null) {
+        child.kill(force ? 'SIGKILL' : 'SIGTERM');
+      }
+    });
+    if (force) {
+      // Sandboxed Windows sessions can deny taskkill access even for a child
+      // created by this process. Always retain the direct-child kill fallback.
+      child.kill('SIGKILL');
+    }
     killer.unref();
     return;
   }

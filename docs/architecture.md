@@ -56,10 +56,12 @@ The renderer never launches processes or receives a generic command-execution en
 | `project_id` | INTEGER FK | References `projects(id)` |
 | `title` | TEXT | Required |
 | `description` | TEXT | Task instructions |
-| `status` | TEXT | `TODO`, `CLAIMED`, `IN_PROGRESS`, `TESTING`, `IN_REVIEW`, `DONE`, `FAILED` |
+| `status` | TEXT | `TODO`, `CLAIMED`, `IN_PROGRESS`, `TESTING`, `IN_REVIEW`, `PENDING_PUSH`, `DONE`, `FAILED` |
 | `priority` | TEXT | `LOW`, `MEDIUM`, `HIGH`, `URGENT` |
 | `branch_name` | TEXT | Assigned once as `agent/{id}-{slug}` |
 | `worktree_path` | TEXT | Legacy-compatible column containing the active repository workspace path |
+| `base_branch` | TEXT | Branch active before the Worker created/switched to the task branch |
+| `commit_summary` | TEXT | Canonical summary returned by Codex and used verbatim as the task commit message |
 | `created_at` | TEXT | UTC ISO-8601 |
 | `updated_at` | TEXT | UTC ISO-8601 |
 
@@ -81,20 +83,24 @@ Indexes cover task status/priority ordering and run lookup by task/time. Foreign
 ## 4. State machine and worker flow
 
 ```text
-TODO --atomic claim--> CLAIMED --> IN_PROGRESS --> TESTING --> IN_REVIEW --approve--> DONE
-                               |              |
-                               +--------------+-----------> FAILED --retry--> TODO
+TODO --atomic claim--> CLAIMED --> IN_PROGRESS --> TESTING --> IN_REVIEW
+                               |              |                 |
+                               +--------------+----> FAILED     +--approve--> PENDING_PUSH
+                                                       |                         |
+                                                       +--retry--> TODO           +--confirm push--> DONE
 ```
 
 1. In a SQLite `BEGIN IMMEDIATE` transaction, select the highest-priority oldest `TODO` task and update it to `CLAIMED` with an `UPDATE ... RETURNING` guard.
 2. Create a `TaskRun`.
 3. Validate that the repository is clean, record its current branch, then create or reuse and check out `agent/{task-id}-{slug}`.
 4. Persist the branch/workspace fields and set `IN_PROGRESS`.
-5. Call `AgentExecutor.execute(task, workspace, signal)` with a backend-generated prompt and a timeout.
+5. Call `AgentExecutor.execute(task, workspace, signal)` with a backend-generated prompt and a timeout. The fixed prompt requires Codex to use `write-worklog` after implementation and available verification, then return only its canonical summary.
 6. On agent success, set `TESTING`; `TestService` prefers a recognized test command and falls back to a recognized build command, using only backend-generated executable/argument lists.
-7. The backend checkpoints any file changes on the task branch and restores the original branch, whether execution succeeded or failed. It never merges or pushes.
+7. The backend uses a valid returned canonical summary verbatim as the task branch commit message, checkpoints changes, stores the summary/base branch, and restores the original branch. Invalid or missing canonical summaries fail the task instead of generating a misleading success commit.
 8. Successful verification sets `IN_REVIEW`. If neither tests nor a build are available—or a detected command cannot be started—the task still enters `IN_REVIEW` with an `UNVERIFIED` warning. Only a verification command that actually runs and returns non-zero sets `FAILED`; Git or agent pipeline failures also remain failures.
 9. The Worker immediately polls for the next task; review is not part of the worker loop.
+
+Approving a task moves it to `PENDING_PUSH`; it does not touch Git. Confirm push is a separate user action that merges the task branch into its recorded base branch and pushes `origin <base-branch>`. If merge succeeds but push fails, the task remains `PENDING_PUSH`; retry detects the existing merge and retries only the push. Databases from earlier versions migrate DONE tasks that still reference an agent branch back to `PENDING_PUSH` for explicit publication.
 
 On application restart, orphaned `CLAIMED`, `IN_PROGRESS`, and `TESTING` tasks are marked `FAILED` rather than silently rerun. A user can then inspect logs and explicitly retry.
 
@@ -109,7 +115,7 @@ On application restart, orphaned `CLAIMED`, `IN_PROGRESS`, and `TESTING` tasks a
 - Authentication remains the responsibility of the installed Codex CLI; this application stores no token or password.
 - The worker requires a clean checkout, switches to the task branch before Codex runs, checkpoints task changes there, and restores the original branch afterward.
 - The worker never merges task changes into the base branch and never pushes.
-- Approval changes only task state; it does not merge branches.
+- Approval changes only task state. The publish endpoint accepts no command text and invokes only backend-generated merge/push arguments after explicit confirmation in the UI.
 
 ## 6. API surface
 
@@ -117,7 +123,7 @@ Required routes:
 
 - `GET /projects`, `POST /projects`
 - `GET /tasks`, `GET /tasks/:id`, `POST /tasks`, `PUT /tasks/:id`, `DELETE /tasks/:id`
-- `POST /tasks/:id/retry`, `POST /tasks/:id/approve`
+- `POST /tasks/:id/retry`, `POST /tasks/:id/approve`, `POST /tasks/:id/push`
 - `GET /tasks/:id/runs`
 
 Additional operational route: `GET /health`.
@@ -127,6 +133,6 @@ The Angular board polls `GET /tasks` so worker-driven state changes appear witho
 ## 7. Deliberate MVP limits
 
 - One local Worker and one task at a time.
-- No automatic merge, PR, remote access, authentication, notifications, dependency graph, or cloud state.
-- Test commands are detected from known project files; arbitrary command strings are not accepted from the UI/API. A repository with no recognized test runner goes to `FAILED` for explicit review.
+- No automatic merge, PR automation, remote access, authentication, notifications, dependency graph, or cloud state. Merge and push require an explicit user action.
+- Test commands are detected from known project files; arbitrary command strings are not accepted from the UI/API. A repository with neither a recognized test nor build command goes to review with an `UNVERIFIED` warning.
 - Deleting a task is blocked while it is executing. Git task branches are retained to avoid destructive loss of agent work.

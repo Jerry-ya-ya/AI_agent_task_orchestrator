@@ -102,8 +102,9 @@ export class TaskRepository {
     const result = this.database.connection.prepare(`
       INSERT INTO tasks (
         project_id, title, description, status, priority,
-        branch_name, worktree_path, is_paused, created_at, updated_at
-      ) VALUES (?, ?, ?, 'TODO', ?, NULL, NULL, 0, ?, ?)
+        branch_name, worktree_path, base_branch, commit_summary,
+        is_paused, created_at, updated_at
+      ) VALUES (?, ?, ?, 'TODO', ?, NULL, NULL, NULL, NULL, 0, ?, ?)
     `).run(input.project_id, input.title, input.description, input.priority, now, now);
     return this.findById(Number(result.lastInsertRowid)) as Task;
   }
@@ -190,14 +191,31 @@ export class TaskRepository {
   public setArtifacts(
     id: number,
     branchName: string,
-    worktreePath: string
+    worktreePath: string,
+    baseBranch: string
   ): Task | null {
     this.database.connection.prepare(`
       UPDATE tasks
-      SET branch_name = ?, worktree_path = ?, updated_at = ?
+      SET branch_name = ?, worktree_path = ?, base_branch = ?, updated_at = ?
       WHERE id = ? AND status = 'CLAIMED'
-    `).run(branchName, worktreePath, this.clock(), id);
+    `).run(branchName, worktreePath, baseBranch, this.clock(), id);
     return this.findById(id);
+  }
+
+  public setCommitSummary(id: number, commitSummary: string): Task | null {
+    const result = this.database.connection.prepare(`
+      UPDATE tasks SET commit_summary = ?, updated_at = ?
+      WHERE id = ? AND status = 'TESTING'
+    `).run(commitSummary, this.clock(), id);
+    return result.changes > 0 ? this.findById(id) : null;
+  }
+
+  public setBaseBranch(id: number, baseBranch: string): Task | null {
+    const result = this.database.connection.prepare(`
+      UPDATE tasks SET base_branch = ?, updated_at = ?
+      WHERE id = ? AND status = 'PENDING_PUSH'
+    `).run(baseBranch, this.clock(), id);
+    return result.changes > 0 ? this.findById(id) : null;
   }
 
   public transition(

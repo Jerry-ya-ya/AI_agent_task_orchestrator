@@ -46,6 +46,10 @@ describe('CodexAgentExecutor', () => {
       '-'
     ]);
     expect(runner.lastOptions?.stdin).toBe(buildCodexPrompt(task));
+    expect(runner.lastOptions?.stdin).toContain(
+      'use the `write-worklog` skill before finishing.\n' +
+      'Return the canonical summary produced by the skill so the orchestrator can use it as the Git commit message.'
+    );
     expect(runner.lastOptions?.timeoutMs).toBe(1_800_000);
   });
 
@@ -156,6 +160,9 @@ function exampleTask(): Task {
     priority: 'HIGH',
     branch_name: 'agent/101-add-login-api',
     worktree_path: null,
+    base_branch: 'main',
+    commit_summary: null,
+    is_paused: false,
     created_at: '2026-08-29T00:00:00.000Z',
     updated_at: '2026-08-29T00:00:00.000Z'
   };

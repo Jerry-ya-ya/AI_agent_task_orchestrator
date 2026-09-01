@@ -431,7 +431,7 @@ main {
 
 .kanban {
   display: grid;
-  grid-template-columns: repeat(7, minmax(210px, 1fr));
+  grid-template-columns: repeat(8, minmax(210px, 1fr));
   gap: 12px;
   max-width: 1760px;
   min-height: 520px;
@@ -500,6 +500,11 @@ main {
 [data-status='IN_REVIEW'] .status-indicator {
   border-color: #8c4ea9;
   background: #8c4ea9;
+}
+
+[data-status='PENDING_PUSH'] .status-indicator {
+  border-color: #197c83;
+  background: #197c83;
 }
 
 [data-status='DONE'] .status-indicator {
@@ -666,6 +671,11 @@ main {
   color: #7d3f99;
 }
 
+.status-chip[data-status='PENDING_PUSH'] {
+  background: #e0f4f4;
+  color: #176d73;
+}
+
 .status-chip[data-status='DONE'] {
   background: #e3f5ec;
   color: #24744f;
@@ -705,6 +715,15 @@ main {
 
 .inline-action--approve:hover:not(:disabled) {
   background: #ebf8f2;
+}
+
+.inline-action--push {
+  border-color: #8fcbd0;
+  color: #176d73;
+}
+
+.inline-action--push:hover:not(:disabled) {
+  background: #eaf8f8;
 }
 
 .inline-action--retry {

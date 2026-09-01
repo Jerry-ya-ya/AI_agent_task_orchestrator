@@ -4,6 +4,7 @@ export const TASK_STATUSES = [
   'IN_PROGRESS',
   'TESTING',
   'IN_REVIEW',
+  'PENDING_PUSH',
   'DONE',
   'FAILED',
 ] as const;
@@ -42,6 +43,8 @@ export interface Task {
   priority: TaskPriority;
   branch_name: string | null;
   worktree_path: string | null;
+  base_branch: string | null;
+  commit_summary: string | null;
   is_paused: boolean;
   created_at: string;
   updated_at: string;

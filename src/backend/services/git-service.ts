@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import { ConflictError, ValidationError } from '../domain/errors.js';
+import { AppError, ConflictError, ValidationError } from '../domain/errors.js';
 import type { ProcessResult, Task } from '../domain/types.js';
 import { ProcessRunner, type ProcessRunnerLike } from '../infra/process-runner.js';
 
@@ -15,10 +15,13 @@ export interface PreparedBranch {
   originalBranch: string;
 }
 
-export class GitCommandError extends Error {
+export interface PublishedBranch {
+  baseBranch: string;
+}
+
+export class GitCommandError extends AppError {
   public constructor(message: string, public readonly result: ProcessResult) {
-    super(message);
-    this.name = 'GitCommandError';
+    super(message, 409, 'GIT_ERROR');
   }
 }
 
@@ -98,7 +101,11 @@ export class GitService {
   }
 
   /** Checkpoints task changes locally and restores the branch active before the task. */
-  public async completeBranch(prepared: PreparedBranch, taskId: number): Promise<boolean> {
+  public async completeBranch(
+    prepared: PreparedBranch,
+    taskId: number,
+    commitSummary?: string
+  ): Promise<boolean> {
     const currentBranch = await this.currentBranch(prepared.workspacePath);
     if (currentBranch !== prepared.branchName) {
       throw new ConflictError(
@@ -115,13 +122,16 @@ export class GitService {
     const hasChanges = statusResult.stdout.trim().length > 0;
 
     if (hasChanges) {
+      const message = commitSummary === undefined
+        ? `chore(agent): checkpoint task #${taskId}`
+        : requireCanonicalCommitSummary(commitSummary);
       await this.runGit(prepared.workspacePath, ['add', '--all'], undefined, false);
       const commit = await this.runGit(
         prepared.workspacePath,
         [
           '-c', 'user.name=AI Agent Task Orchestrator',
           '-c', 'user.email=agent@localhost',
-          'commit', '-m', `chore(agent): checkpoint task #${taskId}`
+          'commit', '-m', message
         ],
         undefined,
         true
@@ -147,6 +157,83 @@ export class GitService {
       );
     }
     return hasChanges;
+  }
+
+  /** Merges an approved task branch into its base branch and pushes that branch to origin. */
+  public async publishBranch(
+    repositoryPath: string,
+    taskBranch: string,
+    storedBaseBranch: string | null
+  ): Promise<PublishedBranch> {
+    const repositoryRoot = await this.validateRepository(repositoryPath);
+    await this.requireCleanCheckout(repositoryRoot);
+    const current = await this.currentBranch(repositoryRoot);
+    const baseBranch = storedBaseBranch ?? current;
+
+    if (AGENT_BRANCH_PATTERN.test(baseBranch) || current !== baseBranch) {
+      throw new ConflictError(
+        `Repository must be on the task base branch ${baseBranch} before publishing; it is on ${current}.`
+      );
+    }
+    if (!AGENT_BRANCH_PATTERN.test(taskBranch) || !await this.localBranchExists(repositoryRoot, taskBranch)) {
+      throw new ConflictError(`Task branch is missing or is not managed by the orchestrator: ${taskBranch}`);
+    }
+
+    const alreadyMerged = await this.runGit(
+      repositoryRoot,
+      ['merge-base', '--is-ancestor', taskBranch, baseBranch],
+      undefined,
+      true
+    );
+    if (alreadyMerged.exitCode !== 0 && alreadyMerged.exitCode !== 1) {
+      throw new GitCommandError(
+        `Unable to compare ${taskBranch} with ${baseBranch}: ${formatFailure(alreadyMerged)}`,
+        alreadyMerged
+      );
+    }
+
+    if (alreadyMerged.exitCode === 1) {
+      const fastForward = await this.runGit(
+        repositoryRoot,
+        ['merge', '--ff-only', taskBranch],
+        undefined,
+        true
+      );
+      if (fastForward.exitCode !== 0) {
+        const merged = await this.runGit(
+          repositoryRoot,
+          [
+            '-c', 'user.name=AI Agent Task Orchestrator',
+            '-c', 'user.email=agent@localhost',
+            'merge', '--no-ff', '--no-edit', taskBranch
+          ],
+          undefined,
+          true
+        );
+        if (merged.exitCode !== 0) {
+          await this.runGit(repositoryRoot, ['merge', '--abort'], undefined, true);
+          throw new GitCommandError(
+            `Unable to merge ${taskBranch} into ${baseBranch}: ${formatFailure(merged)}`,
+            merged
+          );
+        }
+      }
+    }
+
+    const pushed = await this.runGit(
+      repositoryRoot,
+      ['push', 'origin', baseBranch],
+      undefined,
+      true
+    );
+    if (pushed.exitCode !== 0) {
+      throw new GitCommandError(
+        `Task branch was merged locally, but ${baseBranch} could not be pushed to origin: ${formatFailure(pushed)}`,
+        pushed
+      );
+    }
+
+    return { baseBranch };
   }
 
   private async requireCleanCheckout(repositoryRoot: string, signal?: AbortSignal): Promise<void> {
@@ -213,6 +300,21 @@ export class GitService {
     }
     return result;
   }
+}
+
+export function requireCanonicalCommitSummary(summary: string): string {
+  const canonical = summary.trim();
+  if (
+    canonical.length === 0 ||
+    canonical.length > 240 ||
+    /[\r\n]/u.test(canonical) ||
+    !canonical.endsWith('.')
+  ) {
+    throw new ValidationError(
+      'Codex must return one canonical commit-message summary of at most 240 characters ending with a period.'
+    );
+  }
+  return canonical;
 }
 
 export function slugifyTaskTitle(title: string): string {

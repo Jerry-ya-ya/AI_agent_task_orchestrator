@@ -95,6 +95,8 @@ function exampleTask(overrides: Partial<Task> = {}): Task {
     priority: 'MEDIUM',
     branch_name: null,
     worktree_path: null,
+    base_branch: null,
+    commit_summary: null,
     is_paused: false,
     created_at: '2026-08-31T00:00:00.000Z',
     updated_at: '2026-08-31T00:00:00.000Z',

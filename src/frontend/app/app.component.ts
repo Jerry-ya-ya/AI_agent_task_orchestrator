@@ -44,6 +44,7 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
   { status: 'IN_PROGRESS', label: 'In progress', hint: 'Agent is working' },
   { status: 'TESTING', label: 'Testing', hint: 'Running project checks' },
   { status: 'IN_REVIEW', label: 'In review', hint: 'Ready for your review' },
+  { status: 'PENDING_PUSH', label: 'Pending push', hint: 'Approved; waiting to publish' },
   { status: 'DONE', label: 'Done', hint: 'Approved work' },
   { status: 'FAILED', label: 'Failed', hint: 'Needs attention' },
 ];
@@ -311,7 +312,35 @@ export class AppComponent implements OnInit, OnDestroy {
     this.clearError();
     try {
       await firstValueFrom(this.api.approveTask(task.id));
-      this.showNotice(`“${task.title}” marked Done.`);
+      this.showNotice(`“${task.title}” is ready to push.`);
+      await this.refreshBoard(false);
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.setTaskPending(task.id, false);
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  async pushTask(task: Task, event?: Event): Promise<void> {
+    event?.stopPropagation();
+    if (task.status !== 'PENDING_PUSH' || this.isTaskPending(task.id)) {
+      return;
+    }
+
+    const baseBranch = task.base_branch || 'the current base branch';
+    const confirmed = window.confirm(
+      `Merge “${task.title}” into ${baseBranch} and push it to origin?`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    this.setTaskPending(task.id, true);
+    this.clearError();
+    try {
+      await firstValueFrom(this.api.pushTask(task.id));
+      this.showNotice(`“${task.title}” pushed successfully.`);
       await this.refreshBoard(false);
     } catch (error: unknown) {
       this.setError(this.errorMessage(error));
@@ -401,7 +430,10 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   canModifyTask(task: Task): boolean {
-    return task.status !== 'CLAIMED' && task.status !== 'IN_PROGRESS' && task.status !== 'TESTING';
+    return task.status !== 'CLAIMED' &&
+      task.status !== 'IN_PROGRESS' &&
+      task.status !== 'TESTING' &&
+      task.status !== 'PENDING_PUSH';
   }
 
   latestResult(task: Task): string {

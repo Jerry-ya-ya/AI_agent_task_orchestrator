@@ -110,6 +110,10 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     response.json(dependencies.taskService.approve(idSchema.parse(request.params.id)));
   });
 
+  app.post('/tasks/:id/push', async (request, response) => {
+    response.json(await dependencies.taskService.push(idSchema.parse(request.params.id)));
+  });
+
   app.post('/tasks/:id/pause', (request, response) => {
     response.json(dependencies.taskService.pause(idSchema.parse(request.params.id)));
   });

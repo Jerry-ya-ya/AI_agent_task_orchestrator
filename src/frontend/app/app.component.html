@@ -162,7 +162,7 @@
               </span>
             </button>
 
-            <div class="task-card__actions" *ngIf="task.status === 'TODO' || task.status === 'IN_REVIEW' || task.status === 'FAILED'">
+            <div class="task-card__actions" *ngIf="task.status === 'TODO' || task.status === 'IN_REVIEW' || task.status === 'PENDING_PUSH' || task.status === 'FAILED'">
               <button
                 *ngIf="task.status === 'TODO'"
                 class="inline-action inline-action--pause"
@@ -171,6 +171,15 @@
                 (click)="toggleTaskPause(task, $event)"
               >
                 {{ isTaskPending(task.id) ? 'Updating…' : (task.is_paused ? 'Resume' : 'Pause') }}
+              </button>
+              <button
+                *ngIf="task.status === 'PENDING_PUSH'"
+                class="inline-action inline-action--push"
+                type="button"
+                [disabled]="isTaskPending(task.id)"
+                (click)="pushTask(task, $event)"
+              >
+                {{ isTaskPending(task.id) ? 'Pushing…' : 'Confirm push' }}
               </button>
               <button
                 *ngIf="task.status === 'IN_REVIEW'"
@@ -448,14 +457,18 @@
     </div>
 
     <ng-container *ngIf="taskForDetail() as task">
-      <div class="detail-actions" *ngIf="task.status === 'IN_REVIEW' || task.status === 'FAILED'">
+      <div class="detail-actions" *ngIf="task.status === 'IN_REVIEW' || task.status === 'PENDING_PUSH' || task.status === 'FAILED'">
         <div>
-          <strong>{{ task.status === 'IN_REVIEW' ? 'Agent work is ready' : 'This run needs attention' }}</strong>
+          <strong>
+            {{ task.status === 'IN_REVIEW' ? 'Agent work is ready' : task.status === 'PENDING_PUSH' ? 'Approved work is ready to publish' : 'This run needs attention' }}
+          </strong>
           <p>
             {{
               task.status === 'IN_REVIEW'
                 ? 'Inspect the changes and logs, then approve when satisfied.'
-                : 'Review the failure below before placing the task back in Todo.'
+                : task.status === 'PENDING_PUSH'
+                  ? 'Confirm to merge the task branch into its base branch and push it to origin.'
+                  : 'Review the failure below before placing the task back in Todo.'
             }}
           </p>
         </div>
@@ -467,6 +480,15 @@
           (click)="approveTask(task, $event)"
         >
           {{ isTaskPending(task.id) ? 'Approving…' : 'Approve task' }}
+        </button>
+        <button
+          *ngIf="task.status === 'PENDING_PUSH'"
+          class="button button--approve"
+          type="button"
+          [disabled]="isTaskPending(task.id)"
+          (click)="pushTask(task, $event)"
+        >
+          {{ isTaskPending(task.id) ? 'Pushing…' : 'Confirm push' }}
         </button>
         <button
           *ngIf="task.status === 'FAILED'"
@@ -497,6 +519,14 @@
             <div>
               <dt>Workspace</dt>
               <dd><code>{{ task.worktree_path || 'Assigned when claimed' }}</code></dd>
+            </div>
+            <div>
+              <dt>Base branch</dt>
+              <dd><code>{{ task.base_branch || 'Resolved when publishing' }}</code></dd>
+            </div>
+            <div>
+              <dt>Commit message</dt>
+              <dd>{{ task.commit_summary || 'Returned after the agent finishes' }}</dd>
             </div>
             <div>
               <dt>Created</dt>

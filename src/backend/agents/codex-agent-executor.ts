@@ -164,7 +164,10 @@ export function buildCodexPrompt(task: AgentTask): string {
     '- Do not modify, merge into, or rewrite the base branch.',
     '- Do not require interactive input or approval.',
     '- Implement the requested change completely and keep unrelated user changes intact.',
-    '- Finish with a concise summary of the implementation and any checks you ran.'
+    '',
+    'After completing the implementation and available verification,',
+    'use the `write-worklog` skill before finishing.',
+    'Return the canonical summary produced by the skill so the orchestrator can use it as the Git commit message.'
   ].join('\n');
 }
 
@@ -205,7 +208,7 @@ export function summarizeCodexResult(result: ProcessResult): string {
 
   const finalAgentMessage = agentMessages.at(-1);
   if (result.exitCode === 0 && !result.timedOut && !result.aborted) {
-    return truncateSummary(finalAgentMessage ?? 'Codex completed successfully.');
+    return truncateSummary(finalAgentMessage ?? '');
   }
   if (result.timedOut) {
     return 'Codex execution timed out after 30 minutes.';

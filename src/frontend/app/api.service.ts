@@ -95,6 +95,10 @@ export class ApiService {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/approve`, {});
   }
 
+  pushTask(taskId: number): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/push`, {});
+  }
+
   retryTask(taskId: number): Observable<Task> {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry`, {});
   }

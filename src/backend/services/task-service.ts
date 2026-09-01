@@ -11,14 +11,16 @@ import type {
 import { ProjectRepository } from '../database/project-repository.js';
 import { type TaskFilters, TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
+import { GitService } from './git-service.js';
 
-const ACTIVE_STATUSES: readonly TaskStatus[] = ['CLAIMED', 'IN_PROGRESS', 'TESTING'];
+const LOCKED_STATUSES: readonly TaskStatus[] = ['CLAIMED', 'IN_PROGRESS', 'TESTING', 'PENDING_PUSH'];
 
 export class TaskService {
   public constructor(
     private readonly tasks: TaskRepository,
     private readonly projects: ProjectRepository,
-    private readonly runs: TaskRunRepository
+    private readonly runs: TaskRunRepository,
+    private readonly git: GitService
   ) {}
 
   public list(filters: TaskFilters = {}): TaskListItem[] {
@@ -58,7 +60,7 @@ export class TaskService {
 
   public update(id: number, input: UpdateTaskInput): Task {
     const existing = this.requireTask(id);
-    if (ACTIVE_STATUSES.includes(existing.status)) {
+    if (LOCKED_STATUSES.includes(existing.status)) {
       throw new ConflictError('An active task cannot be edited.');
     }
     if (input.title !== undefined && input.title.trim().length === 0) {
@@ -83,7 +85,7 @@ export class TaskService {
 
   public delete(id: number): void {
     const existing = this.requireTask(id);
-    if (ACTIVE_STATUSES.includes(existing.status)) {
+    if (LOCKED_STATUSES.includes(existing.status)) {
       throw new ConflictError('An active task cannot be deleted.');
     }
     this.tasks.delete(id);
@@ -100,9 +102,37 @@ export class TaskService {
 
   public approve(id: number): Task {
     this.requireTask(id);
-    const updated = this.tasks.transition(id, 'IN_REVIEW', 'DONE');
+    const updated = this.tasks.transition(id, 'IN_REVIEW', 'PENDING_PUSH');
     if (updated === null) {
       throw new ConflictError('Only IN_REVIEW tasks can be approved.');
+    }
+    return updated;
+  }
+
+  public async push(id: number): Promise<Task> {
+    const task = this.requireTask(id);
+    if (task.status !== 'PENDING_PUSH') {
+      throw new ConflictError('Only PENDING_PUSH tasks can be pushed.');
+    }
+    if (task.branch_name === null) {
+      throw new ConflictError('The task has no Git branch to publish.');
+    }
+    const project = this.projects.findById(task.project_id);
+    if (project === null) {
+      throw new NotFoundError(`Project ${task.project_id} was not found.`);
+    }
+
+    const published = await this.git.publishBranch(
+      project.repository_path,
+      task.branch_name,
+      task.base_branch
+    );
+    if (task.base_branch === null) {
+      this.tasks.setBaseBranch(id, published.baseBranch);
+    }
+    const updated = this.tasks.transition(id, 'PENDING_PUSH', 'DONE');
+    if (updated === null) {
+      throw new ConflictError('Task state changed while its branch was being pushed.');
     }
     return updated;
   }

@@ -39,7 +39,7 @@ describe('backend API', () => {
     const git = new GitService(new ProcessRunner());
     app = createApi({
       projectService: new ProjectService(projects, git),
-      taskService: new TaskService(tasks, projects, runs),
+      taskService: new TaskService(tasks, projects, runs, git),
       workerStatus: () => ({
         running: true,
         busy: false,
@@ -143,8 +143,11 @@ describe('backend API', () => {
       .post(`/tasks/${taskId}/approve`)
       .expect(200)
       .expect((response) => {
-        expect(response.body.status).toBe('DONE');
+        expect(response.body.status).toBe('PENDING_PUSH');
       });
+
+    await request(app).post(`/tasks/${taskId}/push`).expect(409);
+    expect(tasks.transition(taskId, 'PENDING_PUSH', 'DONE')).not.toBeNull();
 
     await request(app).delete(`/tasks/${taskId}`).expect(204);
     await request(app).get(`/tasks/${taskId}`).expect(404);

@@ -56,6 +56,12 @@ describe('OrchestratorDatabase schema', () => {
       '2026-01-01T00:00:00.000Z',
       '2026-01-01T00:00:00.000Z'
     )).toThrow(/CHECK constraint failed/u);
+    expect(() => insertTask.run(
+      'PENDING_PUSH',
+      'MEDIUM',
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z'
+    )).not.toThrow();
   });
 
   it('enforces foreign keys and cascades task runs when a task is removed', () => {
@@ -88,7 +94,7 @@ describe('OrchestratorDatabase schema', () => {
     expect(runs.listForTask(task.id)).toEqual([]);
   });
 
-  it('adds the pause flag to databases created by earlier releases', async () => {
+  it('migrates earlier databases and restores unpushed DONE branches to PENDING_PUSH', async () => {
     const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'orchestrator-migrate-'));
     const databasePath = path.join(temporaryRoot, 'legacy.sqlite');
     const legacy = new DatabaseSync(databasePath);
@@ -99,8 +105,26 @@ describe('OrchestratorDatabase schema', () => {
       );
       CREATE TABLE tasks (
         id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, title TEXT NOT NULL,
-        description TEXT NOT NULL, status TEXT NOT NULL, priority TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('TODO','IN_REVIEW','DONE','FAILED')),
+        priority TEXT NOT NULL,
         branch_name TEXT, worktree_path TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE task_runs (
+        id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, started_at TEXT NOT NULL,
+        finished_at TEXT, exit_code INTEGER, stdout TEXT NOT NULL DEFAULT '',
+        stderr TEXT NOT NULL DEFAULT '', result_summary TEXT NOT NULL DEFAULT ''
+      );
+      INSERT INTO projects VALUES (
+        1, 'Legacy', '/legacy', '', '2026-08-30T00:00:00.000Z', '2026-08-30T00:00:00.000Z'
+      );
+      INSERT INTO tasks VALUES (
+        7, 1, 'Legacy task', '', 'DONE', 'HIGH', 'agent/7-legacy-task', '/legacy',
+        '2026-08-30T00:00:00.000Z', '2026-08-30T01:00:00.000Z'
+      );
+      INSERT INTO task_runs VALUES (
+        4, 7, '2026-08-30T00:10:00.000Z', '2026-08-30T00:20:00.000Z', 0, '', '',
+        'feat: finish the legacy task.'
       );
     `);
     legacy.close();
@@ -109,6 +133,13 @@ describe('OrchestratorDatabase schema', () => {
     const columns = database.connection.prepare('PRAGMA table_info(tasks)').all();
 
     expect(columns.some((column) => column['name'] === 'is_paused')).toBe(true);
+    expect(columns.some((column) => column['name'] === 'base_branch')).toBe(true);
+    expect(columns.some((column) => column['name'] === 'commit_summary')).toBe(true);
+    expect(database.connection.prepare('SELECT status, commit_summary FROM tasks WHERE id = 7').get())
+      .toMatchObject({
+        status: 'PENDING_PUSH',
+        commit_summary: 'feat: finish the legacy task.'
+      });
     database.close();
     database = undefined;
     await rm(temporaryRoot, { recursive: true, force: true });

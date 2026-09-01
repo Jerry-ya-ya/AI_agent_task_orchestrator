@@ -9,7 +9,7 @@ import type {
 import { TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
 import type { AgentExecutor } from '../agents/agent-executor.js';
-import { GitService } from '../services/git-service.js';
+import { GitService, requireCanonicalCommitSummary } from '../services/git-service.js';
 import { TestService } from '../services/test-service.js';
 
 export interface TaskWorkerOptions {
@@ -140,8 +140,14 @@ export class TaskWorker {
 
       let agentResult: AgentExecutionResult | undefined;
       let testResult: TestExecutionResult | undefined;
+      let canonicalSummary: string | undefined;
       try {
-        const task = this.tasks.setArtifacts(claimed.id, prepared.branchName, prepared.workspacePath);
+        const task = this.tasks.setArtifacts(
+          claimed.id,
+          prepared.branchName,
+          prepared.workspacePath,
+          prepared.originalBranch
+        );
         if (task === null || this.tasks.transition(task.id, 'CLAIMED', 'IN_PROGRESS') === null) {
           throw new PipelineFailure('Task state changed while preparing its branch.', 1);
         }
@@ -161,6 +167,7 @@ export class TaskWorker {
             agentResult.exitCode
           );
         }
+        canonicalSummary = requireCanonicalCommitSummary(agentResult.summary);
 
         if (this.tasks.transition(claimed.id, 'IN_PROGRESS', 'TESTING') === null) {
           throw new PipelineFailure('Task state changed before testing.', 1);
@@ -174,7 +181,10 @@ export class TaskWorker {
           );
         }
       } finally {
-        const checkpointed = await this.git.completeBranch(prepared, claimed.id);
+        const checkpointed = await this.git.completeBranch(prepared, claimed.id, canonicalSummary);
+        if (canonicalSummary !== undefined) {
+          this.tasks.setCommitSummary(claimed.id, canonicalSummary);
+        }
         this.runs.appendOutput(
           claimed.run_id,
           checkpointed

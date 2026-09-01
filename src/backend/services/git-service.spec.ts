@@ -29,10 +29,12 @@ describe('GitService', () => {
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe(prepared.branchName);
 
     await writeFile(path.join(repository, 'feature.txt'), 'agent result\n');
-    await expect(service.completeBranch(prepared, task.id)).resolves.toBe(true);
+    await expect(service.completeBranch(prepared, task.id, 'feat: implement the login API.')).resolves.toBe(true);
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
     await expect(readFile(path.join(repository, 'feature.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await git(runner, repository, ['show', `${prepared.branchName}:feature.txt`])).trim()).toBe('agent result');
+    expect((await git(runner, repository, ['log', '-1', '--format=%s', prepared.branchName])).trim())
+      .toBe('feat: implement the login API.');
 
     const reused = await service.prepareBranch(
       { ...task, branch_name: prepared.branchName, worktree_path: prepared.workspacePath },
@@ -52,6 +54,30 @@ describe('GitService', () => {
       'Repository has uncommitted changes'
     );
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
+  });
+
+  it('publishes an approved task branch to its base branch and origin', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-remote-'));
+    temporaryPaths.push(remote);
+    await git(runner, remote, ['init', '--bare']);
+    await git(runner, repository, ['remote', 'add', 'origin', remote]);
+
+    const service = new GitService(runner);
+    const task = exampleTask();
+    const prepared = await service.prepareBranch(task, repository);
+    await writeFile(path.join(repository, 'feature.txt'), 'ready to publish\n');
+    await service.completeBranch(prepared, task.id, 'feat: add the publishable feature.');
+
+    await expect(service.publishBranch(repository, prepared.branchName, 'main'))
+      .resolves.toEqual({ baseBranch: 'main' });
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
+    expect((await readFile(path.join(repository, 'feature.txt'), 'utf8')).trim()).toBe('ready to publish');
+    expect((await git(runner, repository, ['--git-dir', remote, 'show', 'main:feature.txt'])).trim())
+      .toBe('ready to publish');
+
+    await expect(service.publishBranch(repository, prepared.branchName, 'main'))
+      .resolves.toEqual({ baseBranch: 'main' });
   });
 
   it('turns unsafe or non-ASCII-only titles into safe deterministic slugs', () => {
@@ -95,6 +121,9 @@ function exampleTask(): Task {
     priority: 'HIGH',
     branch_name: null,
     worktree_path: null,
+    base_branch: null,
+    commit_summary: null,
+    is_paused: false,
     created_at: '2026-08-29T00:00:00.000Z',
     updated_at: '2026-08-29T00:00:00.000Z'
   };

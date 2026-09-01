@@ -84,8 +84,11 @@ describe('TaskWorker', () => {
     expect(executeTests).toHaveBeenCalledOnce();
     expect(completeBranch).toHaveBeenCalledWith(
       expect.objectContaining({ branchName: `agent/${task.id}-implement-search` }),
-      task.id
+      task.id,
+      'Implemented search and updated its tests.'
     );
+    expect(completed?.base_branch).toBe('main');
+    expect(completed?.commit_summary).toBe('Implemented search and updated its tests.');
 
     const taskRuns = runs.listForTask(task.id);
     expect(taskRuns).toHaveLength(1);
