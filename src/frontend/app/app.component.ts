@@ -48,6 +48,7 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
   { status: 'PENDING_PUSH', label: 'Pending push', hint: 'Approved; waiting to publish' },
   { status: 'PENDING_BRANCH_REMOVAL', label: 'Remove branch', hint: 'Published; waiting for cleanup approval' },
   { status: 'DONE', label: 'Done', hint: 'Published and cleaned up' },
+  { status: 'REJECTED', label: 'Rejected', hint: 'Declined during review' },
   { status: 'FAILED', label: 'Failed', hint: 'Needs attention' },
 ];
 
@@ -90,8 +91,13 @@ export class AppComponent implements OnInit, OnDestroy {
   editingTaskId: number | null = null;
   selectedTaskId: number | null = null;
   selectedTaskDetail: TaskDetail | null = null;
+<<<<<<< HEAD
   retryingTask: Task | null = null;
   retryModelEffort: ModelEffort = 'medium';
+=======
+  retryReviewTaskId: number | null = null;
+  retryPrompt = '';
+>>>>>>> agent/18-task
   projectDraft: ProjectDraft = this.emptyProjectDraft();
   taskDraft: TaskDraft = this.emptyTaskDraft();
 
@@ -172,7 +178,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   taskHistory(): Task[] {
     return this.tasks
-      .filter((task) => task.status === 'DONE' || task.status === 'FAILED')
+      .filter((task) => task.status === 'DONE' || task.status === 'REJECTED' || task.status === 'FAILED')
       .sort((left, right) => {
         const updatedDifference = right.updated_at.localeCompare(left.updated_at);
         return updatedDifference || right.id - left.id;
@@ -244,7 +250,12 @@ export class AppComponent implements OnInit, OnDestroy {
     this.editingTaskId = null;
     this.selectedTaskId = null;
     this.selectedTaskDetail = null;
+<<<<<<< HEAD
     this.retryingTask = null;
+=======
+    this.retryReviewTaskId = null;
+    this.retryPrompt = '';
+>>>>>>> agent/18-task
     this.detailLoading = false;
     this.saving = false;
     this.clearError();
@@ -330,6 +341,65 @@ export class AppComponent implements OnInit, OnDestroy {
     try {
       await firstValueFrom(this.api.approveTask(task.id));
       this.showNotice(`“${task.title}” is ready to push.`);
+      await this.refreshBoard(false);
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.setTaskPending(task.id, false);
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  onModalBackdrop(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      this.closeModal();
+    }
+  }
+
+  openRetryReview(task: Task, event?: Event): void {
+    event?.stopPropagation();
+    if (task.status !== 'IN_REVIEW' || this.isTaskPending(task.id)) {
+      return;
+    }
+    this.closeModal(false);
+    this.clearError();
+    this.retryReviewTaskId = task.id;
+    this.retryPrompt = '';
+    this.activateModal();
+  }
+
+  async submitReviewRetry(form: NgForm): Promise<void> {
+    if (form.invalid || this.retryReviewTaskId === null || this.saving) {
+      form.control.markAllAsTouched();
+      return;
+    }
+    const task = this.tasks.find((item) => item.id === this.retryReviewTaskId);
+    if (!task) return;
+    this.saving = true;
+    this.clearError();
+    try {
+      await firstValueFrom(this.api.retryReviewTask(task.id, this.retryPrompt.trim()));
+      this.closeModal();
+      this.showNotice(`A revision of “${task.title}” was queued.`);
+      await this.refreshBoard(false);
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.saving = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  async rejectTask(task: Task, event?: Event): Promise<void> {
+    event?.stopPropagation();
+    if (task.status !== 'IN_REVIEW' || this.isTaskPending(task.id)) return;
+    if (!window.confirm(`Reject “${task.title}” and queue its task branch for removal?`)) return;
+    this.setTaskPending(task.id, true);
+    this.clearError();
+    try {
+      await firstValueFrom(this.api.rejectTask(task.id));
+      if (this.selectedTaskId === task.id) this.closeModal();
+      this.showNotice(`“${task.title}” rejected and queued for branch removal.`);
       await this.refreshBoard(false);
     } catch (error: unknown) {
       this.setError(this.errorMessage(error));
@@ -694,8 +764,12 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private hasOpenModal(): boolean {
+<<<<<<< HEAD
     return this.showProjectEditor || this.taskEditorMode !== null ||
       this.selectedTaskId !== null || this.retryingTask !== null;
+=======
+    return this.showProjectEditor || this.taskEditorMode !== null || this.selectedTaskId !== null || this.retryReviewTaskId !== null;
+>>>>>>> agent/18-task
   }
 
   private keepFocusInModal(event: KeyboardEvent): void {

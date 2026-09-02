@@ -745,8 +745,30 @@ main {
   display: flex;
   padding: 8px 10px;
   border-top: 1px solid #e9ecef;
-  background: #fafbfc;
-}
+    gap: 6px;
+    justify-content: flex-end;
+    background: #fafbfc;
+  }
+
+  .review-icon-action {
+    display: inline-grid;
+    width: 32px;
+    height: 32px;
+    padding: 7px;
+    border: 0;
+    border-radius: 50%;
+    place-items: center;
+    background: transparent;
+    transition: background-color 120ms ease;
+  }
+
+  .review-icon-action svg { width: 18px; height: 18px; fill: currentColor; }
+  .review-icon-action--approve { color: #23734f; }
+  .review-icon-action--approve:hover:not(:disabled) { background: #dff3e9; }
+  .review-icon-action--retry { color: #9b5a18; }
+  .review-icon-action--retry:hover:not(:disabled) { background: #fff0dc; }
+  .review-icon-action--reject { color: #b3261e; }
+  .review-icon-action--reject:hover:not(:disabled) { background: #f9dedc; }
 
 .inline-action {
   width: 100%;

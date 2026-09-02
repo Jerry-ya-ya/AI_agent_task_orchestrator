@@ -112,6 +112,30 @@ export class TaskService {
     return updated;
   }
 
+  public retryReview(id: number, prompt: string): Task {
+    const task = this.requireTask(id);
+    if (task.status !== 'IN_REVIEW') {
+      throw new ConflictError('Only IN_REVIEW tasks can be revised.');
+    }
+    const revisionPrompt = prompt.trim();
+    if (revisionPrompt.length === 0) {
+      throw new ValidationError('A revision prompt is required.');
+    }
+    return this.tasks.createReviewRetry(task, revisionPrompt);
+  }
+
+  public async reject(id: number): Promise<Task> {
+    const task = this.requireTask(id);
+    if (task.status !== 'IN_REVIEW') {
+      throw new ConflictError('Only IN_REVIEW tasks can be rejected.');
+    }
+    const updated = this.tasks.rejectForBranchRemoval(id);
+    if (updated === null) {
+      throw new ConflictError('Task state changed while rejection was being queued.');
+    }
+    return updated;
+  }
+
   public approve(id: number): Task {
     this.requireTask(id);
     const updated = this.tasks.transition(id, 'IN_REVIEW', 'PENDING_PUSH');
@@ -167,7 +191,11 @@ export class TaskService {
       task.branch_name,
       task.base_branch
     );
-    const updated = this.tasks.transition(id, 'PENDING_BRANCH_REMOVAL', 'DONE');
+    const updated = this.tasks.transition(
+      id,
+      'PENDING_BRANCH_REMOVAL',
+      task.is_rejected ? 'REJECTED' : 'DONE'
+    );
     if (updated === null) {
       throw new ConflictError('Task state changed while its branch was being removed.');
     }

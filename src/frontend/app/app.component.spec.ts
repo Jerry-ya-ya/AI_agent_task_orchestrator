@@ -112,6 +112,7 @@ describe('AppComponent initialization', () => {
       'PENDING_PUSH',
       'PENDING_BRANCH_REMOVAL',
       'DONE',
+      'REJECTED',
       'FAILED',
     ]);
   });
@@ -141,6 +142,8 @@ function exampleTask(overrides: Partial<Task> = {}): Task {
     worktree_path: null,
     base_branch: null,
     commit_summary: null,
+    source_task_id: null,
+    is_rejected: false,
     is_paused: false,
     created_at: '2026-08-31T00:00:00.000Z',
     updated_at: '2026-08-31T00:00:00.000Z',

@@ -32,6 +32,9 @@ const taskUpdate = z.object({
   priority: z.enum(TASK_PRIORITIES).optional(),
   model_effort: z.enum(MODEL_EFFORTS).optional()
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one field is required.');
+const reviewRetryInput = z.object({
+  prompt: z.string().min(1).max(100_000)
+}).strict();
 
 export function createApi(dependencies: ApiDependencies): express.Express {
   const app = express();
@@ -109,6 +112,17 @@ export function createApi(dependencies: ApiDependencies): express.Express {
       .strict()
       .parse(request.body ?? {});
     response.json(dependencies.taskService.retry(idSchema.parse(request.params.id), input));
+  });
+
+  app.post('/tasks/:id/retry-review', (request, response) => {
+    response.status(201).json(dependencies.taskService.retryReview(
+      idSchema.parse(request.params.id),
+      reviewRetryInput.parse(request.body).prompt
+    ));
+  });
+
+  app.post('/tasks/:id/reject', async (request, response) => {
+    response.json(await dependencies.taskService.reject(idSchema.parse(request.params.id)));
   });
 
   app.post('/tasks/:id/approve', (request, response) => {

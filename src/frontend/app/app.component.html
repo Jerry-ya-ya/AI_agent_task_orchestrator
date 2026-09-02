@@ -165,6 +165,7 @@
               <span class="project-name" [title]="projectName(task.project_id)">
                 {{ projectName(task.project_id) }}
               </span>
+              <span class="status-chip" data-status="REJECTED" *ngIf="task.is_rejected">Rejected</span>
               <span class="latest-result">
                 <span class="sr-only">Latest run result: </span>{{ latestResult(task) }}
               </span>
@@ -203,12 +204,39 @@
               </button>
               <button
                 *ngIf="task.status === 'IN_REVIEW'"
-                class="inline-action inline-action--approve"
+                mat-icon-button
+                class="review-icon-action review-icon-action--retry"
                 type="button"
+                title="Request changes"
+                aria-label="Request changes"
+                [disabled]="isTaskPending(task.id)"
+                (click)="openRetryReview(task, $event)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-4.6 7H5.3A7 7 0 1 0 12 5Z"/></svg>
+              </button>
+              <button
+                *ngIf="task.status === 'IN_REVIEW'"
+                mat-icon-button
+                class="review-icon-action review-icon-action--reject"
+                type="button"
+                title="Reject"
+                aria-label="Reject task"
+                [disabled]="isTaskPending(task.id)"
+                (click)="rejectTask(task, $event)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.4 6 4.6 4.6L16.6 6 18 7.4 13.4 12l4.6 4.6-1.4 1.4-4.6-4.6L7.4 18 6 16.6l4.6-4.6L6 7.4Z"/></svg>
+              </button>
+              <button
+                *ngIf="task.status === 'IN_REVIEW'"
+                mat-icon-button
+                class="review-icon-action review-icon-action--approve"
+                type="button"
+                title="Approve"
+                aria-label="Approve task"
                 [disabled]="isTaskPending(task.id)"
                 (click)="approveTask(task, $event)"
               >
-                {{ isTaskPending(task.id) ? 'Approving…' : 'Approve' }}
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 16.2-3.5-3.5L4.1 14.1 9 19 20.3 7.7l-1.4-1.4Z"/></svg>
               </button>
               <button
                 *ngIf="task.status === 'FAILED'"
@@ -307,6 +335,25 @@
         <button class="button button--primary" type="submit" [disabled]="isTaskPending(task.id)">
           {{ isTaskPending(task.id) ? 'Queuing…' : 'Retry task' }}
         </button>
+<div class="modal" *ngIf="retryReviewTaskId !== null" (mousedown)="onModalBackdrop($event)">
+  <section #modalSurface class="modal__surface modal__surface--form" role="dialog" aria-modal="true" aria-labelledby="retry-review-title" tabindex="-1">
+    <header class="modal__header">
+      <div>
+        <p class="eyebrow">Revise previous version</p>
+        <h2 id="retry-review-title">Request changes</h2>
+      </div>
+      <button class="icon-button" type="button" aria-label="Close revision form" (click)="closeModal()">×</button>
+    </header>
+    <form #retryForm="ngForm" (ngSubmit)="submitReviewRetry(retryForm)" novalidate>
+      <div class="form-field">
+        <label for="retry-prompt">New prompt</label>
+        <textarea id="retry-prompt" name="retryPrompt" [(ngModel)]="retryPrompt" required maxlength="100000" rows="7" placeholder="Describe what should change in the previous implementation…"></textarea>
+        <small>The AI will be told to modify the existing previous version.</small>
+      </div>
+      <div class="form-error" role="alert" *ngIf="apiError">{{ apiError }}</div>
+      <footer class="modal__footer">
+        <button class="button button--quiet" type="button" (click)="closeModal()">Cancel</button>
+        <button class="button button--primary" type="submit" [disabled]="saving">{{ saving ? 'Queuing…' : 'Queue revision' }}</button>
       </footer>
     </form>
   </section>

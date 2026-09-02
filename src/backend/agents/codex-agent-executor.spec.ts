@@ -55,6 +55,20 @@ describe('CodexAgentExecutor', () => {
     expect(runner.lastOptions?.timeoutMs).toBe(1_800_000);
   });
 
+  it('tells the agent that a review retry modifies the previous task version', () => {
+    const prompt = buildCodexPrompt({
+      ...exampleTask(),
+      id: 102,
+      description: 'Keep the dialog open when validation fails.',
+      source_task_id: 101
+    });
+
+    expect(prompt).toContain('This task revises the previous implementation from task #101.');
+    expect(prompt).toContain(
+      'Modify the existing previous version in this branch; do not treat this as a new implementation from scratch.'
+    );
+  });
+
   it('extracts the final agent message from JSONL', () => {
     const result = successResult(
       [

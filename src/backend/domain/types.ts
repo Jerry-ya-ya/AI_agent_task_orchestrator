@@ -7,6 +7,7 @@ export const TASK_STATUSES = [
   'PENDING_PUSH',
   'PENDING_BRANCH_REMOVAL',
   'DONE',
+  'REJECTED',
   'FAILED'
 ] as const;
 
@@ -39,6 +40,8 @@ export interface Task {
   worktree_path: string | null;
   base_branch: string | null;
   commit_summary: string | null;
+  source_task_id: number | null;
+  is_rejected: boolean;
   is_paused: boolean;
   created_at: string;
   updated_at: string;
@@ -94,6 +97,10 @@ export interface UpdateTaskInput {
 
 export interface RetryTaskInput {
   model_effort?: ModelEffort;
+}
+
+export interface RetryReviewInput {
+  prompt: string;
 }
 
 export interface ProcessResult {

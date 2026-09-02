@@ -12,8 +12,9 @@ import type {
 import { type Clock, OrchestratorDatabase, systemClock } from './database.js';
 import { TaskRunRepository } from './task-run-repository.js';
 
-interface StoredTask extends Omit<Task, 'is_paused'> {
+interface StoredTask extends Omit<Task, 'is_paused' | 'is_rejected'> {
   is_paused: number;
+  is_rejected: number;
 }
 
 interface TaskListRow extends StoredTask {
@@ -102,7 +103,7 @@ export class TaskRepository {
     const result = this.database.connection.prepare(`
       INSERT INTO tasks (
         project_id, title, description, status, priority, model_effort,
-        branch_name, worktree_path, base_branch, commit_summary,
+        branch_name, worktree_path, base_branch, commit_summary, source_task_id, is_rejected,
         is_paused, created_at, updated_at
       ) VALUES (?, ?, ?, 'TODO', ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?)
     `).run(
@@ -115,6 +116,35 @@ export class TaskRepository {
       now
     );
     return this.findById(Number(result.lastInsertRowid)) as Task;
+  }
+
+  public createReviewRetry(source: Task, prompt: string): Task {
+    return this.database.transaction(() => {
+      const now = this.clock();
+      const result = this.database.connection.prepare(`
+        INSERT INTO tasks (
+          project_id, title, description, status, priority,
+          branch_name, worktree_path, base_branch, commit_summary,
+          source_task_id, is_rejected, is_paused, created_at, updated_at
+        ) VALUES (?, ?, ?, 'TODO', ?, ?, ?, ?, NULL, ?, 0, 0, ?, ?)
+      `).run(
+        source.project_id, source.title, prompt, source.priority,
+        source.branch_name, source.worktree_path, source.base_branch, source.id, now, now
+      );
+      this.database.connection.prepare(`
+        UPDATE tasks SET status = 'REJECTED', updated_at = ?
+        WHERE id = ? AND status = 'IN_REVIEW'
+      `).run(now, source.id);
+      return this.findById(Number(result.lastInsertRowid)) as Task;
+    });
+  }
+
+  public rejectForBranchRemoval(id: number): Task | null {
+    const result = this.database.connection.prepare(`
+      UPDATE tasks SET status = 'PENDING_BRANCH_REMOVAL', is_rejected = 1, updated_at = ?
+      WHERE id = ? AND status = 'IN_REVIEW'
+    `).run(this.clock(), id);
+    return result.changes > 0 ? this.findById(id) : null;
   }
 
   public update(id: number, input: UpdateTaskInput): Task | null {
@@ -301,10 +331,15 @@ export class TaskRepository {
       result_summary: run_result_summary ?? ''
     };
 
-    return { ...task, is_paused: task.is_paused === 1, latest_run: latestRun };
+    return {
+      ...task,
+      is_paused: task.is_paused === 1,
+      is_rejected: task.is_rejected === 1,
+      latest_run: latestRun
+    };
   }
 
   private mapStoredTask(task: StoredTask): Task {
-    return { ...task, is_paused: task.is_paused === 1 };
+    return { ...task, is_paused: task.is_paused === 1, is_rejected: task.is_rejected === 1 };
   }
 }
