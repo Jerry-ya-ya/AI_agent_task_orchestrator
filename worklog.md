@@ -25,3 +25,5 @@
 ## 2026/09/02
 
 - Remove the Electron application menu and add a draggable custom title bar with a secure close control.
+
+- feat: hide claimed tasks and require approval before removing published task branches.

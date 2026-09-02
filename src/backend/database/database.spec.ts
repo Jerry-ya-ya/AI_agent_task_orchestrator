@@ -62,6 +62,12 @@ describe('OrchestratorDatabase schema', () => {
       '2026-01-01T00:00:00.000Z',
       '2026-01-01T00:00:00.000Z'
     )).not.toThrow();
+    expect(() => insertTask.run(
+      'PENDING_BRANCH_REMOVAL',
+      'MEDIUM',
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z'
+    )).not.toThrow();
   });
 
   it('enforces foreign keys and cascades task runs when a task is removed', () => {
@@ -140,6 +146,47 @@ describe('OrchestratorDatabase schema', () => {
         status: 'PENDING_PUSH',
         commit_summary: 'feat: finish the legacy task.'
       });
+    database.close();
+    database = undefined;
+    await rm(temporaryRoot, { recursive: true, force: true });
+  });
+
+  it('moves published DONE tasks from the prior schema into branch cleanup', async () => {
+    const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'orchestrator-cleanup-migrate-'));
+    const databasePath = path.join(temporaryRoot, 'publishing.sqlite');
+    const previous = new DatabaseSync(databasePath);
+    previous.exec(`
+      CREATE TABLE projects (
+        id INTEGER PRIMARY KEY, name TEXT NOT NULL, repository_path TEXT NOT NULL UNIQUE,
+        context TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE tasks (
+        id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','DONE','FAILED')),
+        priority TEXT NOT NULL, branch_name TEXT, worktree_path TEXT, base_branch TEXT,
+        commit_summary TEXT, is_paused INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE task_runs (
+        id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, started_at TEXT NOT NULL,
+        finished_at TEXT, exit_code INTEGER, stdout TEXT NOT NULL DEFAULT '',
+        stderr TEXT NOT NULL DEFAULT '', result_summary TEXT NOT NULL DEFAULT ''
+      );
+      INSERT INTO projects VALUES (
+        1, 'Published', '/published', '', '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z'
+      );
+      INSERT INTO tasks VALUES (
+        9, 1, 'Published task', '', 'DONE', 'MEDIUM', 'agent/9-published-task', '/published',
+        'main', 'feat: publish the task.', 0,
+        '2026-09-01T00:00:00.000Z', '2026-09-01T01:00:00.000Z'
+      );
+    `);
+    previous.close();
+
+    database = new OrchestratorDatabase(databasePath);
+    expect(database.connection.prepare('SELECT status FROM tasks WHERE id = 9').get())
+      .toMatchObject({ status: 'PENDING_BRANCH_REMOVAL' });
     database.close();
     database = undefined;
     await rm(temporaryRoot, { recursive: true, force: true });

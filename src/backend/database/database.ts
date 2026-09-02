@@ -18,7 +18,7 @@ const SCHEMA = `
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'TODO'
-      CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','DONE','FAILED')),
+      CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','PENDING_BRANCH_REMOVAL','DONE','FAILED')),
     priority TEXT NOT NULL DEFAULT 'MEDIUM'
       CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
     branch_name TEXT,
@@ -92,8 +92,9 @@ export class OrchestratorDatabase {
     const taskDefinition = this.connection.prepare(`
       SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'
     `).get() as { sql?: string } | undefined;
-    if (!taskDefinition?.sql?.includes('PENDING_PUSH')) {
-      this.rebuildTasksForPublishing();
+    const hadPendingPush = taskDefinition?.sql?.includes('PENDING_PUSH') ?? false;
+    if (!taskDefinition?.sql?.includes('PENDING_BRANCH_REMOVAL')) {
+      this.rebuildTasksForPublishing(hadPendingPush);
     }
 
     this.connection.exec(`
@@ -105,7 +106,7 @@ export class OrchestratorDatabase {
         ORDER BY tr.started_at DESC, tr.id DESC
         LIMIT 1
       )
-      WHERE status = 'PENDING_PUSH' AND commit_summary IS NULL;
+      WHERE status IN ('PENDING_PUSH', 'PENDING_BRANCH_REMOVAL') AND commit_summary IS NULL;
     `);
     this.connection.exec(`
       CREATE INDEX IF NOT EXISTS idx_tasks_claimable
@@ -113,7 +114,8 @@ export class OrchestratorDatabase {
     `);
   }
 
-  private rebuildTasksForPublishing(): void {
+  private rebuildTasksForPublishing(hadPendingPush: boolean): void {
+    const migratedDoneStatus = hadPendingPush ? 'PENDING_BRANCH_REMOVAL' : 'PENDING_PUSH';
     this.connection.exec('PRAGMA foreign_keys = OFF;');
     try {
       this.connection.exec(`
@@ -130,7 +132,7 @@ export class OrchestratorDatabase {
           title TEXT NOT NULL,
           description TEXT NOT NULL DEFAULT '',
           status TEXT NOT NULL DEFAULT 'TODO'
-            CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','DONE','FAILED')),
+            CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','PENDING_BRANCH_REMOVAL','DONE','FAILED')),
           priority TEXT NOT NULL DEFAULT 'MEDIUM'
             CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
           branch_name TEXT,
@@ -150,7 +152,7 @@ export class OrchestratorDatabase {
         SELECT
           id, project_id, title, description,
           CASE
-            WHEN status = 'DONE' AND branch_name IS NOT NULL THEN 'PENDING_PUSH'
+            WHEN status = 'DONE' AND branch_name IS NOT NULL THEN '${migratedDoneStatus}'
             ELSE status
           END,
           priority, branch_name, worktree_path, base_branch, commit_summary,

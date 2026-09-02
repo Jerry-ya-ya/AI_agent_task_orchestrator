@@ -5,6 +5,7 @@ export const TASK_STATUSES = [
   'TESTING',
   'IN_REVIEW',
   'PENDING_PUSH',
+  'PENDING_BRANCH_REMOVAL',
   'DONE',
   'FAILED',
 ] as const;

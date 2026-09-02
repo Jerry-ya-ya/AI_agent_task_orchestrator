@@ -173,7 +173,7 @@
               </span>
             </button>
 
-            <div class="task-card__actions" *ngIf="task.status === 'TODO' || task.status === 'IN_REVIEW' || task.status === 'PENDING_PUSH' || task.status === 'FAILED'">
+            <div class="task-card__actions" *ngIf="task.status === 'TODO' || task.status === 'IN_REVIEW' || task.status === 'PENDING_PUSH' || task.status === 'PENDING_BRANCH_REMOVAL' || task.status === 'FAILED'">
               <button
                 *ngIf="task.status === 'TODO'"
                 class="inline-action inline-action--pause"
@@ -182,6 +182,15 @@
                 (click)="toggleTaskPause(task, $event)"
               >
                 {{ isTaskPending(task.id) ? 'Updating…' : (task.is_paused ? 'Resume' : 'Pause') }}
+              </button>
+              <button
+                *ngIf="task.status === 'PENDING_BRANCH_REMOVAL'"
+                class="inline-action inline-action--cleanup"
+                type="button"
+                [disabled]="isTaskPending(task.id)"
+                (click)="removeTaskBranch(task, $event)"
+              >
+                {{ isTaskPending(task.id) ? 'Removing…' : 'Approve removal' }}
               </button>
               <button
                 *ngIf="task.status === 'PENDING_PUSH'"
@@ -468,10 +477,10 @@
     </div>
 
     <ng-container *ngIf="taskForDetail() as task">
-      <div class="detail-actions" *ngIf="task.status === 'IN_REVIEW' || task.status === 'PENDING_PUSH' || task.status === 'FAILED'">
+      <div class="detail-actions" *ngIf="task.status === 'IN_REVIEW' || task.status === 'PENDING_PUSH' || task.status === 'PENDING_BRANCH_REMOVAL' || task.status === 'FAILED'">
         <div>
           <strong>
-            {{ task.status === 'IN_REVIEW' ? 'Agent work is ready' : task.status === 'PENDING_PUSH' ? 'Approved work is ready to publish' : 'This run needs attention' }}
+            {{ task.status === 'IN_REVIEW' ? 'Agent work is ready' : task.status === 'PENDING_PUSH' ? 'Approved work is ready to publish' : task.status === 'PENDING_BRANCH_REMOVAL' ? 'Published branch is ready for cleanup' : 'This run needs attention' }}
           </strong>
           <p>
             {{
@@ -479,7 +488,9 @@
                 ? 'Inspect the changes and logs, then approve when satisfied.'
                 : task.status === 'PENDING_PUSH'
                   ? 'Confirm to merge the task branch into its base branch and push it to origin.'
-                  : 'Review the failure below before placing the task back in Todo.'
+                  : task.status === 'PENDING_BRANCH_REMOVAL'
+                    ? 'Approve removal only after the published changes are confirmed on the base branch.'
+                    : 'Review the failure below before placing the task back in Todo.'
             }}
           </p>
         </div>
@@ -491,6 +502,15 @@
           (click)="approveTask(task, $event)"
         >
           {{ isTaskPending(task.id) ? 'Approving…' : 'Approve task' }}
+        </button>
+        <button
+          *ngIf="task.status === 'PENDING_BRANCH_REMOVAL'"
+          class="button button--cleanup"
+          type="button"
+          [disabled]="isTaskPending(task.id)"
+          (click)="removeTaskBranch(task, $event)"
+        >
+          {{ isTaskPending(task.id) ? 'Removing…' : 'Approve branch removal' }}
         </button>
         <button
           *ngIf="task.status === 'PENDING_PUSH'"

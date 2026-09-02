@@ -13,7 +13,13 @@ import { type TaskFilters, TaskRepository } from '../database/task-repository.js
 import { TaskRunRepository } from '../database/task-run-repository.js';
 import { GitService } from './git-service.js';
 
-const LOCKED_STATUSES: readonly TaskStatus[] = ['CLAIMED', 'IN_PROGRESS', 'TESTING', 'PENDING_PUSH'];
+const LOCKED_STATUSES: readonly TaskStatus[] = [
+  'CLAIMED',
+  'IN_PROGRESS',
+  'TESTING',
+  'PENDING_PUSH',
+  'PENDING_BRANCH_REMOVAL'
+];
 
 export class TaskService {
   public constructor(
@@ -130,9 +136,34 @@ export class TaskService {
     if (task.base_branch === null) {
       this.tasks.setBaseBranch(id, published.baseBranch);
     }
-    const updated = this.tasks.transition(id, 'PENDING_PUSH', 'DONE');
+    const updated = this.tasks.transition(id, 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL');
     if (updated === null) {
       throw new ConflictError('Task state changed while its branch was being pushed.');
+    }
+    return updated;
+  }
+
+  public async removeBranch(id: number): Promise<Task> {
+    const task = this.requireTask(id);
+    if (task.status !== 'PENDING_BRANCH_REMOVAL') {
+      throw new ConflictError('Only PENDING_BRANCH_REMOVAL tasks can remove their task branch.');
+    }
+    if (task.branch_name === null) {
+      throw new ConflictError('The task has no Git branch to remove.');
+    }
+    const project = this.projects.findById(task.project_id);
+    if (project === null) {
+      throw new NotFoundError(`Project ${task.project_id} was not found.`);
+    }
+
+    await this.git.removeTaskBranch(
+      project.repository_path,
+      task.branch_name,
+      task.base_branch
+    );
+    const updated = this.tasks.transition(id, 'PENDING_BRANCH_REMOVAL', 'DONE');
+    if (updated === null) {
+      throw new ConflictError('Task state changed while its branch was being removed.');
     }
     return updated;
   }

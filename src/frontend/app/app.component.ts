@@ -40,12 +40,12 @@ interface StatusColumn {
 
 const STATUS_COLUMNS: readonly StatusColumn[] = [
   { status: 'TODO', label: 'Todo', hint: 'Waiting for the worker' },
-  { status: 'CLAIMED', label: 'Claimed', hint: 'Reserved by the worker' },
   { status: 'IN_PROGRESS', label: 'In progress', hint: 'Agent is working' },
   { status: 'TESTING', label: 'Testing', hint: 'Running project checks' },
   { status: 'IN_REVIEW', label: 'In review', hint: 'Ready for your review' },
   { status: 'PENDING_PUSH', label: 'Pending push', hint: 'Approved; waiting to publish' },
-  { status: 'DONE', label: 'Done', hint: 'Approved work' },
+  { status: 'PENDING_BRANCH_REMOVAL', label: 'Remove branch', hint: 'Published; waiting for cleanup approval' },
+  { status: 'DONE', label: 'Done', hint: 'Published and cleaned up' },
   { status: 'FAILED', label: 'Failed', hint: 'Needs attention' },
 ];
 
@@ -344,7 +344,34 @@ export class AppComponent implements OnInit, OnDestroy {
     this.clearError();
     try {
       await firstValueFrom(this.api.pushTask(task.id));
-      this.showNotice(`“${task.title}” pushed successfully.`);
+      this.showNotice(`“${task.title}” pushed; branch cleanup is awaiting approval.`);
+      await this.refreshBoard(false);
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.setTaskPending(task.id, false);
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  async removeTaskBranch(task: Task, event?: Event): Promise<void> {
+    event?.stopPropagation();
+    if (task.status !== 'PENDING_BRANCH_REMOVAL' || this.isTaskPending(task.id)) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Remove the local task branch ${task.branch_name || ''} for “${task.title}”?`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    this.setTaskPending(task.id, true);
+    this.clearError();
+    try {
+      await firstValueFrom(this.api.removeTaskBranch(task.id));
+      this.showNotice(`“${task.title}” branch removed and task marked Done.`);
       await this.refreshBoard(false);
     } catch (error: unknown) {
       this.setError(this.errorMessage(error));
@@ -437,7 +464,8 @@ export class AppComponent implements OnInit, OnDestroy {
     return task.status !== 'CLAIMED' &&
       task.status !== 'IN_PROGRESS' &&
       task.status !== 'TESTING' &&
-      task.status !== 'PENDING_PUSH';
+      task.status !== 'PENDING_PUSH' &&
+      task.status !== 'PENDING_BRANCH_REMOVAL';
   }
 
   latestResult(task: Task): string {

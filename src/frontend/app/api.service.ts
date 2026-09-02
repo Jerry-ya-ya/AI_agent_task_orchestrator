@@ -99,6 +99,10 @@ export class ApiService {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/push`, {});
   }
 
+  removeTaskBranch(taskId: number): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/remove-branch`, {});
+  }
+
   retryTask(taskId: number): Observable<Task> {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry`, {});
   }

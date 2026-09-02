@@ -114,6 +114,10 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     response.json(await dependencies.taskService.push(idSchema.parse(request.params.id)));
   });
 
+  app.post('/tasks/:id/remove-branch', async (request, response) => {
+    response.json(await dependencies.taskService.removeBranch(idSchema.parse(request.params.id)));
+  });
+
   app.post('/tasks/:id/pause', (request, response) => {
     response.json(dependencies.taskService.pause(idSchema.parse(request.params.id)));
   });

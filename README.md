@@ -71,7 +71,8 @@ For a production-UI browser smoke test, set `ORCHESTRATOR_UI_PATH=dist/frontend/
 4. Leave the desktop app running. The Worker claims one `TODO` task at a time in `URGENT`, `HIGH`, `MEDIUM`, `LOW` order, then oldest first.
 5. Open task cards to inspect branch, workspace, result, stdout, stderr, and all run attempts.
 6. Approve an `IN_REVIEW` task to move it to `PENDING_PUSH`.
-7. Confirm push to merge its task branch into the recorded base branch and push that branch to `origin`; only then does it become `DONE`. Retry a `FAILED` task after reviewing its logs.
+7. Confirm push to merge its task branch into the recorded base branch and push that branch to `origin`; it then waits in `PENDING_BRANCH_REMOVAL`.
+8. Approve branch removal to safely delete the merged local task branch and move the task to `DONE`. Retry a `FAILED` task after reviewing its logs.
 
 For task `101` titled `Login API`, the generated branch is:
 
@@ -79,7 +80,7 @@ For task `101` titled `Login API`, the generated branch is:
 agent/101-login-api
 ```
 
-The sequential Worker requires a clean repository, creates or reuses the task branch, runs Codex and project verification in the configured repository, commits task changes using Codex's canonical `write-worklog` summary, and restores the original branch. It never merges or pushes automatically; publishing happens only after the user clicks Confirm push.
+The sequential Worker requires a clean repository, creates or reuses the task branch, runs Codex and project verification in the configured repository, commits task changes using Codex's canonical `write-worklog` summary, and restores the original branch. It never merges, pushes, or removes branches automatically; publishing and branch cleanup each require a separate user confirmation.
 
 ## Test detection
 
@@ -107,4 +108,5 @@ Automated tests do not invoke real Codex or consume an authenticated session.
 - Logs are capped by the process runner before they are persisted.
 - Deleting an inactive task removes its database record and run history but deliberately leaves its Git branch intact to avoid destroying work.
 - Approval changes state only. A separate explicit confirmation merges locally and runs `git push origin <base-branch>` using the user's existing Git credentials.
+- Local task branches are removed only after another explicit approval and a Git merged-ancestor check; cleanup uses non-forced `git branch -d`.
 - No accounts, cloud sync, LAN binding, multi-user features, parallel workers, DAGs, notifications, remote access, PR automation, or GitHub API integration are included.

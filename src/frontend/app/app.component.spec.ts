@@ -72,6 +72,24 @@ describe('AppComponent initialization', () => {
 
     expect(component.taskHistory().map((task) => task.id)).toEqual([3, 1]);
   });
+
+  it('hides the internal CLAIMED state and exposes branch cleanup between push and done', () => {
+    const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
+    const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
+    const component = new AppComponent(api, changeDetector);
+
+    expect(component.columns.map((column) => column.status)).not.toContain('CLAIMED');
+    expect(component.columns.map((column) => column.status)).toEqual([
+      'TODO',
+      'IN_PROGRESS',
+      'TESTING',
+      'IN_REVIEW',
+      'PENDING_PUSH',
+      'PENDING_BRANCH_REMOVAL',
+      'DONE',
+      'FAILED',
+    ]);
+  });
 });
 
 function exampleProject(): Project {

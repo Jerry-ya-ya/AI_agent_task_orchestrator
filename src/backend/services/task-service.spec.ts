@@ -17,6 +17,7 @@ describe('TaskService state rules', () => {
   let service: TaskService;
   let project: Project;
   let publishBranch: ReturnType<typeof vi.fn>;
+  let removeTaskBranch: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     database = new OrchestratorDatabase(':memory:');
@@ -24,7 +25,8 @@ describe('TaskService state rules', () => {
     runs = new TaskRunRepository(database);
     tasks = new TaskRepository(database, runs);
     publishBranch = vi.fn(async () => ({ baseBranch: 'main' }));
-    const git = { publishBranch } as unknown as GitService;
+    removeTaskBranch = vi.fn(async () => true);
+    const git = { publishBranch, removeTaskBranch } as unknown as GitService;
     service = new TaskService(tasks, projects, runs, git);
     project = projects.create({
       name: 'Example',
@@ -70,7 +72,7 @@ describe('TaskService state rules', () => {
     expect(() => service.create({ project_id: 9999, title: 'Orphan' })).toThrow(ValidationError);
   });
 
-  it.each(['CLAIMED', 'IN_PROGRESS', 'TESTING', 'PENDING_PUSH'] as const)(
+  it.each(['CLAIMED', 'IN_PROGRESS', 'TESTING', 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL'] as const)(
     'rejects edits and deletion while a task is %s',
     (activeStatus) => {
       const task = createTask(`Task in ${activeStatus}`);
@@ -123,20 +125,28 @@ describe('TaskService state rules', () => {
     expect(tasks.findById(todo.id)?.status).toBe('TODO');
   });
 
-  it('publishes only approved tasks and marks them DONE after Git push succeeds', async () => {
+  it('publishes approved tasks, then requires approval before removing the branch and marking DONE', async () => {
     const review = createTask('Publish me');
     expect(tasks.transition(review.id, 'TODO', 'CLAIMED')).not.toBeNull();
     tasks.setArtifacts(review.id, `agent/${review.id}-publish-me`, '/example/repository', 'main');
     expect(tasks.transition(review.id, 'CLAIMED', 'IN_REVIEW')).not.toBeNull();
     service.approve(review.id);
 
-    await expect(service.push(review.id)).resolves.toMatchObject({ status: 'DONE' });
+    await expect(service.push(review.id)).resolves.toMatchObject({ status: 'PENDING_BRANCH_REMOVAL' });
     expect(publishBranch).toHaveBeenCalledWith(
       '/example',
       `agent/${review.id}-publish-me`,
       'main'
     );
     await expect(service.push(review.id)).rejects.toThrow(ConflictError);
+
+    await expect(service.removeBranch(review.id)).resolves.toMatchObject({ status: 'DONE' });
+    expect(removeTaskBranch).toHaveBeenCalledWith(
+      '/example',
+      `agent/${review.id}-publish-me`,
+      'main'
+    );
+    await expect(service.removeBranch(review.id)).rejects.toThrow(ConflictError);
   });
 
   it('keeps a task PENDING_PUSH when Git publishing fails', async () => {
@@ -149,6 +159,17 @@ describe('TaskService state rules', () => {
 
     await expect(service.push(review.id)).rejects.toThrow('origin rejected the push');
     expect(tasks.findById(review.id)?.status).toBe('PENDING_PUSH');
+  });
+
+  it('keeps a task pending branch removal when Git cleanup fails', async () => {
+    const review = createTask('Retry cleanup');
+    expect(tasks.transition(review.id, 'TODO', 'CLAIMED')).not.toBeNull();
+    tasks.setArtifacts(review.id, `agent/${review.id}-retry-cleanup`, '/example/repository', 'main');
+    expect(tasks.transition(review.id, 'CLAIMED', 'PENDING_BRANCH_REMOVAL')).not.toBeNull();
+    removeTaskBranch.mockRejectedValueOnce(new Error('branch is not merged'));
+
+    await expect(service.removeBranch(review.id)).rejects.toThrow('branch is not merged');
+    expect(tasks.findById(review.id)?.status).toBe('PENDING_BRANCH_REMOVAL');
   });
 
   it('pauses and resumes only TODO tasks', () => {

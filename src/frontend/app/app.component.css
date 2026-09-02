@@ -547,6 +547,11 @@ main {
   background: #197c83;
 }
 
+[data-status='PENDING_BRANCH_REMOVAL'] .status-indicator {
+  border-color: #47748f;
+  background: #47748f;
+}
+
 [data-status='DONE'] .status-indicator {
   border-color: #27855b;
   background: #27855b;
@@ -716,6 +721,11 @@ main {
   color: #176d73;
 }
 
+.status-chip[data-status='PENDING_BRANCH_REMOVAL'] {
+  background: #e6f0f5;
+  color: #3c657d;
+}
+
 .status-chip[data-status='DONE'] {
   background: #e3f5ec;
   color: #24744f;
@@ -764,6 +774,15 @@ main {
 
 .inline-action--push:hover:not(:disabled) {
   background: #eaf8f8;
+}
+
+.inline-action--cleanup {
+  border-color: #a7becb;
+  color: #3c657d;
+}
+
+.inline-action--cleanup:hover:not(:disabled) {
+  background: #edf4f7;
 }
 
 .inline-action--retry {
@@ -1244,6 +1263,16 @@ main {
 
 .button--approve:hover:not(:disabled) {
   background: #267952;
+}
+
+.button--cleanup {
+  border-color: #47748f;
+  background: #47748f;
+  color: #fff;
+}
+
+.button--cleanup:hover:not(:disabled) {
+  background: #3b657d;
 }
 
 .button--retry {

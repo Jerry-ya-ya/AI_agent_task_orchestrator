@@ -56,7 +56,7 @@ The renderer never launches processes or receives a generic command-execution en
 | `project_id` | INTEGER FK | References `projects(id)` |
 | `title` | TEXT | Required |
 | `description` | TEXT | Task instructions |
-| `status` | TEXT | `TODO`, `CLAIMED`, `IN_PROGRESS`, `TESTING`, `IN_REVIEW`, `PENDING_PUSH`, `DONE`, `FAILED` |
+| `status` | TEXT | `TODO`, `CLAIMED`, `IN_PROGRESS`, `TESTING`, `IN_REVIEW`, `PENDING_PUSH`, `PENDING_BRANCH_REMOVAL`, `DONE`, `FAILED` |
 | `priority` | TEXT | `LOW`, `MEDIUM`, `HIGH`, `URGENT` |
 | `branch_name` | TEXT | Assigned once as `agent/{id}-{slug}` |
 | `worktree_path` | TEXT | Legacy-compatible column containing the active repository workspace path |
@@ -87,7 +87,9 @@ TODO --atomic claim--> CLAIMED --> IN_PROGRESS --> TESTING --> IN_REVIEW
                                |              |                 |
                                +--------------+----> FAILED     +--approve--> PENDING_PUSH
                                                        |                         |
-                                                       +--retry--> TODO           +--confirm push--> DONE
+                                                       +--retry--> TODO           +--confirm push--> PENDING_BRANCH_REMOVAL
+                                                                                                           |
+                                                                                     approve removal ------+--> DONE
 ```
 
 1. In a SQLite `BEGIN IMMEDIATE` transaction, select the highest-priority oldest `TODO` task and update it to `CLAIMED` with an `UPDATE ... RETURNING` guard.
@@ -100,7 +102,7 @@ TODO --atomic claim--> CLAIMED --> IN_PROGRESS --> TESTING --> IN_REVIEW
 8. Successful verification sets `IN_REVIEW`. If neither tests nor a build are available—or a detected command cannot be started—the task still enters `IN_REVIEW` with an `UNVERIFIED` warning. Only a verification command that actually runs and returns non-zero sets `FAILED`; Git or agent pipeline failures also remain failures.
 9. The Worker immediately polls for the next task; review is not part of the worker loop.
 
-Approving a task moves it to `PENDING_PUSH`; it does not touch Git. Confirm push is a separate user action that merges the task branch into its recorded base branch and pushes `origin <base-branch>`. If merge succeeds but push fails, the task remains `PENDING_PUSH`; retry detects the existing merge and retries only the push. Databases from earlier versions migrate DONE tasks that still reference an agent branch back to `PENDING_PUSH` for explicit publication.
+Approving a task moves it to `PENDING_PUSH`; it does not touch Git. Confirm push is a separate user action that merges the task branch into its recorded base branch and pushes `origin <base-branch>`. If merge succeeds but push fails, the task remains `PENDING_PUSH`; retry detects the existing merge and retries only the push. A successful push moves the task to `PENDING_BRANCH_REMOVAL`. A final user approval verifies the task branch is merged, removes the local branch with non-forced `git branch -d`, and then marks the task `DONE`. Databases from the original pre-publishing schema restore DONE agent branches to `PENDING_PUSH`; databases from the publishing schema move DONE agent branches to cleanup.
 
 On application restart, orphaned `CLAIMED`, `IN_PROGRESS`, and `TESTING` tasks are marked `FAILED` rather than silently rerun. A user can then inspect logs and explicitly retry.
 
@@ -116,6 +118,7 @@ On application restart, orphaned `CLAIMED`, `IN_PROGRESS`, and `TESTING` tasks a
 - The worker requires a clean checkout, switches to the task branch before Codex runs, checkpoints task changes there, and restores the original branch afterward.
 - The worker never merges task changes into the base branch and never pushes.
 - Approval changes only task state. The publish endpoint accepts no command text and invokes only backend-generated merge/push arguments after explicit confirmation in the UI.
+- `CLAIMED` remains an internal atomic-lock state but is omitted from the Kanban columns. Local branch removal requires its own user action and refuses unmerged branches.
 
 ## 6. API surface
 
@@ -123,7 +126,7 @@ Required routes:
 
 - `GET /projects`, `POST /projects`
 - `GET /tasks`, `GET /tasks/:id`, `POST /tasks`, `PUT /tasks/:id`, `DELETE /tasks/:id`
-- `POST /tasks/:id/retry`, `POST /tasks/:id/approve`, `POST /tasks/:id/push`
+- `POST /tasks/:id/retry`, `POST /tasks/:id/approve`, `POST /tasks/:id/push`, `POST /tasks/:id/remove-branch`
 - `GET /tasks/:id/runs`
 
 Additional operational route: `GET /health`.
@@ -133,6 +136,6 @@ The Angular board polls `GET /tasks` so worker-driven state changes appear witho
 ## 7. Deliberate MVP limits
 
 - One local Worker and one task at a time.
-- No automatic merge, PR automation, remote access, authentication, notifications, dependency graph, or cloud state. Merge and push require an explicit user action.
+- No automatic merge, branch removal, PR automation, remote access, authentication, notifications, dependency graph, or cloud state. Merge/push and local branch cleanup require separate explicit user actions.
 - Test commands are detected from known project files; arbitrary command strings are not accepted from the UI/API. A repository with neither a recognized test nor build command goes to review with an `UNVERIFIED` warning.
-- Deleting a task is blocked while it is executing. Git task branches are retained to avoid destructive loss of agent work.
+- Deleting a task is blocked while it is executing or awaiting publication/cleanup. Task branches are retained until the explicit, merge-verified cleanup action.

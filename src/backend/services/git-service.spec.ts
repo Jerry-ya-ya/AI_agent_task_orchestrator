@@ -71,6 +71,7 @@ describe('GitService', () => {
 
     await expect(service.publishBranch(repository, prepared.branchName, 'main'))
       .resolves.toEqual({ baseBranch: 'main' });
+
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
     expect((await readFile(path.join(repository, 'feature.txt'), 'utf8')).trim()).toBe('ready to publish');
     expect((await git(runner, repository, ['--git-dir', remote, 'show', 'main:feature.txt'])).trim())
@@ -78,6 +79,27 @@ describe('GitService', () => {
 
     await expect(service.publishBranch(repository, prepared.branchName, 'main'))
       .resolves.toEqual({ baseBranch: 'main' });
+
+    await expect(service.removeTaskBranch(repository, prepared.branchName, 'main')).resolves.toBe(true);
+    expect(await gitExitCode(runner, repository, [
+      'show-ref', '--verify', '--quiet', `refs/heads/${prepared.branchName}`
+    ])).toBe(1);
+    await expect(service.removeTaskBranch(repository, prepared.branchName, 'main')).resolves.toBe(false);
+  });
+
+  it('refuses to remove an unmerged task branch', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const service = new GitService(runner);
+    const task = exampleTask();
+    const prepared = await service.prepareBranch(task, repository);
+    await writeFile(path.join(repository, 'unmerged.txt'), 'not published\n');
+    await service.completeBranch(prepared, task.id, 'feat: add an unpublished change.');
+
+    await expect(service.removeTaskBranch(repository, prepared.branchName, 'main'))
+      .rejects.toThrow('is not fully merged');
+    expect(await gitExitCode(runner, repository, [
+      'show-ref', '--verify', '--quiet', `refs/heads/${prepared.branchName}`
+    ])).toBe(0);
   });
 
   it('turns unsafe or non-ASCII-only titles into safe deterministic slugs', () => {
@@ -109,6 +131,10 @@ async function git(runner: ProcessRunner, cwd: string, args: readonly string[]):
   const result = await runner.run({ command: 'git', args, cwd, timeoutMs: 10_000 });
   if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout);
   return result.stdout;
+}
+
+async function gitExitCode(runner: ProcessRunner, cwd: string, args: readonly string[]): Promise<number> {
+  return (await runner.run({ command: 'git', args, cwd, timeoutMs: 10_000 })).exitCode;
 }
 
 function exampleTask(): Task {

@@ -236,6 +236,62 @@ export class GitService {
     return { baseBranch };
   }
 
+  /** Removes a local task branch only after Git confirms it is merged into its base branch. */
+  public async removeTaskBranch(
+    repositoryPath: string,
+    taskBranch: string,
+    baseBranch: string | null
+  ): Promise<boolean> {
+    const repositoryRoot = await this.validateRepository(repositoryPath);
+    await this.requireCleanCheckout(repositoryRoot);
+    const current = await this.currentBranch(repositoryRoot);
+    const expectedBase = baseBranch ?? current;
+
+    if (AGENT_BRANCH_PATTERN.test(expectedBase) || current !== expectedBase) {
+      throw new ConflictError(
+        `Repository must be on the task base branch ${expectedBase} before removing ${taskBranch}; it is on ${current}.`
+      );
+    }
+    if (!AGENT_BRANCH_PATTERN.test(taskBranch)) {
+      throw new ConflictError(`Task branch is not managed by the orchestrator: ${taskBranch}`);
+    }
+    if (!await this.localBranchExists(repositoryRoot, taskBranch)) {
+      return false;
+    }
+
+    const merged = await this.runGit(
+      repositoryRoot,
+      ['merge-base', '--is-ancestor', taskBranch, expectedBase],
+      undefined,
+      true
+    );
+    if (merged.exitCode !== 0) {
+      if (merged.exitCode === 1) {
+        throw new ConflictError(
+          `Task branch ${taskBranch} is not fully merged into ${expectedBase} and cannot be removed.`
+        );
+      }
+      throw new GitCommandError(
+        `Unable to verify whether ${taskBranch} is merged into ${expectedBase}: ${formatFailure(merged)}`,
+        merged
+      );
+    }
+
+    const removed = await this.runGit(
+      repositoryRoot,
+      ['branch', '--delete', taskBranch],
+      undefined,
+      true
+    );
+    if (removed.exitCode !== 0) {
+      throw new GitCommandError(
+        `Unable to remove task branch ${taskBranch}: ${formatFailure(removed)}`,
+        removed
+      );
+    }
+    return true;
+  }
+
   private async requireCleanCheckout(repositoryRoot: string, signal?: AbortSignal): Promise<void> {
     const result = await this.runGit(
       repositoryRoot,

@@ -147,7 +147,9 @@ describe('backend API', () => {
       });
 
     await request(app).post(`/tasks/${taskId}/push`).expect(409);
-    expect(tasks.transition(taskId, 'PENDING_PUSH', 'DONE')).not.toBeNull();
+    expect(tasks.transition(taskId, 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL')).not.toBeNull();
+    await request(app).post(`/tasks/${taskId}/remove-branch`).expect(409);
+    expect(tasks.transition(taskId, 'PENDING_BRANCH_REMOVAL', 'DONE')).not.toBeNull();
 
     await request(app).delete(`/tasks/${taskId}`).expect(204);
     await request(app).get(`/tasks/${taskId}`).expect(404);
