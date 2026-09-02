@@ -31,3 +31,5 @@
 ## 2026/09/03
 
 - Make the taskboard close button close both Electron and browser windows.
+
+- Add selectable Codex reasoning strength for task creation and retries.

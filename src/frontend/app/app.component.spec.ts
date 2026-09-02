@@ -136,6 +136,7 @@ function exampleTask(overrides: Partial<Task> = {}): Task {
     description: '',
     status: 'TODO',
     priority: 'MEDIUM',
+    model_effort: 'medium',
     branch_name: null,
     worktree_path: null,
     base_branch: null,

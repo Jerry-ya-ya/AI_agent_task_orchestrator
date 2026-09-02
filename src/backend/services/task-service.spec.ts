@@ -51,6 +51,7 @@ describe('TaskService state rules', () => {
       description: 'Implement full-text search',
       status: 'TODO',
       priority: 'MEDIUM',
+      model_effort: 'medium',
       branch_name: null,
       worktree_path: null,
       base_branch: null,
@@ -105,13 +106,23 @@ describe('TaskService state rules', () => {
     tasks.setArtifacts(failed.id, 'agent/1-retry-me', '/example/repository', 'main');
     expect(tasks.transition(failed.id, 'CLAIMED', 'FAILED')).not.toBeNull();
 
-    const retried = service.retry(failed.id);
+    const retried = service.retry(failed.id, { model_effort: 'high' });
     expect(retried).toMatchObject({
       status: 'TODO',
+      model_effort: 'high',
       branch_name: 'agent/1-retry-me',
       worktree_path: '/example/repository'
     });
     expect(() => service.retry(failed.id)).toThrow(ConflictError);
+    expect(tasks.findById(failed.id)?.model_effort).toBe('high');
+
+    const queued = service.create({
+      project_id: project.id,
+      title: 'Not failed',
+      model_effort: 'low'
+    });
+    expect(() => service.retry(queued.id, { model_effort: 'xhigh' })).toThrow(ConflictError);
+    expect(tasks.findById(queued.id)?.model_effort).toBe('low');
   });
 
   it('approves only IN_REVIEW tasks into PENDING_PUSH', () => {

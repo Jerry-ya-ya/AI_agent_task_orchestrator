@@ -61,8 +61,8 @@ export class TaskService {
       project_id: input.project_id,
       title,
       description: input.description?.trim() ?? '',
-      priority: input.priority ?? 'MEDIUM'
-      ,model_effort: input.model_effort ?? 'medium'
+      priority: input.priority ?? 'MEDIUM',
+      model_effort: input.model_effort ?? 'medium'
     });
   }
 
@@ -100,10 +100,11 @@ export class TaskService {
   }
 
   public retry(id: number, input: RetryTaskInput = {}): Task {
-    this.requireTask(id);
-    if (input.model_effort !== undefined) {
-      this.tasks.update(id, { model_effort: input.model_effort });
+    const existing = this.requireTask(id);
+    if (existing.status !== 'FAILED') {
+      throw new ConflictError('Only FAILED tasks can be retried.');
     }
+    this.tasks.update(id, { model_effort: input.model_effort ?? existing.model_effort });
     const updated = this.tasks.transition(id, 'FAILED', 'TODO');
     if (updated === null) {
       throw new ConflictError('Only FAILED tasks can be retried.');

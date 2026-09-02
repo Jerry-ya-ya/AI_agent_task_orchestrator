@@ -16,6 +16,8 @@ import { ApiService } from './api.service';
 import {
   AgentUsage,
   AgentUsageWindow,
+  MODEL_EFFORTS,
+  ModelEffort,
   Project,
   ProjectDraft,
   SaveTaskInput,
@@ -68,6 +70,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   readonly columns = STATUS_COLUMNS;
   readonly priorities = TASK_PRIORITIES;
+  readonly modelEfforts = MODEL_EFFORTS;
   readonly apiBaseUrl: string;
 
   projects: Project[] = [];
@@ -87,6 +90,8 @@ export class AppComponent implements OnInit, OnDestroy {
   editingTaskId: number | null = null;
   selectedTaskId: number | null = null;
   selectedTaskDetail: TaskDetail | null = null;
+  retryingTask: Task | null = null;
+  retryModelEffort: ModelEffort = 'medium';
   projectDraft: ProjectDraft = this.emptyProjectDraft();
   taskDraft: TaskDraft = this.emptyTaskDraft();
 
@@ -218,6 +223,7 @@ export class AppComponent implements OnInit, OnDestroy {
       title: task.title,
       description: task.description,
       priority: task.priority,
+      model_effort: task.model_effort,
     };
     this.taskEditorMode = 'edit';
     this.activateModal();
@@ -238,6 +244,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.editingTaskId = null;
     this.selectedTaskId = null;
     this.selectedTaskDetail = null;
+    this.retryingTask = null;
     this.detailLoading = false;
     this.saving = false;
     this.clearError();
@@ -289,6 +296,7 @@ export class AppComponent implements OnInit, OnDestroy {
       title: this.taskDraft.title.trim(),
       description: this.taskDraft.description.trim(),
       priority: this.taskDraft.priority,
+      model_effort: this.taskDraft.model_effort,
     };
 
     this.saving = true;
@@ -386,17 +394,31 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  async retryTask(task: Task, event?: Event): Promise<void> {
+  openRetryTask(task: Task, event?: Event): void {
     event?.stopPropagation();
     if (this.isTaskPending(task.id)) {
+      return;
+    }
+
+    this.closeModal(false);
+    this.clearError();
+    this.retryingTask = task;
+    this.retryModelEffort = task.model_effort;
+    this.activateModal();
+  }
+
+  async retryTask(): Promise<void> {
+    const task = this.retryingTask;
+    if (task === null || this.isTaskPending(task.id)) {
       return;
     }
 
     this.setTaskPending(task.id, true);
     this.clearError();
     try {
-      await firstValueFrom(this.api.retryTask(task.id));
+      await firstValueFrom(this.api.retryTask(task.id, this.retryModelEffort));
       this.showNotice(`“${task.title}” queued for retry.`);
+      this.closeModal();
       await this.refreshBoard(false);
     } catch (error: unknown) {
       this.setError(this.errorMessage(error));
@@ -498,6 +520,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   statusLabel(status: TaskStatus): string {
     return this.columns.find((column) => column.status === status)?.label ?? status;
+  }
+
+  modelEffortLabel(effort: ModelEffort): string {
+    return effort === 'xhigh' ? 'Extra high' : `${effort[0].toUpperCase()}${effort.slice(1)}`;
   }
 
   workerStateLabel(): string {
@@ -668,7 +694,8 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private hasOpenModal(): boolean {
-    return this.showProjectEditor || this.taskEditorMode !== null || this.selectedTaskId !== null;
+    return this.showProjectEditor || this.taskEditorMode !== null ||
+      this.selectedTaskId !== null || this.retryingTask !== null;
   }
 
   private keepFocusInModal(event: KeyboardEvent): void {
@@ -710,6 +737,7 @@ export class AppComponent implements OnInit, OnDestroy {
       title: '',
       description: '',
       priority: 'MEDIUM',
+      model_effort: 'medium',
     };
   }
 

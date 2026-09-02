@@ -91,7 +91,8 @@ describe('backend API', () => {
         project_id: projectResponse.body.id,
         title: '  Implement search  ',
         description: '  Add the first search endpoint.  ',
-        priority: 'HIGH'
+        priority: 'HIGH',
+        model_effort: 'xhigh'
       })
       .expect(201);
 
@@ -99,6 +100,7 @@ describe('backend API', () => {
       title: 'Implement search',
       description: 'Add the first search endpoint.',
       priority: 'HIGH',
+      model_effort: 'xhigh',
       status: 'TODO'
     });
 

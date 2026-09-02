@@ -1032,6 +1032,10 @@ main {
   max-width: 620px;
 }
 
+.modal__surface--compact {
+  max-width: 460px;
+}
+
 .modal__surface--detail {
   max-width: 1040px;
 }

@@ -215,7 +215,7 @@
                 class="inline-action inline-action--retry"
                 type="button"
                 [disabled]="isTaskPending(task.id)"
-                (click)="retryTask(task, $event)"
+                (click)="openRetryTask(task, $event)"
               >
                 {{ isTaskPending(task.id) ? 'Queuing…' : 'Retry' }}
               </button>
@@ -271,6 +271,45 @@
       </ng-template>
     </section>
   </main>
+</div>
+
+<!-- Retry task -->
+<div class="modal" *ngIf="retryingTask as task" (click)="closeModal()">
+  <section
+    #modalSurface
+    class="modal__surface modal__surface--form modal__surface--compact"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="retry-dialog-title"
+    tabindex="-1"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal__header">
+      <div>
+        <p class="eyebrow">Queue another attempt</p>
+        <h2 id="retry-dialog-title">Retry task</h2>
+      </div>
+      <button class="icon-button" type="button" aria-label="Close retry form" (click)="closeModal()">×</button>
+    </header>
+
+    <form (ngSubmit)="retryTask()">
+      <div class="form-field">
+        <label for="retry-model-effort">Model strength</label>
+        <select id="retry-model-effort" name="retryModelEffort" required [(ngModel)]="retryModelEffort">
+          <option *ngFor="let effort of modelEfforts" [ngValue]="effort">{{ modelEffortLabel(effort) }}</option>
+        </select>
+        <small>Choose the reasoning strength for the next attempt of “{{ task.title }}”.</small>
+      </div>
+
+      <div class="form-error" role="alert" *ngIf="apiError">{{ apiError }}</div>
+      <footer class="modal__footer">
+        <button class="button button--quiet" type="button" (click)="closeModal()">Cancel</button>
+        <button class="button button--primary" type="submit" [disabled]="isTaskPending(task.id)">
+          {{ isTaskPending(task.id) ? 'Queuing…' : 'Retry task' }}
+        </button>
+      </footer>
+    </form>
+  </section>
 </div>
 
 <div class="toast" role="status" aria-live="polite" *ngIf="notice">{{ notice }}</div>
@@ -402,6 +441,14 @@
           </select>
         </div>
 
+        <div class="form-field">
+          <label for="task-model-effort">Model strength</label>
+          <select id="task-model-effort" name="taskModelEffort" required [(ngModel)]="taskDraft.model_effort">
+            <option *ngFor="let effort of modelEfforts" [ngValue]="effort">{{ modelEffortLabel(effort) }}</option>
+          </select>
+          <small>Controls how much reasoning Codex uses for this task.</small>
+        </div>
+
         <div class="form-field form-field--wide">
           <label for="task-description">Description</label>
           <textarea
@@ -526,7 +573,7 @@
           class="button button--retry"
           type="button"
           [disabled]="isTaskPending(task.id)"
-          (click)="retryTask(task, $event)"
+          (click)="openRetryTask(task, $event)"
         >
           {{ isTaskPending(task.id) ? 'Queuing…' : 'Retry task' }}
         </button>

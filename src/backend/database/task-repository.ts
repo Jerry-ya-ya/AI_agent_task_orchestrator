@@ -97,7 +97,7 @@ export class TaskRepository {
     return task ?? null;
   }
 
-  public create(input: Required<CreateTaskInput>): Task {
+  public create(input: CreateTaskInput): Task {
     const now = this.clock();
     const result = this.database.connection.prepare(`
       INSERT INTO tasks (
@@ -105,7 +105,15 @@ export class TaskRepository {
         branch_name, worktree_path, base_branch, commit_summary,
         is_paused, created_at, updated_at
       ) VALUES (?, ?, ?, 'TODO', ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?)
-    `).run(input.project_id, input.title, input.description, input.priority, input.model_effort, now, now);
+    `).run(
+      input.project_id,
+      input.title,
+      input.description ?? '',
+      input.priority ?? 'MEDIUM',
+      input.model_effort ?? 'medium',
+      now,
+      now
+    );
     return this.findById(Number(result.lastInsertRowid)) as Task;
   }
 

@@ -22,15 +22,15 @@ const taskInput = z.object({
   project_id: z.number().int().positive(),
   title: z.string().min(1).max(500),
   description: z.string().max(100_000).optional(),
-  priority: z.enum(TASK_PRIORITIES).optional()
-  ,model_effort: z.enum(MODEL_EFFORTS).optional()
+  priority: z.enum(TASK_PRIORITIES).optional(),
+  model_effort: z.enum(MODEL_EFFORTS).optional()
 }).strict();
 const taskUpdate = z.object({
   project_id: z.number().int().positive().optional(),
   title: z.string().min(1).max(500).optional(),
   description: z.string().max(100_000).optional(),
-  priority: z.enum(TASK_PRIORITIES).optional()
-  ,model_effort: z.enum(MODEL_EFFORTS).optional()
+  priority: z.enum(TASK_PRIORITIES).optional(),
+  model_effort: z.enum(MODEL_EFFORTS).optional()
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one field is required.');
 
 export function createApi(dependencies: ApiDependencies): express.Express {
@@ -105,7 +105,9 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   });
 
   app.post('/tasks/:id/retry', (request, response) => {
-    const input = z.object({ model_effort: z.enum(MODEL_EFFORTS).optional() }).strict().parse(request.body);
+    const input = z.object({ model_effort: z.enum(MODEL_EFFORTS).optional() })
+      .strict()
+      .parse(request.body ?? {});
     response.json(dependencies.taskService.retry(idSchema.parse(request.params.id), input));
   });
 
