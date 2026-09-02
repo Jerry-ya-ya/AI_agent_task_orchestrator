@@ -91,13 +91,10 @@ export class AppComponent implements OnInit, OnDestroy {
   editingTaskId: number | null = null;
   selectedTaskId: number | null = null;
   selectedTaskDetail: TaskDetail | null = null;
-<<<<<<< HEAD
   retryingTask: Task | null = null;
   retryModelEffort: ModelEffort = 'medium';
-=======
   retryReviewTaskId: number | null = null;
   retryPrompt = '';
->>>>>>> agent/18-task
   projectDraft: ProjectDraft = this.emptyProjectDraft();
   taskDraft: TaskDraft = this.emptyTaskDraft();
 
@@ -250,12 +247,9 @@ export class AppComponent implements OnInit, OnDestroy {
     this.editingTaskId = null;
     this.selectedTaskId = null;
     this.selectedTaskDetail = null;
-<<<<<<< HEAD
     this.retryingTask = null;
-=======
     this.retryReviewTaskId = null;
     this.retryPrompt = '';
->>>>>>> agent/18-task
     this.detailLoading = false;
     this.saving = false;
     this.clearError();
@@ -764,12 +758,9 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private hasOpenModal(): boolean {
-<<<<<<< HEAD
     return this.showProjectEditor || this.taskEditorMode !== null ||
-      this.selectedTaskId !== null || this.retryingTask !== null;
-=======
-    return this.showProjectEditor || this.taskEditorMode !== null || this.selectedTaskId !== null || this.retryReviewTaskId !== null;
->>>>>>> agent/18-task
+      this.selectedTaskId !== null || this.retryingTask !== null ||
+      this.retryReviewTaskId !== null;
   }
 
   private keepFocusInModal(event: KeyboardEvent): void {

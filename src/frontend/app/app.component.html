@@ -335,6 +335,11 @@
         <button class="button button--primary" type="submit" [disabled]="isTaskPending(task.id)">
           {{ isTaskPending(task.id) ? 'Queuing…' : 'Retry task' }}
         </button>
+      </footer>
+    </form>
+  </section>
+</div>
+
 <div class="modal" *ngIf="retryReviewTaskId !== null" (mousedown)="onModalBackdrop($event)">
   <section #modalSurface class="modal__surface modal__surface--form" role="dialog" aria-modal="true" aria-labelledby="retry-review-title" tabindex="-1">
     <header class="modal__header">

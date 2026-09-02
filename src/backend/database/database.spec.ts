@@ -141,10 +141,12 @@ describe('OrchestratorDatabase schema', () => {
     expect(columns.some((column) => column['name'] === 'is_paused')).toBe(true);
     expect(columns.some((column) => column['name'] === 'base_branch')).toBe(true);
     expect(columns.some((column) => column['name'] === 'commit_summary')).toBe(true);
-    expect(database.connection.prepare('SELECT status, commit_summary FROM tasks WHERE id = 7').get())
+    expect(columns.some((column) => column['name'] === 'model_effort')).toBe(true);
+    expect(database.connection.prepare('SELECT status, commit_summary, model_effort FROM tasks WHERE id = 7').get())
       .toMatchObject({
         status: 'PENDING_PUSH',
-        commit_summary: 'feat: finish the legacy task.'
+        commit_summary: 'feat: finish the legacy task.',
+        model_effort: 'medium'
       });
     database.close();
     database = undefined;
@@ -164,7 +166,8 @@ describe('OrchestratorDatabase schema', () => {
         id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, title TEXT NOT NULL,
         description TEXT NOT NULL,
         status TEXT NOT NULL CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','DONE','FAILED')),
-        priority TEXT NOT NULL, branch_name TEXT, worktree_path TEXT, base_branch TEXT,
+        priority TEXT NOT NULL, model_effort TEXT NOT NULL DEFAULT 'medium',
+        branch_name TEXT, worktree_path TEXT, base_branch TEXT,
         commit_summary TEXT, is_paused INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       );
@@ -177,7 +180,7 @@ describe('OrchestratorDatabase schema', () => {
         1, 'Published', '/published', '', '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z'
       );
       INSERT INTO tasks VALUES (
-        9, 1, 'Published task', '', 'DONE', 'MEDIUM', 'agent/9-published-task', '/published',
+        9, 1, 'Published task', '', 'DONE', 'MEDIUM', 'xhigh', 'agent/9-published-task', '/published',
         'main', 'feat: publish the task.', 0,
         '2026-09-01T00:00:00.000Z', '2026-09-01T01:00:00.000Z'
       );
@@ -185,8 +188,8 @@ describe('OrchestratorDatabase schema', () => {
     previous.close();
 
     database = new OrchestratorDatabase(databasePath);
-    expect(database.connection.prepare('SELECT status FROM tasks WHERE id = 9').get())
-      .toMatchObject({ status: 'PENDING_BRANCH_REMOVAL' });
+    expect(database.connection.prepare('SELECT status, model_effort FROM tasks WHERE id = 9').get())
+      .toMatchObject({ status: 'PENDING_BRANCH_REMOVAL', model_effort: 'xhigh' });
     database.close();
     database = undefined;
     await rm(temporaryRoot, { recursive: true, force: true });

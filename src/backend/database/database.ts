@@ -92,6 +92,12 @@ export class OrchestratorDatabase {
     if (!taskColumns.some((column) => column['name'] === 'commit_summary')) {
       this.connection.exec('ALTER TABLE tasks ADD COLUMN commit_summary TEXT;');
     }
+    if (!taskColumns.some((column) => column['name'] === 'model_effort')) {
+      this.connection.exec(`
+        ALTER TABLE tasks ADD COLUMN model_effort TEXT NOT NULL DEFAULT 'medium'
+          CHECK (model_effort IN ('low','medium','high','xhigh'));
+      `);
+    }
     if (!taskColumns.some((column) => column['name'] === 'source_task_id')) {
       this.connection.exec('ALTER TABLE tasks ADD COLUMN source_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL;');
     }
@@ -160,7 +166,7 @@ export class OrchestratorDatabase {
 
         INSERT INTO tasks (
           id, project_id, title, description, status, priority, model_effort,
-          branch_name, worktree_path, base_branch, commit_summary,source_task_id,
+          branch_name, worktree_path, base_branch, commit_summary, source_task_id,
           is_rejected, is_paused, created_at, updated_at
         )
         SELECT
@@ -169,7 +175,7 @@ export class OrchestratorDatabase {
             WHEN status = 'DONE' AND branch_name IS NOT NULL THEN '${migratedDoneStatus}'
             ELSE status
           END,
-          priority, 'medium', branch_name, worktree_path, base_branch, commit_summary,
+          priority, model_effort, branch_name, worktree_path, base_branch, commit_summary,
           source_task_id, is_rejected, is_paused, created_at, updated_at
         FROM tasks_before_publishing;
 

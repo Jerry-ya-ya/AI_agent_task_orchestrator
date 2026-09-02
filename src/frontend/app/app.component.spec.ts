@@ -116,6 +116,24 @@ describe('AppComponent initialization', () => {
       'FAILED',
     ]);
   });
+
+  it('treats both retry dialogs as active modals', () => {
+    const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
+    const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
+    const component = new AppComponent(api, changeDetector);
+    const preventDefault = vi.fn();
+    const escape = { key: 'Escape', preventDefault } as unknown as KeyboardEvent;
+    vi.stubGlobal('document', { body: { classList: { remove: vi.fn() } } });
+
+    component.retryingTask = exampleTask({ status: 'FAILED' });
+    component.handleDocumentKeydown(escape);
+    expect(component.retryingTask).toBeNull();
+
+    component.retryReviewTaskId = 7;
+    component.handleDocumentKeydown(escape);
+    expect(component.retryReviewTaskId).toBeNull();
+    expect(preventDefault).toHaveBeenCalledTimes(2);
+  });
 });
 
 function exampleProject(): Project {

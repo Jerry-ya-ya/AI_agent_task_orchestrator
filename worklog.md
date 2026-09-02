@@ -37,3 +37,5 @@
 - Add icon-based review actions with revision prompts, task lineage, and rejected branch cleanup.
 
 - Cover review retry lineage, revision guidance, and rejected branch cleanup with API tests.
+
+- fix: resolve merge regressions in task creation, migrations, and retry dialogs.
