@@ -27,3 +27,7 @@
 - Remove the Electron application menu and add a draggable custom title bar with a secure close control.
 
 - feat: hide claimed tasks and require approval before removing published task branches.
+
+## 2026/09/03
+
+- Make the taskboard close button close both Electron and browser windows.

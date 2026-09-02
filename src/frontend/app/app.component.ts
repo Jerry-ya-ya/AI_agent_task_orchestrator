@@ -131,7 +131,12 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   closeApplication(): void {
-    window.desktopWindow?.close();
+    if (window.desktopWindow) {
+      window.desktopWindow.close();
+      return;
+    }
+
+    window.close();
   }
 
   @HostListener('document:keydown', ['$event'])

@@ -10,9 +10,34 @@ import type { AgentUsage, Project, Task, WorkerStatus } from './models';
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('AppComponent initialization', () => {
+  it('closes the Electron window from the title-bar close control', () => {
+    const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
+    const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
+    const component = new AppComponent(api, changeDetector);
+    const close = vi.fn();
+    vi.stubGlobal('window', { desktopWindow: { close } });
+
+    component.closeApplication();
+
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('closes the browser page when the desktop bridge is unavailable', () => {
+    const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
+    const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
+    const component = new AppComponent(api, changeDetector);
+    const close = vi.fn();
+    vi.stubGlobal('window', { close });
+
+    component.closeApplication();
+
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('loads board and worker data and schedules rendering without a user interaction', async () => {
     const project = exampleProject();
     const task = exampleTask();
