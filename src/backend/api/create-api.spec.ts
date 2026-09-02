@@ -186,6 +186,60 @@ describe('backend API', () => {
       .expect(400);
   });
 
+  it('creates review revisions through the API with source lineage and rejects blank prompts', async () => {
+    const projectResponse = await request(app)
+      .post('/projects')
+      .send({ name: 'Local app', repository_path: repositoryPath })
+      .expect(201);
+    const taskResponse = await request(app)
+      .post('/tasks')
+      .send({ project_id: projectResponse.body.id, title: 'Review this' })
+      .expect(201);
+    const taskId = Number(taskResponse.body.id);
+    expect(tasks.transition(taskId, 'TODO', 'IN_REVIEW')).not.toBeNull();
+
+    await request(app)
+      .post(`/tasks/${taskId}/retry-review`)
+      .send({ prompt: '' })
+      .expect(400);
+    await request(app)
+      .post(`/tasks/${taskId}/retry-review`)
+      .send({ prompt: '  Preserve focus after saving.  ' })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          status: 'TODO',
+          description: 'Preserve focus after saving.',
+          source_task_id: taskId
+        });
+      });
+    expect(tasks.findById(taskId)?.status).toBe('REJECTED');
+  });
+
+  it('queues rejected review tasks for branch removal and marks the rejection', async () => {
+    const projectResponse = await request(app)
+      .post('/projects')
+      .send({ name: 'Local app', repository_path: repositoryPath })
+      .expect(201);
+    const taskResponse = await request(app)
+      .post('/tasks')
+      .send({ project_id: projectResponse.body.id, title: 'Reject this' })
+      .expect(201);
+    const taskId = Number(taskResponse.body.id);
+    expect(tasks.transition(taskId, 'TODO', 'IN_REVIEW')).not.toBeNull();
+
+    await request(app)
+      .post(`/tasks/${taskId}/reject`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          status: 'PENDING_BRANCH_REMOVAL',
+          is_rejected: true
+        });
+      });
+    await request(app).post(`/tasks/${taskId}/reject`).expect(409);
+  });
+
   it('only reflects explicitly allowed local UI origins', async () => {
     await request(app)
       .get('/health')
