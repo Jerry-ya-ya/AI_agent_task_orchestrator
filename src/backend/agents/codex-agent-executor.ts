@@ -144,6 +144,14 @@ export function buildCodexPrompt(task: AgentTask): string {
   const projectName = task.project?.name ?? `Project ${task.project_id}`;
   const projectContext = task.project?.context.trim() || 'No additional project context was provided.';
   const description = task.description.trim() || 'No additional task description was provided.';
+  const revisionContext = task.source_task_id === null
+    ? []
+    : [
+        'Revision context:',
+        `This task revises the previous implementation from task #${task.source_task_id}.`,
+        'Modify the existing previous version in this branch; do not treat this as a new implementation from scratch.',
+        ''
+      ];
 
   return [
     `You are implementing orchestrator task #${task.id} on an isolated Git task branch.`,
@@ -156,6 +164,7 @@ export function buildCodexPrompt(task: AgentTask): string {
     'Task description:',
     description,
     '',
+    ...revisionContext,
     'Execution constraints:',
     '- Work only inside the current repository workspace and checked-out task branch.',
     '- Do not create, check out, switch, delete, or rewrite Git branches or worktrees.',

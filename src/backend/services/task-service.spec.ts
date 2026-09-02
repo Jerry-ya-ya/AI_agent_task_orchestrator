@@ -125,6 +125,40 @@ describe('TaskService state rules', () => {
     expect(tasks.findById(todo.id)?.status).toBe('TODO');
   });
 
+  it('creates a revision linked to its reviewed source and marks the previous version rejected', () => {
+    const review = createTask('Revise me');
+    expect(tasks.transition(review.id, 'TODO', 'CLAIMED')).not.toBeNull();
+    tasks.setArtifacts(review.id, `agent/${review.id}-revise-me`, '/example/repository', 'main');
+    expect(tasks.transition(review.id, 'CLAIMED', 'IN_REVIEW')).not.toBeNull();
+
+    const revision = service.retryReview(review.id, '  Fix the empty state.  ');
+
+    expect(revision).toMatchObject({
+      status: 'TODO',
+      description: 'Fix the empty state.',
+      source_task_id: review.id,
+      branch_name: `agent/${review.id}-revise-me`
+    });
+    expect(tasks.findById(review.id)?.status).toBe('REJECTED');
+    expect(() => service.retryReview(review.id, 'Again')).toThrow(ConflictError);
+  });
+
+  it('moves rejected work to branch removal and finishes it as rejected after cleanup', async () => {
+    const review = createTask('Reject me');
+    expect(tasks.transition(review.id, 'TODO', 'CLAIMED')).not.toBeNull();
+    tasks.setArtifacts(review.id, `agent/${review.id}-reject-me`, '/example/repository', 'main');
+    expect(tasks.transition(review.id, 'CLAIMED', 'IN_REVIEW')).not.toBeNull();
+
+    await expect(service.reject(review.id)).resolves.toMatchObject({
+      status: 'PENDING_BRANCH_REMOVAL', is_rejected: true
+    });
+    expect(removeTaskBranch).not.toHaveBeenCalled();
+    await expect(service.removeBranch(review.id)).resolves.toMatchObject({ status: 'REJECTED' });
+    expect(removeTaskBranch).toHaveBeenCalledWith(
+      '/example', `agent/${review.id}-reject-me`, 'main'
+    );
+  });
+
   it('publishes approved tasks, then requires approval before removing the branch and marking DONE', async () => {
     const review = createTask('Publish me');
     expect(tasks.transition(review.id, 'TODO', 'CLAIMED')).not.toBeNull();

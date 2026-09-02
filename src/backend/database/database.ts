@@ -18,13 +18,15 @@ const SCHEMA = `
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'TODO'
-      CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','PENDING_BRANCH_REMOVAL','DONE','FAILED')),
+      CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
     priority TEXT NOT NULL DEFAULT 'MEDIUM'
       CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
     branch_name TEXT,
     worktree_path TEXT,
     base_branch TEXT,
     commit_summary TEXT,
+    source_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+    is_rejected INTEGER NOT NULL DEFAULT 0 CHECK (is_rejected IN (0, 1)),
     is_paused INTEGER NOT NULL DEFAULT 0 CHECK (is_paused IN (0, 1)),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -88,12 +90,18 @@ export class OrchestratorDatabase {
     if (!taskColumns.some((column) => column['name'] === 'commit_summary')) {
       this.connection.exec('ALTER TABLE tasks ADD COLUMN commit_summary TEXT;');
     }
+    if (!taskColumns.some((column) => column['name'] === 'source_task_id')) {
+      this.connection.exec('ALTER TABLE tasks ADD COLUMN source_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL;');
+    }
+    if (!taskColumns.some((column) => column['name'] === 'is_rejected')) {
+      this.connection.exec('ALTER TABLE tasks ADD COLUMN is_rejected INTEGER NOT NULL DEFAULT 0 CHECK (is_rejected IN (0, 1));');
+    }
 
     const taskDefinition = this.connection.prepare(`
       SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'
     `).get() as { sql?: string } | undefined;
     const hadPendingPush = taskDefinition?.sql?.includes('PENDING_PUSH') ?? false;
-    if (!taskDefinition?.sql?.includes('PENDING_BRANCH_REMOVAL')) {
+    if (!taskDefinition?.sql?.includes('PENDING_BRANCH_REMOVAL') || !taskDefinition?.sql?.includes('REJECTED')) {
       this.rebuildTasksForPublishing(hadPendingPush);
     }
 
@@ -132,13 +140,15 @@ export class OrchestratorDatabase {
           title TEXT NOT NULL,
           description TEXT NOT NULL DEFAULT '',
           status TEXT NOT NULL DEFAULT 'TODO'
-            CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','PENDING_BRANCH_REMOVAL','DONE','FAILED')),
+            CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
           priority TEXT NOT NULL DEFAULT 'MEDIUM'
             CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
           branch_name TEXT,
           worktree_path TEXT,
           base_branch TEXT,
           commit_summary TEXT,
+          source_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+          is_rejected INTEGER NOT NULL DEFAULT 0 CHECK (is_rejected IN (0, 1)),
           is_paused INTEGER NOT NULL DEFAULT 0 CHECK (is_paused IN (0, 1)),
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -146,7 +156,7 @@ export class OrchestratorDatabase {
 
         INSERT INTO tasks (
           id, project_id, title, description, status, priority,
-          branch_name, worktree_path, base_branch, commit_summary,
+          branch_name, worktree_path, base_branch, commit_summary, source_task_id, is_rejected,
           is_paused, created_at, updated_at
         )
         SELECT
@@ -155,7 +165,7 @@ export class OrchestratorDatabase {
             WHEN status = 'DONE' AND branch_name IS NOT NULL THEN '${migratedDoneStatus}'
             ELSE status
           END,
-          priority, branch_name, worktree_path, base_branch, commit_summary,
+          priority, branch_name, worktree_path, base_branch, commit_summary, source_task_id, is_rejected,
           is_paused, created_at, updated_at
         FROM tasks_before_publishing;
 

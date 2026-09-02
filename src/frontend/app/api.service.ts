@@ -107,6 +107,14 @@ export class ApiService {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry`, {});
   }
 
+  retryReviewTask(taskId: number, prompt: string): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry-review`, { prompt });
+  }
+
+  rejectTask(taskId: number): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/reject`, {});
+  }
+
   pauseTask(taskId: number): Observable<Task> {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/pause`, {});
   }

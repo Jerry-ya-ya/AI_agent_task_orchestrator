@@ -390,8 +390,9 @@ function deriveBranchName(task: Task): string {
     throw new ValidationError('Task must have a positive integer id before preparing a branch.');
   }
   const branchName = task.branch_name ?? `agent/${task.id}-${slugifyTaskTitle(task.title)}`;
+  const branchOwnerId = task.source_task_id ?? task.id;
   const branchPattern = new RegExp(
-    `^agent/${task.id}-([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)$`,
+    `^agent/${branchOwnerId}-([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)$`,
     'u'
   );
   if (!branchPattern.test(branchName)) {
