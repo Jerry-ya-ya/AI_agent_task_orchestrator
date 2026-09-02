@@ -8,6 +8,7 @@ import {
   HealthResponse,
   Project,
   SaveTaskInput,
+  ModelEffort,
   Task,
   TaskDetail,
   TaskRun,
@@ -103,8 +104,8 @@ export class ApiService {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/remove-branch`, {});
   }
 
-  retryTask(taskId: number): Observable<Task> {
-    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry`, {});
+  retryTask(taskId: number, modelEffort: ModelEffort): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry`, { model_effort: modelEffort });
   }
 
   pauseTask(taskId: number): Observable<Task> {

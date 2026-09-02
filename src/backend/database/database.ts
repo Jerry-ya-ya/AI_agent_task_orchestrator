@@ -21,6 +21,8 @@ const SCHEMA = `
       CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','PENDING_BRANCH_REMOVAL','DONE','FAILED')),
     priority TEXT NOT NULL DEFAULT 'MEDIUM'
       CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
+    model_effort TEXT NOT NULL DEFAULT 'medium'
+      CHECK (model_effort IN ('low','medium','high','xhigh')),
     branch_name TEXT,
     worktree_path TEXT,
     base_branch TEXT,
@@ -88,6 +90,12 @@ export class OrchestratorDatabase {
     if (!taskColumns.some((column) => column['name'] === 'commit_summary')) {
       this.connection.exec('ALTER TABLE tasks ADD COLUMN commit_summary TEXT;');
     }
+    if (!taskColumns.some((column) => column['name'] === 'model_effort')) {
+      this.connection.exec(`
+        ALTER TABLE tasks ADD COLUMN model_effort TEXT NOT NULL DEFAULT 'medium'
+          CHECK (model_effort IN ('low','medium','high','xhigh'));
+      `);
+    }
 
     const taskDefinition = this.connection.prepare(`
       SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'
@@ -135,6 +143,8 @@ export class OrchestratorDatabase {
             CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','PENDING_BRANCH_REMOVAL','DONE','FAILED')),
           priority TEXT NOT NULL DEFAULT 'MEDIUM'
             CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
+          model_effort TEXT NOT NULL DEFAULT 'medium'
+            CHECK (model_effort IN ('low','medium','high','xhigh')),
           branch_name TEXT,
           worktree_path TEXT,
           base_branch TEXT,
@@ -145,7 +155,7 @@ export class OrchestratorDatabase {
         );
 
         INSERT INTO tasks (
-          id, project_id, title, description, status, priority,
+          id, project_id, title, description, status, priority, model_effort,
           branch_name, worktree_path, base_branch, commit_summary,
           is_paused, created_at, updated_at
         )
@@ -155,7 +165,7 @@ export class OrchestratorDatabase {
             WHEN status = 'DONE' AND branch_name IS NOT NULL THEN '${migratedDoneStatus}'
             ELSE status
           END,
-          priority, branch_name, worktree_path, base_branch, commit_summary,
+          priority, 'medium', branch_name, worktree_path, base_branch, commit_summary,
           is_paused, created_at, updated_at
         FROM tasks_before_publishing;
 

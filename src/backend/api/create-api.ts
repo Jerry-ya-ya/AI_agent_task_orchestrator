@@ -1,7 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z, ZodError } from 'zod';
 import { AppError } from '../domain/errors.js';
-import { TASK_PRIORITIES, TASK_STATUSES, type AgentUsage, type WorkerStatus } from '../domain/types.js';
+import { MODEL_EFFORTS, TASK_PRIORITIES, TASK_STATUSES, type AgentUsage, type WorkerStatus } from '../domain/types.js';
 import { ProjectService } from '../services/project-service.js';
 import { TaskService } from '../services/task-service.js';
 
@@ -23,12 +23,14 @@ const taskInput = z.object({
   title: z.string().min(1).max(500),
   description: z.string().max(100_000).optional(),
   priority: z.enum(TASK_PRIORITIES).optional()
+  ,model_effort: z.enum(MODEL_EFFORTS).optional()
 }).strict();
 const taskUpdate = z.object({
   project_id: z.number().int().positive().optional(),
   title: z.string().min(1).max(500).optional(),
   description: z.string().max(100_000).optional(),
   priority: z.enum(TASK_PRIORITIES).optional()
+  ,model_effort: z.enum(MODEL_EFFORTS).optional()
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one field is required.');
 
 export function createApi(dependencies: ApiDependencies): express.Express {
@@ -103,7 +105,8 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   });
 
   app.post('/tasks/:id/retry', (request, response) => {
-    response.json(dependencies.taskService.retry(idSchema.parse(request.params.id)));
+    const input = z.object({ model_effort: z.enum(MODEL_EFFORTS).optional() }).strict().parse(request.body);
+    response.json(dependencies.taskService.retry(idSchema.parse(request.params.id), input));
   });
 
   app.post('/tasks/:id/approve', (request, response) => {

@@ -11,9 +11,11 @@ export const TASK_STATUSES = [
 ] as const;
 
 export const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
+export const MODEL_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const;
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+export type ModelEffort = (typeof MODEL_EFFORTS)[number];
 
 export interface Project {
   id: number;
@@ -42,6 +44,7 @@ export interface Task {
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
+  model_effort: ModelEffort;
   branch_name: string | null;
   worktree_path: string | null;
   base_branch: string | null;
@@ -98,6 +101,7 @@ export interface SaveTaskInput {
   title: string;
   description: string;
   priority: TaskPriority;
+  model_effort: ModelEffort;
 }
 
 export interface ProjectDraft {
@@ -111,4 +115,5 @@ export interface TaskDraft {
   title: string;
   description: string;
   priority: TaskPriority;
+  model_effort: ModelEffort;
 }

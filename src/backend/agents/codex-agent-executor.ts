@@ -96,6 +96,8 @@ export class CodexAgentExecutor implements AgentExecutor {
           'never',
           '--cd',
           canonicalWorkspace,
+          '--config',
+          `model_reasoning_effort="${task.model_effort}"`,
           'exec',
           '--ephemeral',
           '--json',

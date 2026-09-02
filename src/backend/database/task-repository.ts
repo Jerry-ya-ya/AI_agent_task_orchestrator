@@ -101,11 +101,11 @@ export class TaskRepository {
     const now = this.clock();
     const result = this.database.connection.prepare(`
       INSERT INTO tasks (
-        project_id, title, description, status, priority,
+        project_id, title, description, status, priority, model_effort,
         branch_name, worktree_path, base_branch, commit_summary,
         is_paused, created_at, updated_at
-      ) VALUES (?, ?, ?, 'TODO', ?, NULL, NULL, NULL, NULL, 0, ?, ?)
-    `).run(input.project_id, input.title, input.description, input.priority, now, now);
+      ) VALUES (?, ?, ?, 'TODO', ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?)
+    `).run(input.project_id, input.title, input.description, input.priority, input.model_effort, now, now);
     return this.findById(Number(result.lastInsertRowid)) as Task;
   }
 
@@ -127,6 +127,10 @@ export class TaskRepository {
     if (input.priority !== undefined) {
       fields.push('priority = ?');
       parameters.push(input.priority);
+    }
+    if (input.model_effort !== undefined) {
+      fields.push('model_effort = ?');
+      parameters.push(input.model_effort);
     }
     if (fields.length === 0) {
       return this.findById(id);

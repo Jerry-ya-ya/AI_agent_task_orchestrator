@@ -6,6 +6,7 @@ import type {
   TaskListItem,
   TaskRun,
   TaskStatus,
+  RetryTaskInput,
   UpdateTaskInput
 } from '../domain/types.js';
 import { ProjectRepository } from '../database/project-repository.js';
@@ -61,6 +62,7 @@ export class TaskService {
       title,
       description: input.description?.trim() ?? '',
       priority: input.priority ?? 'MEDIUM'
+      ,model_effort: input.model_effort ?? 'medium'
     });
   }
 
@@ -97,8 +99,11 @@ export class TaskService {
     this.tasks.delete(id);
   }
 
-  public retry(id: number): Task {
+  public retry(id: number, input: RetryTaskInput = {}): Task {
     this.requireTask(id);
+    if (input.model_effort !== undefined) {
+      this.tasks.update(id, { model_effort: input.model_effort });
+    }
     const updated = this.tasks.transition(id, 'FAILED', 'TODO');
     if (updated === null) {
       throw new ConflictError('Only FAILED tasks can be retried.');
