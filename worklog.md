@@ -47,3 +47,5 @@
 - feat: add retry prompts that continue work on the existing task branch.
 
 - refactor: modularize the Angular dashboard with typed components and reliable task approval actions.
+
+- feat: add a secure Electron window minimize control to the custom title bar.

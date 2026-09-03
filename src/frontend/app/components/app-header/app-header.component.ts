@@ -6,7 +6,13 @@ import type { WorkerStatus } from '../../models';
   selector: 'app-header',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './app-header.component.html'
+  templateUrl: './app-header.component.html',
+  styles: `
+    .window-control {
+      -webkit-app-region: no-drag;
+      pointer-events: auto;
+    }
+  `
 })
 export class AppHeaderComponent {
   @Input({ required: true }) connected = false;
@@ -16,6 +22,7 @@ export class AppHeaderComponent {
 
   @Output() createProject = new EventEmitter<void>();
   @Output() createTask = new EventEmitter<void>();
+  @Output() minimizeApplication = new EventEmitter<void>();
   @Output() closeApplication = new EventEmitter<void>();
 
   workerStateLabel(): string {

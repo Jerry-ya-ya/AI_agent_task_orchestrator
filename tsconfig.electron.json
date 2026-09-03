@@ -15,7 +15,8 @@
   },
   "include": [
     "src/backend/**/*.ts",
-    "src/electron/**/*.ts"
+    "src/electron/**/*.ts",
+    "src/electron/**/*.cts"
   ],
   "exclude": [
     "src/**/*.spec.ts"

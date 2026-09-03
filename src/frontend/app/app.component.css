@@ -20,12 +20,11 @@
   background: #11151a;
   color: #fff;
   box-shadow: 0 4px 22px rgba(17, 21, 26, 0.14);
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
 }
 
-.topbar button,
-.topbar [title] {
-  -webkit-app-region: no-drag;
+.brand-block {
+  -webkit-app-region: drag;
 }
 
 .brand-block,
@@ -90,12 +89,11 @@
   gap: 9px;
 }
 
-.window-close {
+.window-control {
   display: grid;
   flex: 0 0 auto;
   width: 38px;
   height: 38px;
-  margin-left: 5px;
   padding: 0;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -105,7 +103,7 @@
   transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
 }
 
-.window-close svg {
+.window-control svg {
   width: 16px;
   height: 16px;
   fill: none;
@@ -1279,6 +1277,20 @@ main {
   margin: 3px 0 0;
   color: #707985;
   font-size: 10px;
+}
+
+.window-minimize {
+  margin-left: 5px;
+}
+
+.window-minimize:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}
+
+.window-minimize:active {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .detail-actions__buttons {

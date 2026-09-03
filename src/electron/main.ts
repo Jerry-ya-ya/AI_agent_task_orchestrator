@@ -11,10 +11,22 @@ let shutdownPromise: Promise<void> | null = null;
 
 Menu.setApplicationMenu(null);
 
-ipcMain.on('window:close', (event) => {
-  if (mainWindow !== null && event.sender === mainWindow.webContents) {
-    mainWindow.close();
+ipcMain.handle('window:close', (event) => {
+  const browserWindow = BrowserWindow.fromWebContents(event.sender);
+  if (browserWindow === null || browserWindow.isDestroyed()) {
+    return false;
   }
+  browserWindow.close();
+  return true;
+});
+
+ipcMain.handle('window:minimize', (event) => {
+  const browserWindow = BrowserWindow.fromWebContents(event.sender);
+  if (browserWindow === null || browserWindow.isDestroyed()) {
+    return false;
+  }
+  browserWindow.minimize();
+  return true;
 });
 
 if (!app.requestSingleInstanceLock()) {
@@ -69,45 +81,57 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function createWindow(apiUrl: string): Promise<void> {
-  mainWindow = new BrowserWindow({
+  const browserWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 980,
     minHeight: 680,
     title: 'AI Agent Task Orchestrator',
     frame: false,
+    show: false,
     autoHideMenuBar: true,
     backgroundColor: '#f4f6f8',
     webPreferences: {
-      preload: join(currentDirectory, 'preload.js'),
+      preload: join(currentDirectory, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true
     }
   });
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow = browserWindow;
+  browserWindow.once('ready-to-show', () => {
+    browserWindow.show();
+    browserWindow.focus();
+  });
+  browserWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) {
       void shell.openExternal(url);
     }
     return { action: 'deny' };
   });
-  mainWindow.webContents.on('will-navigate', (event, url) => {
+  browserWindow.webContents.on('will-navigate', (event, url) => {
     const allowedOrigins = [new URL(apiUrl).origin, 'http://127.0.0.1:4300'];
     if (!allowedOrigins.includes(new URL(url).origin)) {
       event.preventDefault();
     }
   });
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  browserWindow.on('closed', () => {
+    if (mainWindow === browserWindow) {
+      mainWindow = null;
+    }
   });
 
   const developmentUrl = process.env['ORCHESTRATOR_DEV_URL'];
   if (developmentUrl !== undefined) {
     const url = new URL(developmentUrl);
     url.searchParams.set('apiBaseUrl', apiUrl);
-    await mainWindow.loadURL(url.toString());
+    await browserWindow.loadURL(url.toString());
   } else {
-    await mainWindow.loadURL(apiUrl);
+    await browserWindow.loadURL(apiUrl);
+  }
+  if (!browserWindow.isDestroyed() && !browserWindow.isVisible()) {
+    browserWindow.show();
+    browserWindow.focus();
   }
 }
 

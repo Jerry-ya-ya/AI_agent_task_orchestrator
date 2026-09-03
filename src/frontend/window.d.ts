@@ -3,7 +3,8 @@ export {};
 declare global {
   interface Window {
     desktopWindow?: {
-      close(): void;
+      minimize?(): Promise<boolean>;
+      close(): Promise<boolean>;
     };
   }
 }

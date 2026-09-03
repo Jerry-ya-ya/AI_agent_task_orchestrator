@@ -137,11 +137,15 @@ export class AppComponent implements OnInit, OnDestroy {
 
   closeApplication(): void {
     if (window.desktopWindow) {
-      window.desktopWindow.close();
+      void window.desktopWindow.close();
       return;
     }
 
     window.close();
+  }
+
+  minimizeApplication(): void {
+    void window.desktopWindow?.minimize?.();
   }
 
   @HostListener('document:keydown', ['$event'])

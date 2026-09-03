@@ -1,5 +1,5 @@
 <div class="app-shell">
-  <app-header [connected]="connected" [apiBaseUrl]="apiBaseUrl" [workerStatus]="workerStatus" [projectCount]="projects.length" (createProject)="openProjectEditor()" (createTask)="openCreateTask()" (closeApplication)="closeApplication()" />
+  <app-header [connected]="connected" [apiBaseUrl]="apiBaseUrl" [workerStatus]="workerStatus" [projectCount]="projects.length" (createProject)="openProjectEditor()" (createTask)="openCreateTask()" (minimizeApplication)="minimizeApplication()" (closeApplication)="closeApplication()" />
   <main>
     <section class="board-heading" aria-labelledby="board-title">
       <div><div class="board-title-row"><h2 id="board-title">Taskboard</h2><span class="task-total">{{ tasks.length }} {{ tasks.length === 1 ? 'task' : 'tasks' }}</span></div><p>The worker moves one task at a time. Completed work waits in Review until you approve it.</p></div>

@@ -15,11 +15,23 @@ afterEach(() => {
 });
 
 describe('AppComponent initialization', () => {
+  it('minimizes the Electron window from the title-bar control', () => {
+    const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
+    const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
+    const component = new AppComponent(api, changeDetector);
+    const minimize = vi.fn().mockResolvedValue(true);
+    vi.stubGlobal('window', { desktopWindow: { minimize, close: vi.fn() } });
+
+    component.minimizeApplication();
+
+    expect(minimize).toHaveBeenCalledOnce();
+  });
+
   it('closes the Electron window from the title-bar close control', () => {
     const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
     const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
     const component = new AppComponent(api, changeDetector);
-    const close = vi.fn();
+    const close = vi.fn().mockResolvedValue(true);
     vi.stubGlobal('window', { desktopWindow: { close } });
 
     component.closeApplication();
