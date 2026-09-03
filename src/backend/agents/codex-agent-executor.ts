@@ -154,6 +154,14 @@ export function buildCodexPrompt(task: AgentTask): string {
         'Modify the existing previous version in this branch; do not treat this as a new implementation from scratch.',
         ''
       ];
+  const retryContext = task.retry_prompt === null
+    ? []
+    : [
+        'Retry instructions:',
+        task.retry_prompt,
+        'Continue from the existing implementation in this same task branch; do not start a separate branch.',
+        ''
+      ];
 
   return [
     `You are implementing orchestrator task #${task.id} on an isolated Git task branch.`,
@@ -167,6 +175,7 @@ export function buildCodexPrompt(task: AgentTask): string {
     description,
     '',
     ...revisionContext,
+    ...retryContext,
     'Execution constraints:',
     '- Work only inside the current repository workspace and checked-out task branch.',
     '- Do not create, check out, switch, delete, or rewrite Git branches or worktrees.',

@@ -102,10 +102,10 @@ export class TaskRepository {
     const now = this.clock();
     const result = this.database.connection.prepare(`
       INSERT INTO tasks (
-        project_id, title, description, status, priority, model_effort,
+        project_id, title, description, status, priority, model_effort, retry_prompt,
         branch_name, worktree_path, base_branch, commit_summary, source_task_id, is_rejected,
         is_paused, created_at, updated_at
-      ) VALUES (?, ?, ?, 'TODO', ?, ?, NULL, NULL, NULL, NULL, NULL, 0, 0, ?, ?)
+      ) VALUES (?, ?, ?, 'TODO', ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, ?, ?)
     `).run(
       input.project_id,
       input.title,
@@ -123,10 +123,10 @@ export class TaskRepository {
       const now = this.clock();
       const result = this.database.connection.prepare(`
         INSERT INTO tasks (
-          project_id, title, description, status, priority, model_effort,
+          project_id, title, description, status, priority, model_effort, retry_prompt,
           branch_name, worktree_path, base_branch, commit_summary,
           source_task_id, is_rejected, is_paused, created_at, updated_at
-        ) VALUES (?, ?, ?, 'TODO', ?, ?, ?, ?, ?, NULL, ?, 0, 0, ?, ?)
+        ) VALUES (?, ?, ?, 'TODO', ?, ?, NULL, ?, ?, ?, NULL, ?, 0, 0, ?, ?)
       `).run(
         source.project_id, source.title, prompt, source.priority,
         source.model_effort, source.branch_name, source.worktree_path,
@@ -140,13 +140,13 @@ export class TaskRepository {
     });
   }
 
-  public retry(id: number, modelEffort: Task['model_effort']): Task | null {
+  public retry(id: number, modelEffort: Task['model_effort'], prompt: string): Task | null {
     const result = this.database.connection.prepare(`
       UPDATE tasks
-      SET status = 'TODO', model_effort = ?, commit_summary = NULL,
+      SET status = 'TODO', model_effort = ?, retry_prompt = ?, commit_summary = NULL,
           is_rejected = 0, is_paused = 0, updated_at = ?
       WHERE id = ?
-    `).run(modelEffort, this.clock(), id);
+    `).run(modelEffort, prompt, this.clock(), id);
     return result.changes > 0 ? this.findById(id) : null;
   }
 

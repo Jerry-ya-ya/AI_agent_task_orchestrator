@@ -23,6 +23,7 @@ const SCHEMA = `
       CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
     model_effort TEXT NOT NULL DEFAULT 'medium'
       CHECK (model_effort IN ('low','medium','high','xhigh')),
+    retry_prompt TEXT,
     branch_name TEXT,
     worktree_path TEXT,
     base_branch TEXT,
@@ -98,6 +99,9 @@ export class OrchestratorDatabase {
           CHECK (model_effort IN ('low','medium','high','xhigh'));
       `);
     }
+    if (!taskColumns.some((column) => column['name'] === 'retry_prompt')) {
+      this.connection.exec('ALTER TABLE tasks ADD COLUMN retry_prompt TEXT;');
+    }
     if (!taskColumns.some((column) => column['name'] === 'source_task_id')) {
       this.connection.exec('ALTER TABLE tasks ADD COLUMN source_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL;');
     }
@@ -153,6 +157,7 @@ export class OrchestratorDatabase {
             CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
           model_effort TEXT NOT NULL DEFAULT 'medium'
             CHECK (model_effort IN ('low','medium','high','xhigh')),
+          retry_prompt TEXT,
           branch_name TEXT,
           worktree_path TEXT,
           base_branch TEXT,
@@ -165,7 +170,7 @@ export class OrchestratorDatabase {
         );
 
         INSERT INTO tasks (
-          id, project_id, title, description, status, priority, model_effort,
+          id, project_id, title, description, status, priority, model_effort, retry_prompt,
           branch_name, worktree_path, base_branch, commit_summary, source_task_id,
           is_rejected, is_paused, created_at, updated_at
         )
@@ -175,7 +180,7 @@ export class OrchestratorDatabase {
             WHEN status = 'DONE' AND branch_name IS NOT NULL THEN '${migratedDoneStatus}'
             ELSE status
           END,
-          priority, model_effort, branch_name, worktree_path, base_branch, commit_summary,
+          priority, model_effort, retry_prompt, branch_name, worktree_path, base_branch, commit_summary,
           source_task_id, is_rejected, is_paused, created_at, updated_at
         FROM tasks_before_publishing;
 

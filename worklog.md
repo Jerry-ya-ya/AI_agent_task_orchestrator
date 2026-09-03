@@ -43,3 +43,5 @@
 ## 2026/09/04
 
 - feat: make retry and reject available from every task detail with safe active-run cancellation and branch cleanup.
+
+- feat: add retry prompts that continue work on the existing task branch.

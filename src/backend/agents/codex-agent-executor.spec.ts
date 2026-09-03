@@ -69,6 +69,18 @@ describe('CodexAgentExecutor', () => {
     );
   });
 
+  it('passes retry instructions while keeping the agent on the same task branch', () => {
+    const prompt = buildCodexPrompt({
+      ...exampleTask(),
+      retry_prompt: 'Keep the existing layout and fix keyboard navigation.'
+    });
+
+    expect(prompt).toContain('Retry instructions:\nKeep the existing layout and fix keyboard navigation.');
+    expect(prompt).toContain(
+      'Continue from the existing implementation in this same task branch; do not start a separate branch.'
+    );
+  });
+
   it('extracts the final agent message from JSONL', () => {
     const result = successResult(
       [
@@ -175,10 +187,13 @@ function exampleTask(): Task {
     status: 'IN_PROGRESS',
     priority: 'HIGH',
     model_effort: 'medium',
+    retry_prompt: null,
     branch_name: 'agent/101-add-login-api',
     worktree_path: null,
     base_branch: 'main',
     commit_summary: null,
+    source_task_id: null,
+    is_rejected: false,
     is_paused: false,
     created_at: '2026-08-29T00:00:00.000Z',
     updated_at: '2026-08-29T00:00:00.000Z'

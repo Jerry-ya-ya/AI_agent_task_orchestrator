@@ -1346,6 +1346,21 @@ main {
   text-transform: uppercase;
 }
 
+.retry-prompt {
+  margin-top: 14px;
+  padding: 12px 13px;
+  border-left: 3px solid #d08030;
+  border-radius: 4px;
+  background: #fff8ef;
+}
+
+.retry-prompt strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #78420f;
+  font-size: 11px;
+}
+
 .description-text {
   margin: 0;
   color: #404852;

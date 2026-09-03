@@ -109,7 +109,10 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   });
 
   app.post('/tasks/:id/retry', async (request, response) => {
-    const input = z.object({ model_effort: z.enum(MODEL_EFFORTS).optional() })
+    const input = z.object({
+      prompt: z.string().min(1).max(100_000),
+      model_effort: z.enum(MODEL_EFFORTS).optional()
+    })
       .strict()
       .parse(request.body ?? {});
     const taskId = idSchema.parse(request.params.id);

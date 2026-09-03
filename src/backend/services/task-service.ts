@@ -101,12 +101,16 @@ export class TaskService {
     this.tasks.delete(id);
   }
 
-  public retry(id: number, input: RetryTaskInput = {}): Task {
+  public retry(id: number, input: RetryTaskInput): Task {
     const existing = this.requireTask(id);
     if (RUNNING_STATUSES.includes(existing.status)) {
       throw new ConflictError('The active task must stop before it can be retried.');
     }
-    const updated = this.tasks.retry(id, input.model_effort ?? existing.model_effort);
+    const prompt = input.prompt.trim();
+    if (prompt.length === 0) {
+      throw new ValidationError('A retry prompt is required.');
+    }
+    const updated = this.tasks.retry(id, input.model_effort ?? existing.model_effort, prompt);
     if (updated === null) {
       throw new ConflictError('Task state changed while it was being retried.');
     }

@@ -320,7 +320,20 @@
       <button class="icon-button" type="button" aria-label="Close retry form" (click)="closeModal()">×</button>
     </header>
 
-    <form (ngSubmit)="retryTask()">
+    <form #retryTaskForm="ngForm" (ngSubmit)="retryTask(retryTaskForm)" novalidate>
+      <div class="form-field">
+        <label for="retry-task-prompt">New prompt</label>
+        <textarea
+          id="retry-task-prompt"
+          name="retryTaskPrompt"
+          [(ngModel)]="retryTaskPrompt"
+          required
+          maxlength="100000"
+          rows="7"
+          placeholder="Describe what the agent should change or try differently…"
+        ></textarea>
+        <small>The agent will continue from the existing implementation on this task's current branch.</small>
+      </div>
       <div class="form-field">
         <label for="retry-model-effort">Model strength</label>
         <select id="retry-model-effort" name="retryModelEffort" required [(ngModel)]="retryModelEffort">
@@ -634,6 +647,10 @@
           <h3 id="description-title">Description</h3>
           <p class="description-text" *ngIf="task.description; else noDescription">{{ task.description }}</p>
           <ng-template #noDescription><p class="empty-copy">No description provided.</p></ng-template>
+          <div class="retry-prompt" *ngIf="task.retry_prompt">
+            <strong>Latest retry prompt</strong>
+            <p class="description-text">{{ task.retry_prompt }}</p>
+          </div>
         </section>
 
         <section class="detail-section" aria-labelledby="workspace-title">

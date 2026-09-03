@@ -104,8 +104,11 @@ export class ApiService {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/remove-branch`, {});
   }
 
-  retryTask(taskId: number, modelEffort: ModelEffort): Observable<Task> {
-    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry`, { model_effort: modelEffort });
+  retryTask(taskId: number, prompt: string, modelEffort: ModelEffort): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry`, {
+      prompt,
+      model_effort: modelEffort
+    });
   }
 
   retryReviewTask(taskId: number, prompt: string): Observable<Task> {

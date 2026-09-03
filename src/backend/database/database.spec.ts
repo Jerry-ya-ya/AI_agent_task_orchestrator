@@ -142,6 +142,7 @@ describe('OrchestratorDatabase schema', () => {
     expect(columns.some((column) => column['name'] === 'base_branch')).toBe(true);
     expect(columns.some((column) => column['name'] === 'commit_summary')).toBe(true);
     expect(columns.some((column) => column['name'] === 'model_effort')).toBe(true);
+    expect(columns.some((column) => column['name'] === 'retry_prompt')).toBe(true);
     expect(database.connection.prepare('SELECT status, commit_summary, model_effort FROM tasks WHERE id = 7').get())
       .toMatchObject({
         status: 'PENDING_PUSH',

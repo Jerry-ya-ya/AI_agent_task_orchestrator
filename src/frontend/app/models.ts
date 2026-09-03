@@ -46,6 +46,7 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   model_effort: ModelEffort;
+  retry_prompt: string | null;
   branch_name: string | null;
   worktree_path: string | null;
   base_branch: string | null;

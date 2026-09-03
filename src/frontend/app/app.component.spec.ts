@@ -156,6 +156,7 @@ function exampleTask(overrides: Partial<Task> = {}): Task {
     status: 'TODO',
     priority: 'MEDIUM',
     model_effort: 'medium',
+    retry_prompt: null,
     branch_name: null,
     worktree_path: null,
     base_branch: null,

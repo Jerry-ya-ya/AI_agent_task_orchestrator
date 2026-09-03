@@ -106,10 +106,14 @@ describe('TaskService state rules', () => {
     tasks.setArtifacts(failed.id, 'agent/1-retry-me', '/example/repository', 'main');
     expect(tasks.transition(failed.id, 'CLAIMED', 'FAILED')).not.toBeNull();
 
-    const retried = service.retry(failed.id, { model_effort: 'high' });
+    const retried = service.retry(failed.id, {
+      prompt: 'Fix the failing implementation and rerun verification.',
+      model_effort: 'high'
+    });
     expect(retried).toMatchObject({
       status: 'TODO',
       model_effort: 'high',
+      retry_prompt: 'Fix the failing implementation and rerun verification.',
       branch_name: 'agent/1-retry-me',
       worktree_path: '/example/repository'
     });
@@ -119,14 +123,19 @@ describe('TaskService state rules', () => {
       model_effort: 'low'
     });
     expect(service.pause(queued.id).is_paused).toBe(true);
-    expect(service.retry(queued.id, { model_effort: 'xhigh' })).toMatchObject({
-      status: 'TODO', model_effort: 'xhigh', is_paused: false
+    expect(service.retry(queued.id, {
+      prompt: 'Try this task now.',
+      model_effort: 'xhigh'
+    })).toMatchObject({
+      status: 'TODO', model_effort: 'xhigh', retry_prompt: 'Try this task now.', is_paused: false
     });
 
     for (const status of ['IN_REVIEW', 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL', 'DONE', 'REJECTED'] as const) {
       const task = createTask(`Retry ${status}`);
       expect(tasks.transition(task.id, 'TODO', status)).not.toBeNull();
-      expect(service.retry(task.id)).toMatchObject({ status: 'TODO', is_rejected: false });
+      expect(service.retry(task.id, { prompt: `Retry from ${status}.` })).toMatchObject({
+        status: 'TODO', retry_prompt: `Retry from ${status}.`, is_rejected: false
+      });
     }
   });
 
@@ -135,7 +144,7 @@ describe('TaskService state rules', () => {
     async (status) => {
       const task = createTask(`Running ${status}`);
       expect(tasks.transition(task.id, 'TODO', status)).not.toBeNull();
-      expect(() => service.retry(task.id)).toThrow(ConflictError);
+      expect(() => service.retry(task.id, { prompt: 'Restart after cancellation.' })).toThrow(ConflictError);
       await expect(service.reject(task.id)).rejects.toThrow(ConflictError);
     }
   );

@@ -92,6 +92,7 @@ export class AppComponent implements OnInit, OnDestroy {
   selectedTaskId: number | null = null;
   selectedTaskDetail: TaskDetail | null = null;
   retryingTask: Task | null = null;
+  retryTaskPrompt = '';
   retryModelEffort: ModelEffort = 'medium';
   retryReviewTaskId: number | null = null;
   retryPrompt = '';
@@ -248,6 +249,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.selectedTaskId = null;
     this.selectedTaskDetail = null;
     this.retryingTask = null;
+    this.retryTaskPrompt = '';
     this.retryReviewTaskId = null;
     this.retryPrompt = '';
     this.detailLoading = false;
@@ -470,20 +472,26 @@ export class AppComponent implements OnInit, OnDestroy {
     this.closeModal(false);
     this.clearError();
     this.retryingTask = task;
+    this.retryTaskPrompt = '';
     this.retryModelEffort = task.model_effort;
     this.activateModal();
   }
 
-  async retryTask(): Promise<void> {
+  async retryTask(form: NgForm): Promise<void> {
     const task = this.retryingTask;
-    if (task === null || this.isTaskPending(task.id)) {
+    if (form.invalid || task === null || this.isTaskPending(task.id)) {
+      form.control.markAllAsTouched();
       return;
     }
 
     this.setTaskPending(task.id, true);
     this.clearError();
     try {
-      await firstValueFrom(this.api.retryTask(task.id, this.retryModelEffort));
+      await firstValueFrom(this.api.retryTask(
+        task.id,
+        this.retryTaskPrompt.trim(),
+        this.retryModelEffort
+      ));
       this.showNotice(`“${task.title}” queued for retry.`);
       this.closeModal();
       await this.refreshBoard(false);
