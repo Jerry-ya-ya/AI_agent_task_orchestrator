@@ -18,6 +18,12 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 export type ModelEffort = (typeof MODEL_EFFORTS)[number];
 
+export interface StatusColumn {
+  status: TaskStatus;
+  label: string;
+  hint: string;
+}
+
 export interface Project {
   id: number;
   name: string;

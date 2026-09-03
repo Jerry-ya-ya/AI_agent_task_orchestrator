@@ -1,0 +1,9 @@
+<div class="modal" (click)="closed.emit()"><section class="modal__surface modal__surface--form modal__surface--compact" role="dialog" aria-modal="true" aria-labelledby="retry-dialog-title" tabindex="-1" (click)="$event.stopPropagation()">
+  <header class="modal__header"><div><p class="eyebrow">Queue another attempt</p><h2 id="retry-dialog-title">Retry task</h2></div><button class="icon-button" type="button" aria-label="Close retry form" (click)="closed.emit()">×</button></header>
+  <form #retryTaskForm="ngForm" (ngSubmit)="submit(retryTaskForm)" novalidate>
+    <div class="form-field"><label for="retry-task-prompt">New prompt</label><textarea id="retry-task-prompt" name="retryTaskPrompt" [(ngModel)]="prompt" required maxlength="100000" rows="7" placeholder="Describe what the agent should change or try differently…"></textarea><small>The agent will continue from the existing implementation on this task's current branch.</small></div>
+    <div class="form-field"><label for="retry-model-effort">Model strength</label><select id="retry-model-effort" name="retryModelEffort" required [(ngModel)]="modelEffort"><option *ngFor="let effort of modelEfforts" [ngValue]="effort">{{ modelEffortLabel(effort) }}</option></select><small>Choose the reasoning strength for the next attempt of “{{ task.title }}”.</small></div>
+    <div class="form-error" role="alert" *ngIf="apiError">{{ apiError }}</div>
+    <footer class="modal__footer"><button class="button button--quiet" type="button" (click)="closed.emit()">Cancel</button><button class="button button--primary" type="submit" [disabled]="pending">{{ pending ? 'Queuing…' : 'Retry task' }}</button></footer>
+  </form>
+</section></div>

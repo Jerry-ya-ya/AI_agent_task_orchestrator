@@ -1,0 +1,12 @@
+<div class="modal" (click)="closed.emit()">
+  <section class="modal__surface modal__surface--form" role="dialog" aria-modal="true" aria-labelledby="project-dialog-title" tabindex="-1" (click)="$event.stopPropagation()">
+    <header class="modal__header"><div><p class="eyebrow">Repository workspace</p><h2 id="project-dialog-title">Create project</h2></div><button class="icon-button" type="button" aria-label="Close project form" (click)="closed.emit()">×</button></header>
+    <form #projectForm="ngForm" (ngSubmit)="submit(projectForm)" novalidate>
+      <div class="form-field"><label for="project-name">Project name</label><input id="project-name" name="projectName" type="text" required maxlength="120" autocomplete="off" [(ngModel)]="draft.name" #projectName="ngModel" /><small *ngIf="projectName.invalid && projectName.touched" class="field-error">Enter a project name.</small></div>
+      <div class="form-field"><label for="repository-path">Repository path</label><input id="repository-path" name="repositoryPath" type="text" required autocomplete="off" spellcheck="false" placeholder="C:\Projects\my-repository" [(ngModel)]="draft.repository_path" #repositoryPath="ngModel" /><small>Use an absolute path to an existing local Git repository.</small><small *ngIf="repositoryPath.invalid && repositoryPath.touched" class="field-error">Enter a repository path.</small></div>
+      <div class="form-field"><label for="project-context">Project context <span>Optional</span></label><textarea id="project-context" name="projectContext" rows="4" maxlength="10000" placeholder="Architecture notes or guidance Codex should know…" [(ngModel)]="draft.context"></textarea></div>
+      <div class="form-error" role="alert" *ngIf="apiError">{{ apiError }}</div>
+      <footer class="modal__footer"><button class="button button--quiet" type="button" (click)="closed.emit()">Cancel</button><button class="button button--primary" type="submit" [disabled]="saving">{{ saving ? 'Creating…' : 'Create project' }}</button></footer>
+    </form>
+  </section>
+</div>

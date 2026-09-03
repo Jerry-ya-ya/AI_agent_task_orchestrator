@@ -3,42 +3,38 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectorRef,
   Component,
-  ElementRef,
+  ViewEncapsulation,
   HostListener,
   OnDestroy,
   OnInit,
-  ViewChild,
 } from '@angular/core';
-import { FormsModule, NgForm } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from './api.service';
+import { AppHeaderComponent } from './components/app-header/app-header.component';
+import { ProjectEditorDialogComponent } from './components/project-editor-dialog/project-editor-dialog.component';
+import { RetryReviewDialogComponent } from './components/retry-review-dialog/retry-review-dialog.component';
+import { RetryTaskDialogComponent, type RetryTaskRequest } from './components/retry-task-dialog/retry-task-dialog.component';
+import { TaskBoardComponent } from './components/task-board/task-board.component';
+import { TaskDetailDialogComponent } from './components/task-detail-dialog/task-detail-dialog.component';
+import { TaskEditorDialogComponent } from './components/task-editor-dialog/task-editor-dialog.component';
+import { TaskHistoryComponent } from './components/task-history/task-history.component';
+import { UsageCardComponent } from './components/usage-card/usage-card.component';
 import {
   AgentUsage,
-  AgentUsageWindow,
   MODEL_EFFORTS,
-  ModelEffort,
   Project,
   ProjectDraft,
   SaveTaskInput,
+  StatusColumn,
   TASK_PRIORITIES,
-  TASK_STATUSES,
   Task,
   TaskDetail,
   TaskDraft,
-  TaskPriority,
-  TaskRun,
-  TaskStatus,
   WorkerStatus,
 } from './models';
 
 type TaskEditorMode = 'create' | 'edit';
-
-interface StatusColumn {
-  status: TaskStatus;
-  label: string;
-  hint: string;
-}
 
 const STATUS_COLUMNS: readonly StatusColumn[] = [
   { status: 'TODO', label: 'Todo', hint: 'Waiting for the worker' },
@@ -52,23 +48,26 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
   { status: 'FAILED', label: 'Failed', hint: 'Needs attention' },
 ];
 
-const PRIORITY_WEIGHT: Readonly<Record<TaskPriority, number>> = {
-  LOW: 1,
-  MEDIUM: 2,
-  HIGH: 3,
-  URGENT: 4,
-};
-
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [
+    CommonModule,
+    AppHeaderComponent,
+    UsageCardComponent,
+    TaskBoardComponent,
+    TaskHistoryComponent,
+    ProjectEditorDialogComponent,
+    TaskEditorDialogComponent,
+    RetryTaskDialogComponent,
+    RetryReviewDialogComponent,
+    TaskDetailDialogComponent,
+  ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
+  encapsulation: ViewEncapsulation.None,
 })
 export class AppComponent implements OnInit, OnDestroy {
-  @ViewChild('modalSurface') private modalSurface?: ElementRef<HTMLElement>;
-
   readonly columns = STATUS_COLUMNS;
   readonly priorities = TASK_PRIORITIES;
   readonly modelEfforts = MODEL_EFFORTS;
@@ -92,10 +91,7 @@ export class AppComponent implements OnInit, OnDestroy {
   selectedTaskId: number | null = null;
   selectedTaskDetail: TaskDetail | null = null;
   retryingTask: Task | null = null;
-  retryTaskPrompt = '';
-  retryModelEffort: ModelEffort = 'medium';
   retryReviewTaskId: number | null = null;
-  retryPrompt = '';
   projectDraft: ProjectDraft = this.emptyProjectDraft();
   taskDraft: TaskDraft = this.emptyTaskDraft();
 
@@ -105,7 +101,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private refreshInFlight = false;
   private healthRefreshInFlight = false;
   private usageRefreshInFlight = false;
-  private pendingTaskIds = new Set<number>();
+  pendingTaskIds = new Set<number>();
   private restoreFocusTo: HTMLElement | null = null;
 
   constructor(
@@ -165,36 +161,6 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  tasksFor(status: TaskStatus): Task[] {
-    return this.tasks
-      .filter((task) => task.status === status)
-      .sort((left, right) => {
-        const priorityDifference = PRIORITY_WEIGHT[right.priority] - PRIORITY_WEIGHT[left.priority];
-        return priorityDifference || left.created_at.localeCompare(right.created_at);
-      });
-  }
-
-  taskHistory(): Task[] {
-    return this.tasks
-      .filter((task) => task.status === 'DONE' || task.status === 'REJECTED' || task.status === 'FAILED')
-      .sort((left, right) => {
-        const updatedDifference = right.updated_at.localeCompare(left.updated_at);
-        return updatedDifference || right.id - left.id;
-      });
-  }
-
-  projectName(projectId: number): string {
-    return this.projects.find((project) => project.id === projectId)?.name ?? 'Unknown project';
-  }
-
-  trackTask(_index: number, task: Task): number {
-    return task.id;
-  }
-
-  trackRun(_index: number, run: TaskRun): number {
-    return run.id;
-  }
-
   openProjectEditor(): void {
     this.clearError();
     this.projectDraft = this.emptyProjectDraft();
@@ -249,9 +215,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.selectedTaskId = null;
     this.selectedTaskDetail = null;
     this.retryingTask = null;
-    this.retryTaskPrompt = '';
     this.retryReviewTaskId = null;
-    this.retryPrompt = '';
     this.detailLoading = false;
     this.saving = false;
     this.clearError();
@@ -264,12 +228,8 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  async saveProject(form: NgForm): Promise<void> {
-    if (form.invalid || this.saving) {
-      form.control.markAllAsTouched();
-      return;
-    }
-
+  async saveProject(): Promise<void> {
+    if (this.saving) return;
     this.saving = true;
     this.clearError();
     try {
@@ -292,11 +252,8 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  async saveTask(form: NgForm): Promise<void> {
-    if (form.invalid || this.taskDraft.project_id === null || this.saving) {
-      form.control.markAllAsTouched();
-      return;
-    }
+  async saveTask(): Promise<void> {
+    if (this.taskDraft.project_id === null || this.saving) return;
 
     const input: SaveTaskInput = {
       project_id: this.taskDraft.project_id,
@@ -360,21 +317,17 @@ export class AppComponent implements OnInit, OnDestroy {
     this.closeModal(false);
     this.clearError();
     this.retryReviewTaskId = task.id;
-    this.retryPrompt = '';
     this.activateModal();
   }
 
-  async submitReviewRetry(form: NgForm): Promise<void> {
-    if (form.invalid || this.retryReviewTaskId === null || this.saving) {
-      form.control.markAllAsTouched();
-      return;
-    }
+  async submitReviewRetry(prompt: string): Promise<void> {
+    if (this.retryReviewTaskId === null || this.saving) return;
     const task = this.tasks.find((item) => item.id === this.retryReviewTaskId);
     if (!task) return;
     this.saving = true;
     this.clearError();
     try {
-      await firstValueFrom(this.api.retryReviewTask(task.id, this.retryPrompt.trim()));
+      await firstValueFrom(this.api.retryReviewTask(task.id, prompt));
       this.closeModal();
       this.showNotice(`A revision of “${task.title}” was queued.`);
       await this.refreshBoard(false);
@@ -472,25 +425,20 @@ export class AppComponent implements OnInit, OnDestroy {
     this.closeModal(false);
     this.clearError();
     this.retryingTask = task;
-    this.retryTaskPrompt = '';
-    this.retryModelEffort = task.model_effort;
     this.activateModal();
   }
 
-  async retryTask(form: NgForm): Promise<void> {
+  async retryTask(request: RetryTaskRequest): Promise<void> {
     const task = this.retryingTask;
-    if (form.invalid || task === null || this.isTaskPending(task.id)) {
-      form.control.markAllAsTouched();
-      return;
-    }
+    if (task === null || this.isTaskPending(task.id)) return;
 
     this.setTaskPending(task.id, true);
     this.clearError();
     try {
       await firstValueFrom(this.api.retryTask(
         task.id,
-        this.retryTaskPrompt.trim(),
-        this.retryModelEffort
+        request.prompt,
+        request.modelEffort
       ));
       this.showNotice(`“${task.title}” queued for retry.`);
       this.closeModal();
@@ -570,22 +518,6 @@ export class AppComponent implements OnInit, OnDestroy {
       task.status !== 'PENDING_BRANCH_REMOVAL';
   }
 
-  latestResult(task: Task): string {
-    if (task.status === 'TODO' && task.is_paused) {
-      return 'Paused — the worker will skip this task.';
-    }
-    const summary = task.latest_run?.result_summary?.trim();
-    if (summary) {
-      return summary;
-    }
-
-    if (task.status === 'CLAIMED' || task.status === 'IN_PROGRESS' || task.status === 'TESTING') {
-      return 'Worker is processing this task.';
-    }
-
-    return 'No execution result yet.';
-  }
-
   taskForDetail(): Task | null {
     if (this.selectedTaskDetail) {
       return this.selectedTaskDetail;
@@ -593,71 +525,11 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.tasks.find((task) => task.id === this.selectedTaskId) ?? null;
   }
 
-  statusLabel(status: TaskStatus): string {
-    return this.columns.find((column) => column.status === status)?.label ?? status;
-  }
-
-  modelEffortLabel(effort: ModelEffort): string {
-    return effort === 'xhigh' ? 'Extra high' : `${effort[0].toUpperCase()}${effort.slice(1)}`;
-  }
-
-  workerStateLabel(): string {
-    if (!this.connected) {
-      return 'Worker unknown';
-    }
-    if (this.workerStatus === null) {
-      return 'Worker status unavailable';
-    }
-    if (!this.workerStatus.running) {
-      return 'Worker stopped';
-    }
-    if (!this.workerStatus.agentAvailable) {
-      return 'Agent unavailable';
-    }
-    if (this.workerStatus.busy) {
-      return this.workerStatus.activeTaskId === null
-        ? 'Worker busy'
-        : `Running task #${this.workerStatus.activeTaskId}`;
-    }
-    return 'Worker idle';
-  }
-
-  workerStateTitle(): string {
-    return this.workerStatus?.message || 'Worker health is not available.';
-  }
-
   workerWarning(): string {
     if (this.workerStatus === null || !this.workerStatus.running) {
       return this.workerStatus?.message ?? '';
     }
     return this.workerStatus.agentAvailable ? '' : this.workerStatus.message;
-  }
-
-  usageWindowLabel(window: AgentUsageWindow): string {
-    if (window.windowDurationMins === null) {
-      return 'Usage window';
-    }
-    if (window.windowDurationMins >= 1_440 && window.windowDurationMins % 1_440 === 0) {
-      const days = window.windowDurationMins / 1_440;
-      return `${days}-day window`;
-    }
-    if (window.windowDurationMins >= 60 && window.windowDurationMins % 60 === 0) {
-      return `${window.windowDurationMins / 60}-hour window`;
-    }
-    return `${window.windowDurationMins}-minute window`;
-  }
-
-  usageResetDate(window: AgentUsageWindow): Date | null {
-    return window.resetsAt === null ? null : new Date(window.resetsAt * 1_000);
-  }
-
-  runLabel(run: TaskRun, index: number, total: number): string {
-    const attempt = total - index;
-    return `Attempt ${attempt}`;
-  }
-
-  hasOutput(value: string | null | undefined): boolean {
-    return Boolean(value?.trim());
   }
 
   private async refreshBoard(silent: boolean): Promise<void> {
@@ -765,7 +637,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private activateModal(): void {
     this.restoreFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.body.classList.add('modal-open');
-    setTimeout(() => this.modalSurface?.nativeElement.focus());
+    setTimeout(() => document.querySelector<HTMLElement>('.modal__surface')?.focus());
   }
 
   private hasOpenModal(): boolean {
@@ -775,7 +647,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private keepFocusInModal(event: KeyboardEvent): void {
-    const modal = this.modalSurface?.nativeElement;
+    const modal = document.querySelector<HTMLElement>('.modal__surface');
     if (!modal) {
       return;
     }

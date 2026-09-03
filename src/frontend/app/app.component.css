@@ -1794,3 +1794,17 @@ main {
     transition-duration: 0.01ms !important;
   }
 }
+.app-shell > app-header,
+usage-card,
+task-board,
+task-history {
+  display: block;
+}
+
+project-editor-dialog,
+task-editor-dialog,
+retry-task-dialog,
+retry-review-dialog,
+task-detail-dialog {
+  display: contents;
+}

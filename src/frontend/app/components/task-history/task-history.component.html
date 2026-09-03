@@ -1,0 +1,11 @@
+<section class="task-history" aria-labelledby="task-history-title">
+  <header class="task-history__heading"><div><p class="eyebrow">Archive</p><div class="board-title-row"><h2 id="task-history-title">Task history</h2><span class="task-total">{{ history().length }}</span></div><p>Completed and failed tasks, newest activity first.</p></div></header>
+  <div class="history-list" *ngIf="history().length > 0; else noTaskHistory">
+    <button class="history-row" type="button" *ngFor="let task of history(); trackBy: trackTask" (click)="taskOpened.emit(task)" [attr.aria-label]="'Open history for ' + task.title">
+      <span class="status-chip" [attr.data-status]="task.status">{{ statusLabel(task.status) }}</span>
+      <span class="history-row__task"><strong>{{ task.title }}</strong><small>#{{ task.id }} · {{ projectName(task.project_id) }}</small></span>
+      <span class="history-row__result">{{ latestResult(task) }}</span><time [attr.datetime]="task.updated_at">{{ task.updated_at | date: 'MMM d, y, HH:mm' }}</time><span class="history-row__open" aria-hidden="true">›</span>
+    </button>
+  </div>
+  <ng-template #noTaskHistory><div class="history-empty"><span aria-hidden="true">⌛</span><p>No completed or failed tasks yet.</p></div></ng-template>
+</section>

@@ -45,3 +45,5 @@
 - feat: make retry and reject available from every task detail with safe active-run cancellation and branch cleanup.
 
 - feat: add retry prompts that continue work on the existing task branch.
+
+- refactor: modularize the Angular dashboard with typed components and reliable task approval actions.

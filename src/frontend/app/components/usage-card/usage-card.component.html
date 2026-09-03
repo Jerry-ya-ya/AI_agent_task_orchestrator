@@ -1,0 +1,18 @@
+<section class="usage-card" aria-labelledby="usage-title">
+  <div class="usage-card__heading">
+    <div><p class="eyebrow">Codex allowance</p><h2 id="usage-title">Remaining usage</h2></div>
+    <span class="usage-plan" *ngIf="usage?.planType as plan">{{ plan | titlecase }}</span>
+  </div>
+  <div class="usage-card__loading" *ngIf="usage === null">Checking Codex usage…</div>
+  <div class="usage-card__unavailable" *ngIf="usage && !usage.available"><strong>Usage unavailable</strong><span>{{ usage.message }}</span></div>
+  <div class="usage-windows" *ngIf="usage?.available">
+    <div class="usage-window" *ngFor="let window of [usage!.primary, usage!.secondary]">
+      <ng-container *ngIf="window">
+        <div class="usage-window__label"><span>{{ windowLabel(window) }}</span><strong>{{ window.remainingPercent }}% left</strong></div>
+        <div class="usage-meter" role="meter" aria-label="Codex remaining usage" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="window.remainingPercent"><span [style.width.%]="window.remainingPercent"></span></div>
+        <small *ngIf="resetDate(window) as resetAt">Resets {{ resetAt | date: 'MMM d, HH:mm' }}</small>
+      </ng-container>
+    </div>
+    <div class="usage-reset-credits" *ngIf="usage!.resetCredits !== null">{{ usage!.resetCredits }} reset {{ usage!.resetCredits === 1 ? 'credit' : 'credits' }} available</div>
+  </div>
+</section>

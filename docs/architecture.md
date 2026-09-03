@@ -28,12 +28,19 @@ src/
   electron/
     main.ts               starts/stops runtime and owns BrowserWindow
   frontend/
-    app/                  Angular board, forms, task detail dialog, API client
+    app/
+      components/        standalone feature views and dialogs with typed inputs/outputs
+      app.component.*    dashboard container and workflow coordination
+      api.service.ts     loopback backend client
+      models.ts          shared frontend contracts
+      task-view.utils.ts pure task presentation helpers
 docs/
   architecture.md
 ```
 
-The renderer never launches processes or receives a generic command-execution endpoint.
+The dashboard container owns API calls and workflow state. Presentation components never launch
+processes or call the backend directly; they receive data through inputs and emit typed user actions.
+The renderer never receives a generic command-execution endpoint.
 
 ## 3. Data model
 

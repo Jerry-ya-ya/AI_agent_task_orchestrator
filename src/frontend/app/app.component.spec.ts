@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApiService } from './api.service';
 import { AppComponent } from './app.component';
 import type { AgentUsage, Project, Task, WorkerStatus } from './models';
+import { completedTaskHistory } from './task-view.utils';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -95,7 +96,7 @@ describe('AppComponent initialization', () => {
       exampleTask({ id: 4, status: 'IN_REVIEW', updated_at: '2026-08-31T10:00:00.000Z' }),
     ];
 
-    expect(component.taskHistory().map((task) => task.id)).toEqual([3, 1]);
+    expect(completedTaskHistory(component.tasks).map((task) => task.id)).toEqual([3, 1]);
   });
 
   it('hides the internal CLAIMED state and exposes branch cleanup between push and done', () => {
@@ -115,6 +116,31 @@ describe('AppComponent initialization', () => {
       'REJECTED',
       'FAILED',
     ]);
+  });
+
+  it('sends approval requests instead of returning after marking the task pending', async () => {
+    const task = exampleTask({ status: 'IN_REVIEW' });
+    const worker: WorkerStatus = {
+      running: true,
+      busy: false,
+      activeTaskId: null,
+      agentAvailable: true,
+      message: 'Worker idle.'
+    };
+    const api = {
+      baseUrl: 'http://127.0.0.1:4317',
+      approveTask: vi.fn(() => of({ ...task, status: 'PENDING_PUSH' })),
+      getProjects: vi.fn(() => of([])),
+      getTasks: vi.fn(() => of([])),
+      getHealth: vi.fn(() => of({ ok: true, worker }))
+    } as unknown as ApiService;
+    const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
+    const component = new AppComponent(api, changeDetector);
+
+    await component.approveTask(task);
+
+    expect(api.approveTask).toHaveBeenCalledWith(task.id);
+    expect(component.isTaskPending(task.id)).toBe(false);
   });
 
   it('treats both retry dialogs as active modals', () => {

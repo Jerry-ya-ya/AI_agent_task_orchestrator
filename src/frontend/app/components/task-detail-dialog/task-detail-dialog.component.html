@@ -1,0 +1,29 @@
+<div class="modal" (click)="closed.emit()">
+  <section class="modal__surface modal__surface--detail" role="dialog" aria-modal="true" aria-labelledby="detail-dialog-title" tabindex="-1" (click)="$event.stopPropagation()">
+    <header class="modal__header detail-header">
+      <div *ngIf="task as current"><div class="detail-kicker"><span class="status-chip" [attr.data-status]="current.status">{{ statusLabel(current.status) }}</span><span class="priority" [attr.data-priority]="current.priority"><span class="priority-dot" aria-hidden="true"></span>{{ current.priority | titlecase }}</span><span>#{{ current.id }}</span></div><h2 id="detail-dialog-title">{{ current.title }}</h2><p>{{ projectName(current.project_id) }}</p></div>
+      <div class="detail-header__actions" *ngIf="task as current"><button class="button button--quiet button--small" type="button" [disabled]="!canModify(current)" [title]="canModify(current) ? 'Edit task' : 'Active tasks cannot be edited'" (click)="editRequested.emit(current)">Edit</button><button class="button button--danger-quiet button--small" type="button" [disabled]="pending || !canModify(current)" [title]="canModify(current) ? 'Delete task' : 'Active tasks cannot be deleted'" (click)="deleteRequested.emit(current)">Delete</button><button class="icon-button" type="button" aria-label="Close task details" (click)="closed.emit()">×</button></div>
+    </header>
+    <div class="detail-loading" *ngIf="loading && !detail" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Loading task details…</div>
+    <ng-container *ngIf="task as current">
+      <div class="detail-actions"><div><strong>Task actions</strong><p>Retry places this task back in Todo. Reject stops further work and keeps branch removal under your approval.</p></div><div class="detail-actions__buttons">
+        <button *ngIf="current.status === 'IN_REVIEW'" class="button button--approve" type="button" [disabled]="pending" (click)="approveRequested.emit(current)">{{ pending ? 'Approving…' : 'Approve task' }}</button>
+        <button *ngIf="current.status === 'PENDING_BRANCH_REMOVAL'" class="button button--cleanup" type="button" [disabled]="pending" (click)="branchRemovalRequested.emit(current)">{{ pending ? 'Removing…' : 'Approve branch removal' }}</button>
+        <button *ngIf="current.status === 'PENDING_PUSH'" class="button button--approve" type="button" [disabled]="pending" (click)="pushRequested.emit(current)">{{ pending ? 'Pushing…' : 'Confirm push' }}</button>
+        <button class="button button--retry" type="button" [disabled]="pending" (click)="retryRequested.emit(current)">{{ pending ? 'Queuing…' : 'Retry task' }}</button>
+        <button class="button button--danger" type="button" [disabled]="pending" (click)="rejectRequested.emit(current)">{{ pending ? 'Rejecting…' : 'Reject task' }}</button>
+      </div></div>
+      <div class="detail-body">
+        <div class="form-error detail-error" role="alert" *ngIf="apiError">{{ apiError }}</div>
+        <section class="detail-section" aria-labelledby="description-title"><h3 id="description-title">Description</h3><p class="description-text" *ngIf="current.description; else noDescription">{{ current.description }}</p><ng-template #noDescription><p class="empty-copy">No description provided.</p></ng-template><div class="retry-prompt" *ngIf="current.retry_prompt"><strong>Latest retry prompt</strong><p class="description-text">{{ current.retry_prompt }}</p></div></section>
+        <section class="detail-section" aria-labelledby="workspace-title"><h3 id="workspace-title">Workspace</h3><dl class="metadata-grid">
+          <div><dt>Branch</dt><dd><code>{{ current.branch_name || 'Assigned when claimed' }}</code></dd></div><div><dt>Workspace</dt><dd><code>{{ current.worktree_path || 'Assigned when claimed' }}</code></dd></div><div><dt>Base branch</dt><dd><code>{{ current.base_branch || 'Resolved when publishing' }}</code></dd></div><div><dt>Commit message</dt><dd>{{ current.commit_summary || 'Returned after the agent finishes' }}</dd></div><div><dt>Created</dt><dd>{{ current.created_at | date: 'medium' }}</dd></div><div><dt>Last updated</dt><dd>{{ current.updated_at | date: 'medium' }}</dd></div>
+        </dl></section>
+        <section class="detail-section runs-section" aria-labelledby="runs-title"><div class="section-title-row"><h3 id="runs-title">Execution runs</h3><span *ngIf="detail">{{ detail.runs.length }} total</span></div>
+          <div class="runs-empty" *ngIf="detail && detail.runs.length === 0"><span aria-hidden="true">›_</span><p>No runs yet. The worker will create one after claiming this task.</p></div>
+          <div class="runs" *ngIf="detail as taskDetail"><details class="run" *ngFor="let run of taskDetail.runs; let index = index; trackBy: trackRun" [open]="index === 0"><summary><span class="run-chevron" aria-hidden="true">›</span><span class="run-name">{{ runLabel(run, index, taskDetail.runs.length) }}</span><span class="run-time">{{ run.started_at | date: 'medium' }}</span><span class="exit-code" [class.exit-code--success]="run.exit_code === 0" [class.exit-code--failed]="run.exit_code !== null && run.exit_code !== 0">{{ run.exit_code === null ? 'Running' : 'Exit ' + run.exit_code }}</span></summary><div class="run-content"><div class="result-summary"><span>Result</span><p>{{ run.result_summary || 'No result summary.' }}</p></div><div class="log-block"><div class="log-title"><span>stdout</span><small>{{ hasOutput(run.stdout) ? 'Captured output' : 'Empty' }}</small></div><pre>{{ hasOutput(run.stdout) ? run.stdout : 'No stdout captured.' }}</pre></div><div class="log-block log-block--stderr"><div class="log-title"><span>stderr</span><small>{{ hasOutput(run.stderr) ? 'Captured output' : 'Empty' }}</small></div><pre>{{ hasOutput(run.stderr) ? run.stderr : 'No stderr captured.' }}</pre></div></div></details></div>
+        </section>
+      </div>
+    </ng-container>
+  </section>
+</div>
