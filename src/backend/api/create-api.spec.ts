@@ -138,7 +138,11 @@ describe('backend API', () => {
       .get('/agent/usage')
       .expect(200)
       .expect((response) => expect(response.body.primary.remainingPercent).toBe(75));
-    await request(app).post(`/tasks/${taskId}/retry`).expect(409);
+    await request(app)
+      .post(`/tasks/${taskId}/retry`)
+      .send({ model_effort: 'high' })
+      .expect(200)
+      .expect((response) => expect(response.body).toMatchObject({ status: 'TODO', model_effort: 'high' }));
 
     expect(tasks.transition(taskId, 'TODO', 'IN_REVIEW')).not.toBeNull();
     await request(app)
@@ -218,7 +222,7 @@ describe('backend API', () => {
     expect(tasks.findById(taskId)?.status).toBe('REJECTED');
   });
 
-  it('queues rejected review tasks for branch removal and marks the rejection', async () => {
+  it('rejects tasks without branches immediately and keeps rejection idempotent', async () => {
     const projectResponse = await request(app)
       .post('/projects')
       .send({ name: 'Local app', repository_path: repositoryPath })
@@ -235,11 +239,16 @@ describe('backend API', () => {
       .expect(200)
       .expect((response) => {
         expect(response.body).toMatchObject({
-          status: 'PENDING_BRANCH_REMOVAL',
+          status: 'REJECTED',
           is_rejected: true
         });
       });
-    await request(app).post(`/tasks/${taskId}/reject`).expect(409);
+    await request(app)
+      .post(`/tasks/${taskId}/reject`)
+      .expect(200)
+      .expect((response) => expect(response.body).toMatchObject({
+        status: 'REJECTED', is_rejected: true
+      }));
   });
 
   it('only reflects explicitly allowed local UI origins', async () => {

@@ -32,6 +32,8 @@ export class TaskWorker {
   private busy = false;
   private activeTaskId: number | null = null;
   private activeController: AbortController | null = null;
+  private activeCompletion: Promise<void> | null = null;
+  private finishActive: (() => void) | null = null;
   private loopPromise: Promise<void> | null = null;
   private stopRequested = false;
   private wakeIdle: (() => void) | null = null;
@@ -80,6 +82,16 @@ export class TaskWorker {
     };
   }
 
+  public async cancelTask(taskId: number): Promise<boolean> {
+    if (this.activeTaskId !== taskId || this.activeController === null) {
+      return false;
+    }
+    const completion = this.activeCompletion;
+    this.activeController.abort();
+    await completion;
+    return true;
+  }
+
   public async processNext(): Promise<boolean> {
     if (this.busy) {
       return false;
@@ -98,6 +110,9 @@ export class TaskWorker {
     this.busy = true;
     this.activeTaskId = claimed.id;
     this.activeController = new AbortController();
+    this.activeCompletion = new Promise<void>((resolve) => {
+      this.finishActive = resolve;
+    });
 
     try {
       await this.executePipeline(claimed, this.activeController.signal);
@@ -105,6 +120,9 @@ export class TaskWorker {
       this.activeController = null;
       this.activeTaskId = null;
       this.busy = false;
+      this.finishActive?.();
+      this.finishActive = null;
+      this.activeCompletion = null;
     }
     return true;
   }

@@ -100,7 +100,7 @@ describe('TaskService state rules', () => {
     expect(tasks.findById(task.id)?.project_id).toBe(project.id);
   });
 
-  it('retries only FAILED tasks and preserves their branch and workspace', () => {
+  it('retries tasks from every inactive state and preserves their branch and workspace', () => {
     const failed = createTask('Retry me');
     expect(tasks.transition(failed.id, 'TODO', 'CLAIMED')).not.toBeNull();
     tasks.setArtifacts(failed.id, 'agent/1-retry-me', '/example/repository', 'main');
@@ -113,16 +113,46 @@ describe('TaskService state rules', () => {
       branch_name: 'agent/1-retry-me',
       worktree_path: '/example/repository'
     });
-    expect(() => service.retry(failed.id)).toThrow(ConflictError);
-    expect(tasks.findById(failed.id)?.model_effort).toBe('high');
-
     const queued = service.create({
       project_id: project.id,
       title: 'Not failed',
       model_effort: 'low'
     });
-    expect(() => service.retry(queued.id, { model_effort: 'xhigh' })).toThrow(ConflictError);
-    expect(tasks.findById(queued.id)?.model_effort).toBe('low');
+    expect(service.pause(queued.id).is_paused).toBe(true);
+    expect(service.retry(queued.id, { model_effort: 'xhigh' })).toMatchObject({
+      status: 'TODO', model_effort: 'xhigh', is_paused: false
+    });
+
+    for (const status of ['IN_REVIEW', 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL', 'DONE', 'REJECTED'] as const) {
+      const task = createTask(`Retry ${status}`);
+      expect(tasks.transition(task.id, 'TODO', status)).not.toBeNull();
+      expect(service.retry(task.id)).toMatchObject({ status: 'TODO', is_rejected: false });
+    }
+  });
+
+  it.each(['CLAIMED', 'IN_PROGRESS', 'TESTING'] as const)(
+    'requires a running %s task to stop before retry or rejection',
+    async (status) => {
+      const task = createTask(`Running ${status}`);
+      expect(tasks.transition(task.id, 'TODO', status)).not.toBeNull();
+      expect(() => service.retry(task.id)).toThrow(ConflictError);
+      await expect(service.reject(task.id)).rejects.toThrow(ConflictError);
+    }
+  );
+
+  it('rejects tasks from every inactive state and only queues cleanup when a branch exists', async () => {
+    const queued = createTask('Reject queued task');
+    await expect(service.reject(queued.id)).resolves.toMatchObject({
+      status: 'REJECTED', is_rejected: true
+    });
+
+    const prepared = createTask('Reject prepared task');
+    expect(tasks.transition(prepared.id, 'TODO', 'CLAIMED')).not.toBeNull();
+    tasks.setArtifacts(prepared.id, `agent/${prepared.id}-reject-prepared-task`, '/example/repository', 'main');
+    expect(tasks.transition(prepared.id, 'CLAIMED', 'FAILED')).not.toBeNull();
+    await expect(service.reject(prepared.id)).resolves.toMatchObject({
+      status: 'PENDING_BRANCH_REMOVAL', is_rejected: true
+    });
   });
 
   it('approves only IN_REVIEW tasks into PENDING_PUSH', () => {
@@ -166,7 +196,7 @@ describe('TaskService state rules', () => {
     expect(removeTaskBranch).not.toHaveBeenCalled();
     await expect(service.removeBranch(review.id)).resolves.toMatchObject({ status: 'REJECTED' });
     expect(removeTaskBranch).toHaveBeenCalledWith(
-      '/example', `agent/${review.id}-reject-me`, 'main'
+      '/example', `agent/${review.id}-reject-me`, 'main', true
     );
   });
 
@@ -189,7 +219,8 @@ describe('TaskService state rules', () => {
     expect(removeTaskBranch).toHaveBeenCalledWith(
       '/example',
       `agent/${review.id}-publish-me`,
-      'main'
+      'main',
+      false
     );
     await expect(service.removeBranch(review.id)).rejects.toThrow(ConflictError);
   });

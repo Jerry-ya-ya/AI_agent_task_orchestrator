@@ -1281,6 +1281,13 @@ main {
   font-size: 10px;
 }
 
+.detail-actions__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .button--approve {
   border-color: #2d8a60;
   background: #2d8a60;
@@ -1309,6 +1316,16 @@ main {
 
 .button--retry:hover:not(:disabled) {
   background: #ba6e25;
+}
+
+.button--danger {
+  border-color: #b3261e;
+  background: #b3261e;
+  color: #fff;
+}
+
+.button--danger:hover:not(:disabled) {
+  background: #941f19;
 }
 
 .detail-body {

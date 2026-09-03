@@ -236,11 +236,12 @@ export class GitService {
     return { baseBranch };
   }
 
-  /** Removes a local task branch only after Git confirms it is merged into its base branch. */
+  /** Removes a task branch after merge verification, or force-removes explicitly rejected work. */
   public async removeTaskBranch(
     repositoryPath: string,
     taskBranch: string,
-    baseBranch: string | null
+    baseBranch: string | null,
+    allowUnmerged = false
   ): Promise<boolean> {
     const repositoryRoot = await this.validateRepository(repositoryPath);
     await this.requireCleanCheckout(repositoryRoot);
@@ -259,27 +260,31 @@ export class GitService {
       return false;
     }
 
-    const merged = await this.runGit(
-      repositoryRoot,
-      ['merge-base', '--is-ancestor', taskBranch, expectedBase],
-      undefined,
-      true
-    );
-    if (merged.exitCode !== 0) {
-      if (merged.exitCode === 1) {
-        throw new ConflictError(
-          `Task branch ${taskBranch} is not fully merged into ${expectedBase} and cannot be removed.`
+    if (!allowUnmerged) {
+      const merged = await this.runGit(
+        repositoryRoot,
+        ['merge-base', '--is-ancestor', taskBranch, expectedBase],
+        undefined,
+        true
+      );
+      if (merged.exitCode !== 0) {
+        if (merged.exitCode === 1) {
+          throw new ConflictError(
+            `Task branch ${taskBranch} is not fully merged into ${expectedBase} and cannot be removed.`
+          );
+        }
+        throw new GitCommandError(
+          `Unable to verify whether ${taskBranch} is merged into ${expectedBase}: ${formatFailure(merged)}`,
+          merged
         );
       }
-      throw new GitCommandError(
-        `Unable to verify whether ${taskBranch} is merged into ${expectedBase}: ${formatFailure(merged)}`,
-        merged
-      );
     }
 
     const removed = await this.runGit(
       repositoryRoot,
-      ['branch', '--delete', taskBranch],
+      allowUnmerged
+        ? ['branch', '--delete', '--force', taskBranch]
+        : ['branch', '--delete', taskBranch],
       undefined,
       true
     );

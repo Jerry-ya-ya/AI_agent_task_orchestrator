@@ -61,7 +61,8 @@ export class OrchestratorRuntime {
       projectService: this.projectService,
       taskService: this.taskService,
       workerStatus: () => this.worker.getStatus(),
-      agentUsage: () => agentUsage.read()
+      agentUsage: () => agentUsage.read(),
+      cancelTask: (taskId) => this.worker.cancelTask(taskId)
     });
     if (options.uiPath !== undefined && existsSync(options.uiPath)) {
       api.use(express.static(options.uiPath));

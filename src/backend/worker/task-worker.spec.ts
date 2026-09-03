@@ -235,6 +235,41 @@ describe('TaskWorker', () => {
     });
   });
 
+  it('cancels the active task and waits for its pipeline to finish', async () => {
+    const task = createTask('Cancel active task');
+    const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
+      branchName: `agent/${claimed.id}-cancel-active-task`,
+      workspacePath: project.repository_path,
+      originalBranch: 'main'
+    }));
+    const executeAgent = vi.fn(async (
+      _task: Task,
+      _workspace: string,
+      signal: AbortSignal
+    ): Promise<AgentExecutionResult> => await new Promise((resolve) => {
+      signal.addEventListener('abort', () => resolve({
+        exitCode: 130,
+        stdout: '',
+        stderr: 'Cancelled by user.\n',
+        timedOut: false,
+        aborted: true,
+        summary: 'Task cancelled.'
+      }), { once: true });
+    }));
+    const { worker } = createWorker(prepareBranch, executeAgent, async () => successfulTests());
+
+    const processing = worker.processNext();
+    await vi.waitFor(() => expect(worker.getStatus()).toMatchObject({
+      busy: true, activeTaskId: task.id
+    }));
+
+    await expect(worker.cancelTask(task.id + 1)).resolves.toBe(false);
+    await expect(worker.cancelTask(task.id)).resolves.toBe(true);
+    await expect(processing).resolves.toBe(true);
+    expect(tasks.findById(task.id)?.status).toBe('FAILED');
+    expect(worker.getStatus()).toMatchObject({ busy: false, activeTaskId: null });
+  });
+
   function createTask(title: string): Task {
     return tasks.create({
       project_id: project.id,

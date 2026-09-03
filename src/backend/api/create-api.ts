@@ -10,6 +10,7 @@ export interface ApiDependencies {
   taskService: TaskService;
   workerStatus: () => WorkerStatus;
   agentUsage: () => Promise<AgentUsage>;
+  cancelTask?: (taskId: number) => Promise<boolean>;
 }
 
 const idSchema = z.coerce.number().int().positive();
@@ -107,11 +108,13 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     response.sendStatus(204);
   });
 
-  app.post('/tasks/:id/retry', (request, response) => {
+  app.post('/tasks/:id/retry', async (request, response) => {
     const input = z.object({ model_effort: z.enum(MODEL_EFFORTS).optional() })
       .strict()
       .parse(request.body ?? {});
-    response.json(dependencies.taskService.retry(idSchema.parse(request.params.id), input));
+    const taskId = idSchema.parse(request.params.id);
+    await dependencies.cancelTask?.(taskId);
+    response.json(dependencies.taskService.retry(taskId, input));
   });
 
   app.post('/tasks/:id/retry-review', (request, response) => {
@@ -122,7 +125,9 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   });
 
   app.post('/tasks/:id/reject', async (request, response) => {
-    response.json(await dependencies.taskService.reject(idSchema.parse(request.params.id)));
+    const taskId = idSchema.parse(request.params.id);
+    await dependencies.cancelTask?.(taskId);
+    response.json(await dependencies.taskService.reject(taskId));
   });
 
   app.post('/tasks/:id/approve', (request, response) => {

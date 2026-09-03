@@ -140,10 +140,25 @@ export class TaskRepository {
     });
   }
 
-  public rejectForBranchRemoval(id: number): Task | null {
+  public retry(id: number, modelEffort: Task['model_effort']): Task | null {
     const result = this.database.connection.prepare(`
-      UPDATE tasks SET status = 'PENDING_BRANCH_REMOVAL', is_rejected = 1, updated_at = ?
-      WHERE id = ? AND status = 'IN_REVIEW'
+      UPDATE tasks
+      SET status = 'TODO', model_effort = ?, commit_summary = NULL,
+          is_rejected = 0, is_paused = 0, updated_at = ?
+      WHERE id = ?
+    `).run(modelEffort, this.clock(), id);
+    return result.changes > 0 ? this.findById(id) : null;
+  }
+
+  public reject(id: number): Task | null {
+    const result = this.database.connection.prepare(`
+      UPDATE tasks
+      SET status = CASE
+            WHEN branch_name IS NULL THEN 'REJECTED'
+            ELSE 'PENDING_BRANCH_REMOVAL'
+          END,
+          is_rejected = 1, is_paused = 0, updated_at = ?
+      WHERE id = ?
     `).run(this.clock(), id);
     return result.changes > 0 ? this.findById(id) : null;
   }

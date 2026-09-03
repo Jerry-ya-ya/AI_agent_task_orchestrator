@@ -100,6 +100,12 @@ describe('GitService', () => {
     expect(await gitExitCode(runner, repository, [
       'show-ref', '--verify', '--quiet', `refs/heads/${prepared.branchName}`
     ])).toBe(0);
+
+    await expect(service.removeTaskBranch(repository, prepared.branchName, 'main', true))
+      .resolves.toBe(true);
+    expect(await gitExitCode(runner, repository, [
+      'show-ref', '--verify', '--quiet', `refs/heads/${prepared.branchName}`
+    ])).toBe(1);
   });
 
   it('turns unsafe or non-ASCII-only titles into safe deterministic slugs', () => {

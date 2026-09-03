@@ -22,6 +22,8 @@ const LOCKED_STATUSES: readonly TaskStatus[] = [
   'PENDING_BRANCH_REMOVAL'
 ];
 
+const RUNNING_STATUSES: readonly TaskStatus[] = ['CLAIMED', 'IN_PROGRESS', 'TESTING'];
+
 export class TaskService {
   public constructor(
     private readonly tasks: TaskRepository,
@@ -101,13 +103,12 @@ export class TaskService {
 
   public retry(id: number, input: RetryTaskInput = {}): Task {
     const existing = this.requireTask(id);
-    if (existing.status !== 'FAILED') {
-      throw new ConflictError('Only FAILED tasks can be retried.');
+    if (RUNNING_STATUSES.includes(existing.status)) {
+      throw new ConflictError('The active task must stop before it can be retried.');
     }
-    this.tasks.update(id, { model_effort: input.model_effort ?? existing.model_effort });
-    const updated = this.tasks.transition(id, 'FAILED', 'TODO');
+    const updated = this.tasks.retry(id, input.model_effort ?? existing.model_effort);
     if (updated === null) {
-      throw new ConflictError('Only FAILED tasks can be retried.');
+      throw new ConflictError('Task state changed while it was being retried.');
     }
     return updated;
   }
@@ -126,12 +127,12 @@ export class TaskService {
 
   public async reject(id: number): Promise<Task> {
     const task = this.requireTask(id);
-    if (task.status !== 'IN_REVIEW') {
-      throw new ConflictError('Only IN_REVIEW tasks can be rejected.');
+    if (RUNNING_STATUSES.includes(task.status)) {
+      throw new ConflictError('The active task must stop before it can be rejected.');
     }
-    const updated = this.tasks.rejectForBranchRemoval(id);
+    const updated = this.tasks.reject(id);
     if (updated === null) {
-      throw new ConflictError('Task state changed while rejection was being queued.');
+      throw new ConflictError('Task state changed while it was being rejected.');
     }
     return updated;
   }
@@ -189,7 +190,8 @@ export class TaskService {
     await this.git.removeTaskBranch(
       project.repository_path,
       task.branch_name,
-      task.base_branch
+      task.base_branch,
+      task.is_rejected
     );
     const updated = this.tasks.transition(
       id,

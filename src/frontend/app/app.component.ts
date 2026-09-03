@@ -386,8 +386,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   async rejectTask(task: Task, event?: Event): Promise<void> {
     event?.stopPropagation();
-    if (task.status !== 'IN_REVIEW' || this.isTaskPending(task.id)) return;
-    if (!window.confirm(`Reject “${task.title}” and queue its task branch for removal?`)) return;
+    if (this.isTaskPending(task.id)) return;
+    const activeWarning = ['CLAIMED', 'IN_PROGRESS', 'TESTING'].includes(task.status)
+      ? ' This will stop the current run.'
+      : '';
+    if (!window.confirm(`Reject “${task.title}”?${activeWarning} Any task branch will wait for removal approval.`)) return;
     this.setTaskPending(task.id, true);
     this.clearError();
     try {

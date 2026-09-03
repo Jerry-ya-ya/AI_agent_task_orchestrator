@@ -39,3 +39,7 @@
 - Cover review retry lineage, revision guidance, and rejected branch cleanup with API tests.
 
 - fix: resolve merge regressions in task creation, migrations, and retry dialogs.
+
+## 2026/09/04
+
+- feat: make retry and reject available from every task detail with safe active-run cancellation and branch cleanup.

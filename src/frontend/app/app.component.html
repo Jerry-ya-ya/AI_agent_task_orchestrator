@@ -576,59 +576,56 @@
     </div>
 
     <ng-container *ngIf="taskForDetail() as task">
-      <div class="detail-actions" *ngIf="task.status === 'IN_REVIEW' || task.status === 'PENDING_PUSH' || task.status === 'PENDING_BRANCH_REMOVAL' || task.status === 'FAILED'">
+      <div class="detail-actions">
         <div>
-          <strong>
-            {{ task.status === 'IN_REVIEW' ? 'Agent work is ready' : task.status === 'PENDING_PUSH' ? 'Approved work is ready to publish' : task.status === 'PENDING_BRANCH_REMOVAL' ? 'Published branch is ready for cleanup' : 'This run needs attention' }}
-          </strong>
-          <p>
-            {{
-              task.status === 'IN_REVIEW'
-                ? 'Inspect the changes and logs, then approve when satisfied.'
-                : task.status === 'PENDING_PUSH'
-                  ? 'Confirm to merge the task branch into its base branch and push it to origin.'
-                  : task.status === 'PENDING_BRANCH_REMOVAL'
-                    ? 'Approve removal only after the published changes are confirmed on the base branch.'
-                    : 'Review the failure below before placing the task back in Todo.'
-            }}
-          </p>
+          <strong>Task actions</strong>
+          <p>Retry places this task back in Todo. Reject stops further work and keeps branch removal under your approval.</p>
         </div>
-        <button
-          *ngIf="task.status === 'IN_REVIEW'"
-          class="button button--approve"
-          type="button"
-          [disabled]="isTaskPending(task.id)"
-          (click)="approveTask(task, $event)"
-        >
-          {{ isTaskPending(task.id) ? 'Approving…' : 'Approve task' }}
-        </button>
-        <button
-          *ngIf="task.status === 'PENDING_BRANCH_REMOVAL'"
-          class="button button--cleanup"
-          type="button"
-          [disabled]="isTaskPending(task.id)"
-          (click)="removeTaskBranch(task, $event)"
-        >
-          {{ isTaskPending(task.id) ? 'Removing…' : 'Approve branch removal' }}
-        </button>
-        <button
-          *ngIf="task.status === 'PENDING_PUSH'"
-          class="button button--approve"
-          type="button"
-          [disabled]="isTaskPending(task.id)"
-          (click)="pushTask(task, $event)"
-        >
-          {{ isTaskPending(task.id) ? 'Pushing…' : 'Confirm push' }}
-        </button>
-        <button
-          *ngIf="task.status === 'FAILED'"
-          class="button button--retry"
-          type="button"
-          [disabled]="isTaskPending(task.id)"
-          (click)="openRetryTask(task, $event)"
-        >
-          {{ isTaskPending(task.id) ? 'Queuing…' : 'Retry task' }}
-        </button>
+        <div class="detail-actions__buttons">
+          <button
+            *ngIf="task.status === 'IN_REVIEW'"
+            class="button button--approve"
+            type="button"
+            [disabled]="isTaskPending(task.id)"
+            (click)="approveTask(task, $event)"
+          >
+            {{ isTaskPending(task.id) ? 'Approving…' : 'Approve task' }}
+          </button>
+          <button
+            *ngIf="task.status === 'PENDING_BRANCH_REMOVAL'"
+            class="button button--cleanup"
+            type="button"
+            [disabled]="isTaskPending(task.id)"
+            (click)="removeTaskBranch(task, $event)"
+          >
+            {{ isTaskPending(task.id) ? 'Removing…' : 'Approve branch removal' }}
+          </button>
+          <button
+            *ngIf="task.status === 'PENDING_PUSH'"
+            class="button button--approve"
+            type="button"
+            [disabled]="isTaskPending(task.id)"
+            (click)="pushTask(task, $event)"
+          >
+            {{ isTaskPending(task.id) ? 'Pushing…' : 'Confirm push' }}
+          </button>
+          <button
+            class="button button--retry"
+            type="button"
+            [disabled]="isTaskPending(task.id)"
+            (click)="openRetryTask(task, $event)"
+          >
+            {{ isTaskPending(task.id) ? 'Queuing…' : 'Retry task' }}
+          </button>
+          <button
+            class="button button--danger"
+            type="button"
+            [disabled]="isTaskPending(task.id)"
+            (click)="rejectTask(task, $event)"
+          >
+            {{ isTaskPending(task.id) ? 'Rejecting…' : 'Reject task' }}
+          </button>
+        </div>
       </div>
 
       <div class="detail-body">
