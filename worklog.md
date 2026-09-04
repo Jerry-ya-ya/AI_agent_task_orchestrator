@@ -53,3 +53,7 @@
 - Fix Electron development startup and restore functional sandboxed window controls with a CommonJS preload bridge.
 
 - Add a collapsible icon sidebar and move task history into a dedicated Angular page.
+
+## 2026/09/05
+
+- Keep the desktop header and navigation fixed while taskboard content scrolls.

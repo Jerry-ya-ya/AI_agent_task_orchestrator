@@ -4,13 +4,15 @@
 }
 
 .app-shell {
+  --topbar-height: 76px;
   min-height: 100vh;
 }
 
 .app-workspace {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
-  min-height: calc(100vh - 76px);
+  min-height: calc(100vh - var(--topbar-height));
+  margin-top: var(--topbar-height);
   transition: grid-template-columns 180ms ease;
 }
 
@@ -20,11 +22,11 @@
 
 .app-navigation {
   position: sticky;
-  top: 76px;
+  top: var(--topbar-height);
   z-index: 8;
   display: flex;
   width: 64px;
-  height: calc(100vh - 76px);
+  height: calc(100vh - var(--topbar-height));
   align-self: start;
   padding: 12px 8px;
   overflow: hidden;
@@ -139,13 +141,15 @@
 }
 
 .topbar {
-  position: sticky;
+  position: fixed;
   z-index: 10;
   top: 0;
+  right: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 76px;
+  min-height: var(--topbar-height);
   padding: 12px clamp(18px, 3vw, 42px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   background: #11151a;
@@ -1793,8 +1797,11 @@
 }
 
 @media (max-width: 900px) {
+  .app-shell {
+    --topbar-height: 120px;
+  }
+
   .topbar {
-    position: relative;
     align-items: flex-start;
     gap: 16px;
     flex-direction: column;
@@ -1805,8 +1812,8 @@
   }
 
   .app-navigation {
-    top: 0;
-    height: 100vh;
+    top: var(--topbar-height);
+    height: calc(100vh - var(--topbar-height));
   }
 
   .connection-state {
@@ -1856,6 +1863,10 @@
 }
 
 @media (max-width: 620px) {
+  .app-shell {
+    --topbar-height: 164px;
+  }
+
   .topbar-actions {
     align-items: stretch;
     flex-wrap: wrap;
