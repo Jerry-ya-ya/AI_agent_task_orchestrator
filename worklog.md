@@ -49,3 +49,7 @@
 - refactor: modularize the Angular dashboard with typed components and reliable task approval actions.
 
 - feat: add a secure Electron window minimize control to the custom title bar.
+
+- Fix Electron development startup and restore functional sandboxed window controls with a CommonJS preload bridge.
+
+- Add a collapsible icon sidebar and move task history into a dedicated Angular page.

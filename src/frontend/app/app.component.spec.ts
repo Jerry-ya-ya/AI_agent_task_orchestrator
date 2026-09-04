@@ -15,6 +15,35 @@ afterEach(() => {
 });
 
 describe('AppComponent initialization', () => {
+  it('switches between the taskboard and history pages', () => {
+    const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
+    const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
+    const component = new AppComponent(api, changeDetector);
+
+    expect(component.activePage).toBe('taskboard');
+    expect(component.navigationExpanded).toBe(false);
+
+    component.setNavigationExpanded(true);
+    component.selectPage('history');
+
+    expect(component.navigationExpanded).toBe(true);
+    expect(component.activePage).toBe('history');
+  });
+
+  it('counts terminal tasks for the history navigation badge', () => {
+    const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
+    const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
+    const component = new AppComponent(api, changeDetector);
+    component.tasks = [
+      exampleTask({ id: 1, status: 'DONE' }),
+      exampleTask({ id: 2, status: 'REJECTED' }),
+      exampleTask({ id: 3, status: 'FAILED' }),
+      exampleTask({ id: 4, status: 'IN_REVIEW' }),
+    ];
+
+    expect(component.historyTaskCount()).toBe(3);
+  });
+
   it('minimizes the Electron window from the title-bar control', () => {
     const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
     const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;

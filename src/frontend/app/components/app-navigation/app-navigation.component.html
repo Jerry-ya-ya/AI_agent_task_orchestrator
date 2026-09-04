@@ -1,0 +1,48 @@
+<aside class="app-navigation" [class.app-navigation--expanded]="expanded">
+  <button
+    class="navigation-toggle"
+    type="button"
+    [attr.aria-label]="expanded ? 'Collapse navigation' : 'Expand navigation'"
+    [attr.title]="expanded ? 'Collapse navigation' : 'Expand navigation'"
+    [attr.aria-expanded]="expanded"
+    (click)="expandedChange.emit(!expanded)"
+  >
+    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+      <rect x="3.5" y="4" width="17" height="16" rx="2.5" />
+      <path d="M9 4v16M13 9h4M13 15h4" />
+    </svg>
+    <span class="navigation-label">Navigation</span>
+  </button>
+
+  <nav class="navigation-links" aria-label="Main navigation">
+    <button
+      class="navigation-link"
+      type="button"
+      [class.navigation-link--active]="activePage === 'taskboard'"
+      [attr.aria-current]="activePage === 'taskboard' ? 'page' : null"
+      title="Taskboard"
+      (click)="pageSelected.emit('taskboard')"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <rect x="3.5" y="4" width="7" height="16" rx="2" />
+        <rect x="13.5" y="4" width="7" height="10" rx="2" />
+      </svg>
+      <span class="navigation-label">Taskboard</span>
+    </button>
+
+    <button
+      class="navigation-link"
+      type="button"
+      [class.navigation-link--active]="activePage === 'history'"
+      [attr.aria-current]="activePage === 'history' ? 'page' : null"
+      title="Task history"
+      (click)="pageSelected.emit('history')"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M4 7h16M7 3v4M17 3v4M5 7v12h14V7M8 11h3M8 15h5" />
+      </svg>
+      <span class="navigation-label">Task history</span>
+      <span class="navigation-count" *ngIf="historyCount > 0">{{ historyCount }}</span>
+    </button>
+  </nav>
+</aside>

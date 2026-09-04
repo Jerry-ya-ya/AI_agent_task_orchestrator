@@ -12,6 +12,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from './api.service';
 import { AppHeaderComponent } from './components/app-header/app-header.component';
+import { AppNavigationComponent, type AppPage } from './components/app-navigation/app-navigation.component';
 import { ProjectEditorDialogComponent } from './components/project-editor-dialog/project-editor-dialog.component';
 import { RetryReviewDialogComponent } from './components/retry-review-dialog/retry-review-dialog.component';
 import { RetryTaskDialogComponent, type RetryTaskRequest } from './components/retry-task-dialog/retry-task-dialog.component';
@@ -54,6 +55,7 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
   imports: [
     CommonModule,
     AppHeaderComponent,
+    AppNavigationComponent,
     UsageCardComponent,
     TaskBoardComponent,
     TaskHistoryComponent,
@@ -84,6 +86,8 @@ export class AppComponent implements OnInit, OnDestroy {
   apiError = '';
   notice = '';
   lastUpdated: Date | null = null;
+  activePage: AppPage = 'taskboard';
+  navigationExpanded = false;
 
   showProjectEditor = false;
   taskEditorMode: TaskEditorMode | null = null;
@@ -146,6 +150,20 @@ export class AppComponent implements OnInit, OnDestroy {
 
   minimizeApplication(): void {
     void window.desktopWindow?.minimize?.();
+  }
+
+  selectPage(page: AppPage): void {
+    this.activePage = page;
+  }
+
+  setNavigationExpanded(expanded: boolean): void {
+    this.navigationExpanded = expanded;
+  }
+
+  historyTaskCount(): number {
+    return this.tasks.filter((task) =>
+      task.status === 'DONE' || task.status === 'REJECTED' || task.status === 'FAILED'
+    ).length;
   }
 
   @HostListener('document:keydown', ['$event'])
