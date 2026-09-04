@@ -20,7 +20,6 @@ import { TaskBoardComponent } from './components/task-board/task-board.component
 import { TaskDetailDialogComponent } from './components/task-detail-dialog/task-detail-dialog.component';
 import { TaskEditorDialogComponent } from './components/task-editor-dialog/task-editor-dialog.component';
 import { TaskHistoryComponent } from './components/task-history/task-history.component';
-import { UsageCardComponent } from './components/usage-card/usage-card.component';
 import {
   AgentUsage,
   MODEL_EFFORTS,
@@ -56,7 +55,6 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
     CommonModule,
     AppHeaderComponent,
     AppNavigationComponent,
-    UsageCardComponent,
     TaskBoardComponent,
     TaskHistoryComponent,
     ProjectEditorDialogComponent,

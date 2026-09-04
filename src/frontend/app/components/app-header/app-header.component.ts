@@ -1,11 +1,12 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
-import type { WorkerStatus } from '../../models';
+import type { AgentUsage, WorkerStatus } from '../../models';
+import { HeaderUsageComponent } from '../header-usage/header-usage.component';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, HeaderUsageComponent],
   templateUrl: './app-header.component.html',
   styles: `
     .window-control {
@@ -18,6 +19,7 @@ export class AppHeaderComponent {
   @Input({ required: true }) connected = false;
   @Input({ required: true }) apiBaseUrl = '';
   @Input() workerStatus: WorkerStatus | null = null;
+  @Input() agentUsage: AgentUsage | null = null;
   @Input({ required: true }) projectCount = 0;
 
   @Output() createProject = new EventEmitter<void>();

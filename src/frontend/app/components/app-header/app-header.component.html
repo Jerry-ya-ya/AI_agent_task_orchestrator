@@ -12,6 +12,7 @@
         <span class="worker-state__dot" aria-hidden="true"></span><span>{{ workerStateLabel() }}</span>
       </div>
     </div>
+    <header-usage [usage]="agentUsage" />
     <button class="button button--quiet" type="button" (click)="createProject.emit()">New project</button>
     <button class="button button--primary" type="button" (click)="createTask.emit()" [attr.aria-describedby]="projectCount === 0 ? 'create-task-hint' : null"><span aria-hidden="true">＋</span> New task</button>
     <button class="window-control window-minimize" type="button" aria-label="Minimize application" title="Minimize" (click)="minimizeApplication.emit()">
