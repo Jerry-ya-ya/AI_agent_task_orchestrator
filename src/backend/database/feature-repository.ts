@@ -1,4 +1,5 @@
 import type { CreateFeatureInput, Feature } from '../domain/types.js';
+import { ConflictError } from '../domain/errors.js';
 import { type Clock, OrchestratorDatabase, systemClock } from './database.js';
 
 export class FeatureRepository {
@@ -25,10 +26,17 @@ export class FeatureRepository {
 
   public create(input: CreateFeatureInput, branchName: string, baseBranch: string): Feature {
     const now = this.clock();
-    const result = this.database.connection.prepare(`
-      INSERT INTO features (project_id, name, branch_name, base_branch, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(input.project_id, input.name, branchName, baseBranch, now, now);
-    return this.findById(Number(result.lastInsertRowid)) as Feature;
+    try {
+      const result = this.database.connection.prepare(`
+        INSERT INTO features (project_id, name, branch_name, base_branch, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(input.project_id, input.name, branchName, baseBranch, now, now);
+      return this.findById(Number(result.lastInsertRowid)) as Feature;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+        throw new ConflictError('A Feature with the same name or branch already exists in this project.');
+      }
+      throw error;
+    }
   }
 }

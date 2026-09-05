@@ -7,7 +7,7 @@ import { TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
 import { ConflictError } from '../domain/errors.js';
 import type { GitService } from './git-service.js';
-import { FeatureService } from './feature-service.js';
+import { createAvailableFeatureBranch, FeatureService } from './feature-service.js';
 
 describe('FeatureService', () => {
   let database: OrchestratorDatabase;
@@ -58,5 +58,17 @@ describe('FeatureService', () => {
     ]));
     await expect(service.create({ project_id: project.id, name: 'Account Settings' }))
       .rejects.toThrow(ConflictError);
+
+    const firstChineseFeature = await service.create({ project_id: project.id, name: '成就系統' });
+    const secondChineseFeature = await service.create({ project_id: project.id, name: '任務系統' });
+    expect(firstChineseFeature.branch_name).toBe('feature/task');
+    expect(secondChineseFeature.branch_name).toMatch(/^feature\/task-[a-f0-9]{8}$/u);
+    expect(secondChineseFeature.branch_name).not.toBe(firstChineseFeature.branch_name);
+  });
+
+  it('generates a stable fallback when normalized branch names collide', () => {
+    const generated = createAvailableFeatureBranch('Account settings!', ['FEATURE/account-settings']);
+    expect(generated).toMatch(/^feature\/account-settings-[a-f0-9]{8}$/u);
+    expect(createAvailableFeatureBranch('Account settings!', ['FEATURE/account-settings'])).toBe(generated);
   });
 });

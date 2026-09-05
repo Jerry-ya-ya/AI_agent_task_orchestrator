@@ -7,11 +7,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 
 import { OrchestratorDatabase } from '../database/database.js';
+import { FeatureRepository } from '../database/feature-repository.js';
 import { ProjectRepository } from '../database/project-repository.js';
 import { TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
 import { ProcessRunner } from '../infra/process-runner.js';
 import { GitService } from '../services/git-service.js';
+import { FeatureService } from '../services/feature-service.js';
 import { ProjectService } from '../services/project-service.js';
 import { TaskService } from '../services/task-service.js';
 import { createApi } from './create-api.js';
@@ -36,10 +38,12 @@ describe('backend API', () => {
     const projects = new ProjectRepository(database);
     const runs = new TaskRunRepository(database);
     tasks = new TaskRepository(database, runs);
+    const features = new FeatureRepository(database);
     const git = new GitService(new ProcessRunner());
     app = createApi({
       projectService: new ProjectService(projects, git),
-      taskService: new TaskService(tasks, projects, runs, git),
+      featureService: new FeatureService(features, projects, tasks, git),
+      taskService: new TaskService(tasks, projects, runs, git, features),
       workerStatus: () => ({
         running: true,
         busy: false,
@@ -61,6 +65,32 @@ describe('backend API', () => {
         checkedAt: '2026-08-31T00:00:00.000Z',
         message: 'Codex usage is available.'
       })
+    });
+  });
+
+  it('creates multiple Features with colliding normalized names without returning a server error', async () => {
+    const project = await request(app).post('/projects').send({
+      name: 'Feature project',
+      repository_path: repositoryPath,
+    }).expect(201);
+
+    const first = await request(app).post('/features').send({
+      project_id: project.body.id,
+      name: '成就系統',
+    }).expect(201);
+    const second = await request(app).post('/features').send({
+      project_id: project.body.id,
+      name: '任務系統',
+    }).expect(201);
+
+    expect(first.body.branch_name).toBe('feature/task');
+    expect(second.body.branch_name).toMatch(/^feature\/task-[a-f0-9]{8}$/u);
+    await request(app).post('/features').send({
+      project_id: project.body.id,
+      name: '成就系統',
+    }).expect(409, {
+      error: 'CONFLICT',
+      message: 'Feature 成就系統 is already configured for this project.',
     });
   });
 

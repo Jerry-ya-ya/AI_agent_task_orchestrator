@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { ConflictError, NotFoundError, ValidationError } from '../domain/errors.js';
 import type { BranchLane, CreateFeatureInput, Feature, ProjectBranchMap } from '../domain/types.js';
 import { FeatureRepository } from '../database/feature-repository.js';
@@ -23,10 +25,14 @@ export class FeatureService {
     const name = input.name.trim();
     if (name.length === 0) throw new ValidationError('Feature name is required.');
     const snapshot = await this.git.inspectBranches(project.repository_path);
-    const branchName = `feature/${slugifyTaskTitle(name)}`;
-    if (this.features.list(project.id).some((feature) => feature.branch_name === branchName)) {
-      throw new ConflictError(`Feature branch ${branchName} is already configured for this project.`);
+    const configuredFeatures = this.features.list(project.id);
+    if (configuredFeatures.some((feature) => feature.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      throw new ConflictError(`Feature ${name} is already configured for this project.`);
     }
+    const branchName = createAvailableFeatureBranch(
+      name,
+      [...snapshot.localBranches, ...configuredFeatures.map((feature) => feature.branch_name)],
+    );
     return this.features.create({ project_id: project.id, name }, branchName, snapshot.currentBranch);
   }
 
@@ -68,4 +74,23 @@ export class FeatureService {
       return { project, current_branch: currentBranch, branches };
     }));
   }
+}
+
+export function createAvailableFeatureBranch(name: string, reservedBranches: readonly string[]): string {
+  const reserved = new Set(reservedBranches.map((branch) => branch.toLocaleLowerCase()));
+  const baseSlug = slugifyTaskTitle(name);
+  const baseBranch = `feature/${baseSlug}`;
+  if (!reserved.has(baseBranch.toLocaleLowerCase())) return baseBranch;
+
+  const digest = createHash('sha256').update(name, 'utf8').digest('hex').slice(0, 8);
+  const stem = baseSlug.slice(0, 53).replace(/-+$/u, '') || 'task';
+  const hashedBranch = `feature/${stem}-${digest}`;
+  if (!reserved.has(hashedBranch.toLocaleLowerCase())) return hashedBranch;
+
+  for (let suffix = 2; suffix <= 999; suffix += 1) {
+    const numberedStem = stem.slice(0, 49).replace(/-+$/u, '') || 'task';
+    const candidate = `feature/${numberedStem}-${digest}-${suffix}`;
+    if (!reserved.has(candidate.toLocaleLowerCase())) return candidate;
+  }
+  throw new ConflictError('No unique Feature branch name could be generated for this project.');
 }
