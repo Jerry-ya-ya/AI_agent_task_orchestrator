@@ -87,6 +87,37 @@ describe('GitService', () => {
     await expect(service.removeTaskBranch(repository, prepared.branchName, 'main')).resolves.toBe(false);
   });
 
+  it('reuses and pushes a shared feature branch without merging it into main', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-feature-remote-'));
+    temporaryPaths.push(remote);
+    await git(runner, remote, ['init', '--bare']);
+    await git(runner, repository, ['remote', 'add', 'origin', remote]);
+    const service = new GitService(runner);
+    const firstTask = {
+      ...exampleTask(),
+      feature_id: 1,
+      branch_name: 'feature/authentication',
+      base_branch: 'main'
+    };
+
+    const firstRun = await service.prepareBranch(firstTask, repository);
+    await writeFile(path.join(repository, 'feature.txt'), 'first task\n');
+    await service.completeBranch(firstRun, firstTask.id, 'feat: start authentication.');
+
+    const secondRun = await service.prepareBranch({ ...firstTask, id: 102 }, repository);
+    expect((await readFile(path.join(repository, 'feature.txt'), 'utf8')).trim()).toBe('first task');
+    await writeFile(path.join(repository, 'second.txt'), 'second task\n');
+    await service.completeBranch(secondRun, 102, 'feat: finish authentication.');
+    await service.pushFeatureBranch(repository, 'feature/authentication');
+
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
+    expect(await gitExitCode(runner, repository, ['cat-file', '-e', 'main:feature.txt'])).toBe(128);
+    expect((await git(runner, repository, [
+      '--git-dir', remote, 'show', 'feature/authentication:second.txt'
+    ])).trim()).toBe('second task');
+  });
+
   it('refuses to remove an unmerged task branch', async () => {
     const { repository, runner } = await temporaryRepository();
     const service = new GitService(runner);

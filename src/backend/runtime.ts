@@ -9,10 +9,12 @@ import type { AgentExecutor } from './agents/agent-executor.js';
 import { createApi } from './api/create-api.js';
 import { OrchestratorDatabase } from './database/database.js';
 import { ProjectRepository } from './database/project-repository.js';
+import { FeatureRepository } from './database/feature-repository.js';
 import { TaskRepository } from './database/task-repository.js';
 import { TaskRunRepository } from './database/task-run-repository.js';
 import { ProcessRunner } from './infra/process-runner.js';
 import { GitService } from './services/git-service.js';
+import { FeatureService } from './services/feature-service.js';
 import { ProjectService } from './services/project-service.js';
 import { TaskService } from './services/task-service.js';
 import { TestService } from './services/test-service.js';
@@ -33,6 +35,7 @@ export class OrchestratorRuntime {
   public readonly worker: TaskWorker;
   public readonly projectService: ProjectService;
   public readonly taskService: TaskService;
+  public readonly featureService: FeatureService;
   private readonly server: Server;
   private readonly port: number;
   private started = false;
@@ -48,10 +51,12 @@ export class OrchestratorRuntime {
     const agent = options.agent ?? new CodexAgentExecutor(processRunner);
     const agentUsage = new CodexUsageService();
     const projects = new ProjectRepository(this.database);
+    const features = new FeatureRepository(this.database);
     const runs = new TaskRunRepository(this.database);
     const tasks = new TaskRepository(this.database, runs);
     this.projectService = new ProjectService(projects, git);
-    this.taskService = new TaskService(tasks, projects, runs, git);
+    this.taskService = new TaskService(tasks, projects, runs, git, features);
+    this.featureService = new FeatureService(features, projects, tasks, git);
     tasks.recoverInterrupted();
     this.worker = new TaskWorker(tasks, runs, git, agent, tests, {
       pollIntervalMs: options.pollIntervalMs
@@ -60,6 +65,7 @@ export class OrchestratorRuntime {
     const api = createApi({
       projectService: this.projectService,
       taskService: this.taskService,
+      featureService: this.featureService,
       workerStatus: () => this.worker.getStatus(),
       agentUsage: () => agentUsage.read(),
       cancelTask: (taskId) => this.worker.cancelTask(taskId)

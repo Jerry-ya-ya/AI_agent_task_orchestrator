@@ -102,6 +102,7 @@ describe('AppComponent initialization', () => {
     const api = {
       baseUrl: 'http://127.0.0.1:4317',
       getProjects: vi.fn(() => of([project])),
+      getFeatures: vi.fn(() => of([])),
       getTasks: vi.fn(() => of([task])),
       getHealth: vi.fn(() => of({ ok: true, worker })),
       getAgentUsage: vi.fn(() => of(usage))
@@ -172,6 +173,7 @@ describe('AppComponent initialization', () => {
       baseUrl: 'http://127.0.0.1:4317',
       approveTask: vi.fn(() => of({ ...task, status: 'PENDING_PUSH' })),
       getProjects: vi.fn(() => of([])),
+      getFeatures: vi.fn(() => of([])),
       getTasks: vi.fn(() => of([])),
       getHealth: vi.fn(() => of({ ok: true, worker }))
     } as unknown as ApiService;

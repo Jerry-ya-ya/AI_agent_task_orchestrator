@@ -3,11 +3,13 @@ import { z, ZodError } from 'zod';
 import { AppError } from '../domain/errors.js';
 import { MODEL_EFFORTS, TASK_PRIORITIES, TASK_STATUSES, type AgentUsage, type WorkerStatus } from '../domain/types.js';
 import { ProjectService } from '../services/project-service.js';
+import { FeatureService } from '../services/feature-service.js';
 import { TaskService } from '../services/task-service.js';
 
 export interface ApiDependencies {
   projectService: ProjectService;
   taskService: TaskService;
+  featureService?: FeatureService;
   workerStatus: () => WorkerStatus;
   agentUsage: () => Promise<AgentUsage>;
   cancelTask?: (taskId: number) => Promise<boolean>;
@@ -21,6 +23,7 @@ const projectInput = z.object({
 }).strict();
 const taskInput = z.object({
   project_id: z.number().int().positive(),
+  feature_id: z.number().int().positive().optional(),
   title: z.string().min(1).max(500),
   description: z.string().max(100_000).optional(),
   priority: z.enum(TASK_PRIORITIES).optional(),
@@ -28,11 +31,16 @@ const taskInput = z.object({
 }).strict();
 const taskUpdate = z.object({
   project_id: z.number().int().positive().optional(),
+  feature_id: z.number().int().positive().optional(),
   title: z.string().min(1).max(500).optional(),
   description: z.string().max(100_000).optional(),
   priority: z.enum(TASK_PRIORITIES).optional(),
   model_effort: z.enum(MODEL_EFFORTS).optional()
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one field is required.');
+const featureInput = z.object({
+  project_id: z.number().int().positive(),
+  name: z.string().min(1).max(200)
+}).strict();
 const reviewRetryInput = z.object({
   prompt: z.string().min(1).max(100_000)
 }).strict();
@@ -75,6 +83,20 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   app.post('/projects', async (request, response) => {
     const created = await dependencies.projectService.create(projectInput.parse(request.body));
     response.status(201).json(created);
+  });
+
+  app.get('/features', (request, response) => {
+    const query = z.object({ project_id: idSchema.optional() }).parse(request.query);
+    response.json(dependencies.featureService?.list(query.project_id) ?? []);
+  });
+
+  app.post('/features', async (request, response) => {
+    if (dependencies.featureService === undefined) throw new AppError('Feature service is unavailable.', 503, 'UNAVAILABLE');
+    response.status(201).json(await dependencies.featureService.create(featureInput.parse(request.body)));
+  });
+
+  app.get('/branches', async (_request, response) => {
+    response.json(await dependencies.featureService?.branchMap() ?? []);
   });
 
   app.get('/tasks', (request, response) => {

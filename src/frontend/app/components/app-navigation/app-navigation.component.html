@@ -18,6 +18,21 @@
     <button
       class="navigation-link"
       type="button"
+      [class.navigation-link--active]="activePage === 'features'"
+      [attr.aria-current]="activePage === 'features' ? 'page' : null"
+      title="Features and branches"
+      (click)="pageSelected.emit('features')"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <circle cx="6" cy="5" r="2" /><circle cx="18" cy="8" r="2" /><circle cx="8" cy="19" r="2" />
+        <path d="M6 7v4a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4V10M8 17v-2" />
+      </svg>
+      <span class="navigation-label">Features</span>
+    </button>
+
+    <button
+      class="navigation-link"
+      type="button"
       [class.navigation-link--active]="activePage === 'taskboard'"
       [attr.aria-current]="activePage === 'taskboard' ? 'page' : null"
       title="Taskboard"

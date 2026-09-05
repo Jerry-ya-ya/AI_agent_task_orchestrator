@@ -59,3 +59,5 @@
 - Keep the desktop header and navigation fixed while taskboard content scrolls.
 
 - Keep all Taskboard statuses in one horizontal row and move compact Codex usage indicators into the fixed header.
+
+- feat: group tasks by shared Feature branches and add a graphical branch history page.

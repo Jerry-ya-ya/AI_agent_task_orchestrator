@@ -148,7 +148,7 @@ export class TaskWorker {
     let summary = 'Task pipeline failed.';
 
     try {
-      this.runs.appendOutput(claimed.run_id, '[git] Checking out isolated task branch...\n', '');
+      this.runs.appendOutput(claimed.run_id, '[git] Checking out managed delivery branch...\n', '');
       const prepared = await this.git.prepareBranch(claimed, claimed.project.repository_path, signal);
       this.runs.appendOutput(
         claimed.run_id,

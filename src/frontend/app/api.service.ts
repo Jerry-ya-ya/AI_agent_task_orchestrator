@@ -6,6 +6,8 @@ import {
   CreateProjectInput,
   AgentUsage,
   HealthResponse,
+  Feature,
+  ProjectBranchMap,
   Project,
   SaveTaskInput,
   ModelEffort,
@@ -70,6 +72,18 @@ export class ApiService {
 
   createProject(input: CreateProjectInput): Observable<Project> {
     return this.http.post<Project>(`${this.baseUrl}/projects`, input);
+  }
+
+  getFeatures(): Observable<Feature[]> {
+    return this.http.get<Feature[]>(`${this.baseUrl}/features`);
+  }
+
+  createFeature(input: { project_id: number; name: string }): Observable<Feature> {
+    return this.http.post<Feature>(`${this.baseUrl}/features`, input);
+  }
+
+  getBranchMap(): Observable<ProjectBranchMap[]> {
+    return this.http.get<ProjectBranchMap[]>(`${this.baseUrl}/branches`);
   }
 
   getTasks(): Observable<Task[]> {

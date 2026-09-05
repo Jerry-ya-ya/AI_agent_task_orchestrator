@@ -100,18 +100,24 @@ export class TaskRepository {
 
   public create(input: CreateTaskInput): Task {
     const now = this.clock();
+    const feature = input.feature_id === undefined ? undefined : this.database.connection
+      .prepare('SELECT branch_name, base_branch FROM features WHERE id = ?')
+      .get(input.feature_id);
     const result = this.database.connection.prepare(`
       INSERT INTO tasks (
-        project_id, title, description, status, priority, model_effort, retry_prompt,
+        project_id, feature_id, title, description, status, priority, model_effort, retry_prompt,
         branch_name, worktree_path, base_branch, commit_summary, source_task_id, is_rejected,
         is_paused, created_at, updated_at
-      ) VALUES (?, ?, ?, 'TODO', ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, ?, ?)
+      ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, NULL, ?, NULL, ?, NULL, NULL, 0, 0, ?, ?)
     `).run(
       input.project_id,
+      input.feature_id ?? null,
       input.title,
       input.description ?? '',
       input.priority ?? 'MEDIUM',
       input.model_effort ?? 'medium',
+      feature?.['branch_name'] ?? null,
+      feature?.['base_branch'] ?? null,
       now,
       now
     );
@@ -123,12 +129,12 @@ export class TaskRepository {
       const now = this.clock();
       const result = this.database.connection.prepare(`
         INSERT INTO tasks (
-          project_id, title, description, status, priority, model_effort, retry_prompt,
+          project_id, feature_id, title, description, status, priority, model_effort, retry_prompt,
           branch_name, worktree_path, base_branch, commit_summary,
           source_task_id, is_rejected, is_paused, created_at, updated_at
-        ) VALUES (?, ?, ?, 'TODO', ?, ?, NULL, ?, ?, ?, NULL, ?, 0, 0, ?, ?)
+        ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, NULL, ?, ?, ?, NULL, ?, 0, 0, ?, ?)
       `).run(
-        source.project_id, source.title, prompt, source.priority,
+        source.project_id, source.feature_id ?? null, source.title, prompt, source.priority,
         source.model_effort, source.branch_name, source.worktree_path,
         source.base_branch, source.id, now, now
       );
@@ -154,7 +160,7 @@ export class TaskRepository {
     const result = this.database.connection.prepare(`
       UPDATE tasks
       SET status = CASE
-            WHEN branch_name IS NULL THEN 'REJECTED'
+            WHEN feature_id IS NOT NULL OR branch_name IS NULL THEN 'REJECTED'
             ELSE 'PENDING_BRANCH_REMOVAL'
           END,
           is_rejected = 1, is_paused = 0, updated_at = ?
@@ -169,6 +175,17 @@ export class TaskRepository {
     if (input.project_id !== undefined) {
       fields.push('project_id = ?');
       parameters.push(input.project_id);
+    }
+    if (input.feature_id !== undefined) {
+      const feature = this.database.connection.prepare(
+        'SELECT branch_name, base_branch FROM features WHERE id = ?',
+      ).get(input.feature_id) as { branch_name: string; base_branch: string } | undefined;
+      fields.push('feature_id = ?');
+      parameters.push(input.feature_id);
+      if (feature !== undefined) {
+        fields.push('branch_name = ?', 'base_branch = ?');
+        parameters.push(feature.branch_name, feature.base_branch);
+      }
     }
     if (input.title !== undefined) {
       fields.push('title = ?');
@@ -211,6 +228,14 @@ export class TaskRepository {
         WHERE id = (
           SELECT id FROM tasks
           WHERE status = 'TODO' AND is_paused = 0
+            AND (
+              feature_id IS NULL OR NOT EXISTS (
+                SELECT 1 FROM tasks earlier
+                WHERE earlier.feature_id = tasks.feature_id
+                  AND earlier.id < tasks.id
+                  AND earlier.status NOT IN ('DONE', 'REJECTED')
+              )
+            )
           ORDER BY
             CASE priority
               WHEN 'URGENT' THEN 4

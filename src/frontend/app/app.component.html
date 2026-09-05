@@ -8,8 +8,8 @@
       (expandedChange)="setNavigationExpanded($event)"
       (pageSelected)="selectPage($event)"
     />
-    <main class="page-content" [class.page-content--history]="activePage === 'history'">
-      <ng-container *ngIf="activePage === 'taskboard'; else historyPage">
+    <main class="page-content" [class.page-content--history]="activePage === 'history'" [ngSwitch]="activePage">
+      <ng-container *ngSwitchCase="'taskboard'">
         <section class="board-heading" aria-labelledby="board-title">
           <div><div class="board-title-row"><h2 id="board-title">Taskboard</h2><span class="task-total">{{ tasks.length }} {{ tasks.length === 1 ? 'task' : 'tasks' }}</span></div><p>The worker moves one task at a time. Completed work waits in Review until you approve it.</p></div>
           <div class="project-summary"><span>{{ projects.length }} {{ projects.length === 1 ? 'project' : 'projects' }}</span><span *ngIf="lastUpdated">Updated {{ lastUpdated | date: 'HH:mm:ss' }}</span></div>
@@ -20,10 +20,14 @@
         <div class="empty-workspace" *ngIf="!loading && projects.length === 0 && tasks.length === 0"><div class="empty-workspace__icon" aria-hidden="true">⌁</div><h2>Connect your first repository</h2><p>Create a project with the path to a local Git repository, then queue work for Codex.</p><button class="button button--primary" type="button" (click)="openProjectEditor()">Create a project</button></div>
         <task-board [columns]="columns" [tasks]="tasks" [projects]="projects" [pendingTaskIds]="pendingTaskIds" [loading]="loading" (taskOpened)="openTaskDetail($event)" (pauseToggled)="toggleTaskPause($event)" (branchRemovalRequested)="removeTaskBranch($event)" (pushRequested)="pushTask($event)" (reviewRetryRequested)="openRetryReview($event)" (rejectRequested)="rejectTask($event)" (approveRequested)="approveTask($event)" (retryRequested)="openRetryTask($event)" />
       </ng-container>
-      <ng-template #historyPage>
+      <ng-container *ngSwitchCase="'features'">
+        <div class="alert alert--error" role="alert" *ngIf="apiError"><span aria-hidden="true">!</span><p>{{ apiError }}</p><button type="button" aria-label="Dismiss error" (click)="apiError = ''">×</button></div>
+        <feature-map [maps]="branchMaps" [loading]="branchMapRefreshInFlight" (createFeature)="openFeatureEditor()" (taskOpened)="openTaskDetailById($event)" />
+      </ng-container>
+      <ng-container *ngSwitchCase="'history'">
         <div class="alert alert--error" role="alert" *ngIf="apiError"><span aria-hidden="true">!</span><p>{{ apiError }}</p><button type="button" aria-label="Dismiss error" (click)="apiError = ''">×</button></div>
         <task-history [tasks]="tasks" [projects]="projects" [columns]="columns" (taskOpened)="openTaskDetail($event)" />
-      </ng-template>
+      </ng-container>
     </main>
   </div>
 </div>
@@ -32,5 +36,6 @@
 <retry-review-dialog *ngIf="retryReviewTaskId !== null" [saving]="saving" [apiError]="apiError" (closed)="closeModal()" (submitted)="submitReviewRetry($event)" />
 <div class="toast" role="status" aria-live="polite" *ngIf="notice">{{ notice }}</div>
 <project-editor-dialog *ngIf="showProjectEditor" [draft]="projectDraft" [saving]="saving" [apiError]="apiError" (closed)="closeModal()" (submitted)="saveProject()" />
-<task-editor-dialog *ngIf="taskEditorMode as mode" [mode]="mode" [draft]="taskDraft" [projects]="projects" [priorities]="priorities" [modelEfforts]="modelEfforts" [saving]="saving" [apiError]="apiError" (closed)="closeModal()" (submitted)="saveTask()" />
+<feature-editor-dialog *ngIf="showFeatureEditor" [draft]="featureDraft" [projects]="projects" [saving]="saving" [apiError]="apiError" (closed)="closeModal()" (submitted)="saveFeature()" />
+<task-editor-dialog *ngIf="taskEditorMode as mode" [mode]="mode" [draft]="taskDraft" [projects]="projects" [features]="features" [priorities]="priorities" [modelEfforts]="modelEfforts" [saving]="saving" [apiError]="apiError" (closed)="closeModal()" (submitted)="saveTask()" />
 <task-detail-dialog *ngIf="selectedTaskId !== null" [task]="taskForDetail()" [detail]="selectedTaskDetail" [projects]="projects" [columns]="columns" [loading]="detailLoading" [pending]="isTaskPending(taskForDetail()?.id ?? -1)" [apiError]="apiError" (closed)="closeModal()" (editRequested)="openEditTask($event)" (deleteRequested)="deleteTask($event)" (approveRequested)="approveTask($event)" (branchRemovalRequested)="removeTaskBranch($event)" (pushRequested)="pushTask($event)" (retryRequested)="openRetryTask($event)" (rejectRequested)="rejectTask($event)" />

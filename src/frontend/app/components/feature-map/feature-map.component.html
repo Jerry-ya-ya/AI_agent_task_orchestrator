@@ -1,0 +1,25 @@
+<section class="feature-map" aria-labelledby="feature-map-title">
+  <header class="feature-map__heading">
+    <div><p class="eyebrow">Repository delivery map</p><h2 id="feature-map-title">Features and branches</h2><p>Feature tasks share one branch and publish in sequence. Missing branches appear in monochrome.</p></div>
+    <button class="button button--primary" type="button" (click)="createFeature.emit()">＋ New feature</button>
+  </header>
+  <div class="feature-map__loading" *ngIf="loading">Inspecting local repositories…</div>
+  <div class="feature-project" *ngFor="let map of maps">
+    <header class="feature-project__header"><div><h3>{{ map.project.name }}</h3><code>{{ map.project.repository_path }}</code></div><span>Current: {{ map.current_branch || 'unavailable' }}</span></header>
+    <div class="branch-lanes" *ngIf="map.branches.length > 0; else noBranches">
+      <article class="branch-lane" *ngFor="let lane of map.branches" [class.branch-lane--missing]="!lane.exists">
+        <div class="branch-lane__identity"><span class="branch-state-dot" [class.branch-state-dot--current]="lane.is_current"></span><div><strong>{{ lane.feature?.name || lane.name }}</strong><code>{{ lane.name }}</code></div><span class="branch-badge">{{ lane.exists ? (lane.is_current ? 'current' : 'local') : 'not created' }}</span></div>
+        <div class="branch-graph">
+          <svg aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 100 24"><path d="M0 12H100" /></svg>
+          <span class="branch-origin" [class.branch-origin--highlighted]="highlightStart(lane)" title="Feature branch start"></span>
+          <button class="branch-task-node" type="button" *ngFor="let task of lane.tasks" [attr.data-status]="task.status" [class.branch-task-node--checkpoint]="isCheckpoint(lane, task)" [title]="task.commit_summary || task.title" (click)="taskOpened.emit(task.id)">
+            <span class="branch-task-node__dot"></span><strong>#{{ task.id }} {{ task.title }}</strong><small>{{ statusLabel(task.status) }}</small>
+          </button>
+          <span class="branch-empty" *ngIf="lane.tasks.length === 0">No task publications</span>
+        </div>
+      </article>
+    </div>
+    <ng-template #noBranches><div class="history-empty"><p>No local branches or configured features found.</p></div></ng-template>
+  </div>
+  <div class="empty-workspace" *ngIf="!loading && maps.length === 0"><div class="empty-workspace__icon" aria-hidden="true">⑂</div><h2>No projects yet</h2><p>Create a project before defining its first feature branch.</p></div>
+</section>

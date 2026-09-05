@@ -33,6 +33,39 @@ export interface Project {
   updated_at: string;
 }
 
+export interface Feature {
+  id: number;
+  project_id: number;
+  name: string;
+  branch_name: string;
+  base_branch: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BranchTaskHistory {
+  id: number;
+  title: string;
+  status: TaskStatus;
+  commit_summary: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BranchLane {
+  name: string;
+  exists: boolean;
+  is_current: boolean;
+  feature: Feature | null;
+  tasks: BranchTaskHistory[];
+}
+
+export interface ProjectBranchMap {
+  project: Project;
+  current_branch: string | null;
+  branches: BranchLane[];
+}
+
 export interface TaskRun {
   id: number;
   task_id: number;
@@ -47,6 +80,7 @@ export interface TaskRun {
 export interface Task {
   id: number;
   project_id: number;
+  feature_id?: number | null;
   title: string;
   description: string;
   status: TaskStatus;
@@ -108,6 +142,7 @@ export interface CreateProjectInput {
 
 export interface SaveTaskInput {
   project_id: number;
+  feature_id: number;
   title: string;
   description: string;
   priority: TaskPriority;
@@ -122,10 +157,16 @@ export interface ProjectDraft {
 
 export interface TaskDraft {
   project_id: number | null;
+  feature_id: number | null;
   title: string;
   description: string;
   priority: TaskPriority;
   model_effort: ModelEffort;
+}
+
+export interface FeatureDraft {
+  project_id: number | null;
+  name: string;
 }
 
 export interface RetryReviewInput {

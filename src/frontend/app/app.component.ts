@@ -13,6 +13,8 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService } from './api.service';
 import { AppHeaderComponent } from './components/app-header/app-header.component';
 import { AppNavigationComponent, type AppPage } from './components/app-navigation/app-navigation.component';
+import { FeatureEditorDialogComponent } from './components/feature-editor-dialog/feature-editor-dialog.component';
+import { FeatureMapComponent } from './components/feature-map/feature-map.component';
 import { ProjectEditorDialogComponent } from './components/project-editor-dialog/project-editor-dialog.component';
 import { RetryReviewDialogComponent } from './components/retry-review-dialog/retry-review-dialog.component';
 import { RetryTaskDialogComponent, type RetryTaskRequest } from './components/retry-task-dialog/retry-task-dialog.component';
@@ -22,9 +24,12 @@ import { TaskEditorDialogComponent } from './components/task-editor-dialog/task-
 import { TaskHistoryComponent } from './components/task-history/task-history.component';
 import {
   AgentUsage,
+  Feature,
+  FeatureDraft,
   MODEL_EFFORTS,
   Project,
   ProjectDraft,
+  ProjectBranchMap,
   SaveTaskInput,
   StatusColumn,
   TASK_PRIORITIES,
@@ -42,8 +47,8 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
   { status: 'TESTING', label: 'Testing', hint: 'Running project checks' },
   { status: 'IN_REVIEW', label: 'In review', hint: 'Ready for your review' },
   { status: 'PENDING_PUSH', label: 'Pending push', hint: 'Approved; waiting to publish' },
-  { status: 'PENDING_BRANCH_REMOVAL', label: 'Remove branch', hint: 'Published; waiting for cleanup approval' },
-  { status: 'DONE', label: 'Done', hint: 'Published and cleaned up' },
+  { status: 'PENDING_BRANCH_REMOVAL', label: 'Remove branch', hint: 'Legacy branch cleanup' },
+  { status: 'DONE', label: 'Done', hint: 'Published checkpoint' },
   { status: 'REJECTED', label: 'Rejected', hint: 'Declined during review' },
   { status: 'FAILED', label: 'Failed', hint: 'Needs attention' },
 ];
@@ -55,6 +60,8 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
     CommonModule,
     AppHeaderComponent,
     AppNavigationComponent,
+    FeatureMapComponent,
+    FeatureEditorDialogComponent,
     TaskBoardComponent,
     TaskHistoryComponent,
     ProjectEditorDialogComponent,
@@ -74,6 +81,8 @@ export class AppComponent implements OnInit, OnDestroy {
   readonly apiBaseUrl: string;
 
   projects: Project[] = [];
+  features: Feature[] = [];
+  branchMaps: ProjectBranchMap[] = [];
   tasks: Task[] = [];
   workerStatus: WorkerStatus | null = null;
   agentUsage: AgentUsage | null = null;
@@ -88,6 +97,7 @@ export class AppComponent implements OnInit, OnDestroy {
   navigationExpanded = false;
 
   showProjectEditor = false;
+  showFeatureEditor = false;
   taskEditorMode: TaskEditorMode | null = null;
   editingTaskId: number | null = null;
   selectedTaskId: number | null = null;
@@ -95,6 +105,7 @@ export class AppComponent implements OnInit, OnDestroy {
   retryingTask: Task | null = null;
   retryReviewTaskId: number | null = null;
   projectDraft: ProjectDraft = this.emptyProjectDraft();
+  featureDraft: FeatureDraft = this.emptyFeatureDraft();
   taskDraft: TaskDraft = this.emptyTaskDraft();
 
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
@@ -103,6 +114,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private refreshInFlight = false;
   private healthRefreshInFlight = false;
   private usageRefreshInFlight = false;
+  branchMapRefreshInFlight = false;
   pendingTaskIds = new Set<number>();
   private restoreFocusTo: HTMLElement | null = null;
 
@@ -152,6 +164,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   selectPage(page: AppPage): void {
     this.activePage = page;
+    if (page === 'features') void this.refreshBranchMap();
   }
 
   setNavigationExpanded(expanded: boolean): void {
@@ -193,6 +206,11 @@ export class AppComponent implements OnInit, OnDestroy {
       this.openProjectEditor();
       return;
     }
+    if (this.features.length === 0) {
+      this.activePage = 'features';
+      this.openFeatureEditor();
+      return;
+    }
 
     this.clearError();
     this.editingTaskId = null;
@@ -210,6 +228,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.editingTaskId = task.id;
     this.taskDraft = {
       project_id: task.project_id,
+      feature_id: task.feature_id ?? null,
       title: task.title,
       description: task.description,
       priority: task.priority,
@@ -230,6 +249,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   closeModal(restoreFocus = true): void {
     this.showProjectEditor = false;
+    this.showFeatureEditor = false;
     this.taskEditorMode = null;
     this.editingTaskId = null;
     this.selectedTaskId = null;
@@ -272,11 +292,44 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  openFeatureEditor(): void {
+    if (this.projects.length === 0) {
+      this.openProjectEditor();
+      return;
+    }
+    this.clearError();
+    this.featureDraft = this.emptyFeatureDraft();
+    this.showFeatureEditor = true;
+    this.activateModal();
+  }
+
+  async saveFeature(): Promise<void> {
+    if (this.featureDraft.project_id === null || this.saving) return;
+    this.saving = true;
+    this.clearError();
+    try {
+      const feature = await firstValueFrom(this.api.createFeature({
+        project_id: this.featureDraft.project_id,
+        name: this.featureDraft.name.trim(),
+      }));
+      this.features = [...this.features, feature];
+      this.closeModal();
+      this.showNotice(`Feature “${feature.name}” created.`);
+      await this.refreshBranchMap();
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.saving = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
   async saveTask(): Promise<void> {
-    if (this.taskDraft.project_id === null || this.saving) return;
+    if (this.taskDraft.project_id === null || this.taskDraft.feature_id === null || this.saving) return;
 
     const input: SaveTaskInput = {
       project_id: this.taskDraft.project_id,
+      feature_id: this.taskDraft.feature_id,
       title: this.taskDraft.title.trim(),
       description: this.taskDraft.description.trim(),
       priority: this.taskDraft.priority,
@@ -365,13 +418,18 @@ export class AppComponent implements OnInit, OnDestroy {
     const activeWarning = ['CLAIMED', 'IN_PROGRESS', 'TESTING'].includes(task.status)
       ? ' This will stop the current run.'
       : '';
-    if (!window.confirm(`Reject “${task.title}”?${activeWarning} Any task branch will wait for removal approval.`)) return;
+    const branchWarning = task.feature_id
+      ? ' The shared Feature branch will be kept for its other tasks.'
+      : ' Any task branch will wait for removal approval.';
+    if (!window.confirm(`Reject “${task.title}”?${activeWarning}${branchWarning}`)) return;
     this.setTaskPending(task.id, true);
     this.clearError();
     try {
       await firstValueFrom(this.api.rejectTask(task.id));
       if (this.selectedTaskId === task.id) this.closeModal();
-      this.showNotice(`“${task.title}” rejected and queued for branch removal.`);
+      this.showNotice(task.feature_id
+        ? `“${task.title}” rejected; its shared Feature branch was retained.`
+        : `“${task.title}” rejected and queued for branch removal.`);
       await this.refreshBoard(false);
     } catch (error: unknown) {
       this.setError(this.errorMessage(error));
@@ -388,9 +446,9 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     const baseBranch = task.base_branch || 'the current base branch';
-    const confirmed = window.confirm(
-      `Merge “${task.title}” into ${baseBranch} and push it to origin?`,
-    );
+    const confirmed = window.confirm(task.feature_id
+      ? `Push “${task.title}” to the shared feature branch ${task.branch_name}?`
+      : `Merge “${task.title}” into ${baseBranch} and push it to origin?`);
     if (!confirmed) {
       return;
     }
@@ -399,7 +457,9 @@ export class AppComponent implements OnInit, OnDestroy {
     this.clearError();
     try {
       await firstValueFrom(this.api.pushTask(task.id));
-      this.showNotice(`“${task.title}” pushed; branch cleanup is awaiting approval.`);
+      this.showNotice(task.feature_id
+        ? `“${task.title}” published to ${task.branch_name}.`
+        : `“${task.title}” pushed; branch cleanup is awaiting approval.`);
       await this.refreshBoard(false);
     } catch (error: unknown) {
       this.setError(this.errorMessage(error));
@@ -545,6 +605,11 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.tasks.find((task) => task.id === this.selectedTaskId) ?? null;
   }
 
+  openTaskDetailById(taskId: number): void {
+    const task = this.tasks.find((item) => item.id === taskId);
+    if (task) this.openTaskDetail(task);
+  }
+
   workerWarning(): string {
     if (this.workerStatus === null || !this.workerStatus.running) {
       return this.workerStatus?.message ?? '';
@@ -564,11 +629,13 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     try {
-      const [projects, tasks] = await Promise.all([
+      const [projects, features, tasks] = await Promise.all([
         firstValueFrom(this.api.getProjects()),
+        firstValueFrom(this.api.getFeatures()),
         firstValueFrom(this.api.getTasks()),
       ]);
       this.projects = projects;
+      this.features = features;
       this.tasks = tasks;
       this.connected = true;
       this.lastUpdated = new Date();
@@ -578,6 +645,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
       if (this.selectedTaskId !== null) {
         await this.loadTaskDetail(this.selectedTaskId, true);
+      }
+      if (this.activePage === 'features') {
+        await this.refreshBranchMap();
       }
     } catch (error: unknown) {
       this.connected = false;
@@ -632,6 +702,19 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  private async refreshBranchMap(): Promise<void> {
+    if (this.branchMapRefreshInFlight) return;
+    this.branchMapRefreshInFlight = true;
+    try {
+      this.branchMaps = await firstValueFrom(this.api.getBranchMap());
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.branchMapRefreshInFlight = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
   private async loadTaskDetail(taskId: number, silent: boolean): Promise<void> {
     if (!silent) {
       this.detailLoading = true;
@@ -661,7 +744,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private hasOpenModal(): boolean {
-    return this.showProjectEditor || this.taskEditorMode !== null ||
+    return this.showProjectEditor || this.showFeatureEditor || this.taskEditorMode !== null ||
       this.selectedTaskId !== null || this.retryingTask !== null ||
       this.retryReviewTaskId !== null;
   }
@@ -700,13 +783,19 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private emptyTaskDraft(): TaskDraft {
+    const projectId = this.projects[0]?.id ?? null;
     return {
-      project_id: this.projects[0]?.id ?? null,
+      project_id: projectId,
+      feature_id: this.features.find((feature) => feature.project_id === projectId)?.id ?? null,
       title: '',
       description: '',
       priority: 'MEDIUM',
       model_effort: 'medium',
     };
+  }
+
+  private emptyFeatureDraft(): FeatureDraft {
+    return { project_id: this.projects[0]?.id ?? null, name: '' };
   }
 
   private setTaskPending(taskId: number, pending: boolean): void {

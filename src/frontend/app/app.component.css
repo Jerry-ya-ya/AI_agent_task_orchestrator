@@ -1511,6 +1511,235 @@ header-usage {
   font-size: 24px;
 }
 
+.feature-map {
+  max-width: 1760px;
+  margin: 0 auto;
+}
+
+.feature-map__heading,
+.feature-project__header,
+.branch-lane__identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.feature-map__heading {
+  margin-bottom: 20px;
+}
+
+.feature-map__heading .eyebrow {
+  color: #77818c;
+}
+
+.feature-map__heading h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.feature-map__heading p:last-child {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.feature-map__loading {
+  padding: 28px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.feature-project {
+  overflow: hidden;
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 3px 12px rgba(30, 38, 48, 0.045);
+}
+
+.feature-project__header {
+  padding: 16px 18px;
+  border-bottom: 1px solid #e2e6ea;
+  background: #fafbfc;
+}
+
+.feature-project__header h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.feature-project__header code,
+.branch-lane__identity code {
+  display: block;
+  color: #7b8590;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+}
+
+.feature-project__header > span {
+  color: #67717c;
+  font-size: 10px;
+}
+
+.branch-lane {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 112px;
+  border-bottom: 1px solid #edf0f2;
+  transition: filter 140ms ease, opacity 140ms ease;
+}
+
+.branch-lane:last-child {
+  border-bottom: 0;
+}
+
+.branch-lane--missing {
+  filter: grayscale(1);
+  opacity: 0.52;
+}
+
+.branch-lane__identity {
+  justify-content: flex-start;
+  padding: 16px 18px;
+  border-right: 1px solid #e5e8eb;
+  background: #f8fafc;
+}
+
+.branch-lane__identity > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.branch-lane__identity strong {
+  display: block;
+  overflow: hidden;
+  margin-bottom: 4px;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-state-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border: 2px solid #8e98a3;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.branch-state-dot--current {
+  border-color: #3977d4;
+  box-shadow: 0 0 0 4px rgba(57, 119, 212, 0.13);
+}
+
+.branch-badge {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #e8edf3;
+  color: #68737e;
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.branch-graph {
+  display: flex;
+  position: relative;
+  min-width: 0;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 24px;
+  overflow-x: auto;
+}
+
+.branch-graph > svg {
+  position: absolute;
+  z-index: 0;
+  top: 42px;
+  right: 20px;
+  left: 20px;
+  width: calc(100% - 40px);
+  height: 24px;
+  fill: none;
+  stroke: #c9d2dc;
+  stroke-width: 2;
+}
+
+.branch-origin {
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 3px solid #6f7d8c;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.branch-origin--highlighted,
+.branch-task-node--checkpoint .branch-task-node__dot {
+  border-color: #f0a52e;
+  box-shadow: 0 0 0 6px rgba(240, 165, 46, 0.2);
+}
+
+.branch-task-node {
+  display: grid;
+  z-index: 1;
+  width: 142px;
+  min-width: 142px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #333c46;
+  grid-template-rows: 23px auto auto;
+  justify-items: center;
+  text-align: center;
+}
+
+.branch-task-node__dot {
+  width: 16px;
+  height: 16px;
+  border: 3px solid #3977d4;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 120ms ease;
+}
+
+.branch-task-node:hover .branch-task-node__dot {
+  transform: scale(1.15);
+}
+
+.branch-task-node[data-status='DONE'] .branch-task-node__dot { border-color: #29966a; background: #dff4e9; }
+.branch-task-node[data-status='FAILED'] .branch-task-node__dot { border-color: #c84545; background: #fae2e2; }
+.branch-task-node[data-status='REJECTED'] .branch-task-node__dot { border-color: #8c6b6b; background: #eee5e5; }
+.branch-task-node[data-status='TODO'] .branch-task-node__dot { border-color: #9ba5b0; }
+
+.branch-task-node strong {
+  width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-task-node small {
+  margin-top: 3px;
+  color: #7b8590;
+  font-size: 8px;
+  text-transform: capitalize;
+}
+
+.branch-empty {
+  z-index: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #fff;
+  color: #8b949f;
+  font-size: 10px;
+}
+
 .window-minimize {
   margin-left: 5px;
 }

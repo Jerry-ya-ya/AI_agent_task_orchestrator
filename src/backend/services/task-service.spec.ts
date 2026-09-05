@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { OrchestratorDatabase } from '../database/database.js';
+import { FeatureRepository } from '../database/feature-repository.js';
 import { ProjectRepository } from '../database/project-repository.js';
 import { TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
@@ -14,9 +15,11 @@ describe('TaskService state rules', () => {
   let projects: ProjectRepository;
   let tasks: TaskRepository;
   let runs: TaskRunRepository;
+  let features: FeatureRepository;
   let service: TaskService;
   let project: Project;
   let publishBranch: ReturnType<typeof vi.fn>;
+  let pushFeatureBranch: ReturnType<typeof vi.fn>;
   let removeTaskBranch: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -24,10 +27,12 @@ describe('TaskService state rules', () => {
     projects = new ProjectRepository(database);
     runs = new TaskRunRepository(database);
     tasks = new TaskRepository(database, runs);
+    features = new FeatureRepository(database);
     publishBranch = vi.fn(async () => ({ baseBranch: 'main' }));
+    pushFeatureBranch = vi.fn(async () => undefined);
     removeTaskBranch = vi.fn(async () => true);
-    const git = { publishBranch, removeTaskBranch } as unknown as GitService;
-    service = new TaskService(tasks, projects, runs, git);
+    const git = { publishBranch, pushFeatureBranch, removeTaskBranch } as unknown as GitService;
+    service = new TaskService(tasks, projects, runs, git, features);
     project = projects.create({
       name: 'Example',
       repository_path: '/example',
@@ -244,6 +249,23 @@ describe('TaskService state rules', () => {
 
     await expect(service.push(review.id)).rejects.toThrow('origin rejected the push');
     expect(tasks.findById(review.id)?.status).toBe('PENDING_PUSH');
+  });
+
+  it('publishes a reviewed feature task on its shared branch without merging or cleanup', async () => {
+    const feature = features.create({ project_id: project.id, name: 'Search' }, 'feature/search', 'main');
+    const task = service.create({ project_id: project.id, feature_id: feature.id, title: 'Index documents' });
+    expect(task).toMatchObject({
+      feature_id: feature.id,
+      branch_name: 'feature/search',
+      base_branch: 'main'
+    });
+    expect(tasks.transition(task.id, 'TODO', 'IN_REVIEW')).not.toBeNull();
+    service.approve(task.id);
+
+    await expect(service.push(task.id)).resolves.toMatchObject({ status: 'DONE' });
+    expect(pushFeatureBranch).toHaveBeenCalledWith('/example', 'feature/search');
+    expect(publishBranch).not.toHaveBeenCalled();
+    await expect(service.removeBranch(task.id)).rejects.toThrow(ConflictError);
   });
 
   it('keeps a task pending branch removal when Git cleanup fails', async () => {

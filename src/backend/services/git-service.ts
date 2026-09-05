@@ -7,7 +7,7 @@ import { ProcessRunner, type ProcessRunnerLike } from '../infra/process-runner.j
 
 const GIT_TIMEOUT_MS = 60_000;
 const GIT_OUTPUT_LIMIT_BYTES = 1024 * 1024;
-const AGENT_BRANCH_PATTERN = /^agent\//u;
+const MANAGED_BRANCH_PATTERN = /^(?:agent|feature)\//u;
 
 export interface PreparedBranch {
   branchName: string;
@@ -17,6 +17,11 @@ export interface PreparedBranch {
 
 export interface PublishedBranch {
   baseBranch: string;
+}
+
+export interface BranchSnapshot {
+  currentBranch: string;
+  localBranches: string[];
 }
 
 export class GitCommandError extends AppError {
@@ -76,13 +81,18 @@ export class GitService {
     await this.requireCleanCheckout(repositoryRoot, signal);
 
     const originalBranch = await this.currentBranch(repositoryRoot, signal);
-    if (AGENT_BRANCH_PATTERN.test(originalBranch)) {
+    if (MANAGED_BRANCH_PATTERN.test(originalBranch)) {
       throw new ConflictError(
         `Repository is already on agent branch ${originalBranch}. Check out its base branch before running the Worker.`
       );
     }
 
     const branchExists = await this.localBranchExists(repositoryRoot, branchName, signal);
+    if (!branchExists && task.base_branch !== null && originalBranch !== task.base_branch) {
+      throw new ConflictError(
+        `Repository must be on feature base branch ${task.base_branch} before creating ${branchName}; it is on ${originalBranch}.`
+      );
+    }
     const switched = await this.runGit(
       repositoryRoot,
       branchExists ? ['switch', branchName] : ['switch', '-c', branchName],
@@ -170,12 +180,12 @@ export class GitService {
     const current = await this.currentBranch(repositoryRoot);
     const baseBranch = storedBaseBranch ?? current;
 
-    if (AGENT_BRANCH_PATTERN.test(baseBranch) || current !== baseBranch) {
+    if (MANAGED_BRANCH_PATTERN.test(baseBranch) || current !== baseBranch) {
       throw new ConflictError(
         `Repository must be on the task base branch ${baseBranch} before publishing; it is on ${current}.`
       );
     }
-    if (!AGENT_BRANCH_PATTERN.test(taskBranch) || !await this.localBranchExists(repositoryRoot, taskBranch)) {
+    if (!MANAGED_BRANCH_PATTERN.test(taskBranch) || !await this.localBranchExists(repositoryRoot, taskBranch)) {
       throw new ConflictError(`Task branch is missing or is not managed by the orchestrator: ${taskBranch}`);
     }
 
@@ -236,6 +246,42 @@ export class GitService {
     return { baseBranch };
   }
 
+  /** Pushes a shared feature branch without merging it into the base branch. */
+  public async pushFeatureBranch(repositoryPath: string, featureBranch: string): Promise<void> {
+    const repositoryRoot = await this.validateRepository(repositoryPath);
+    await this.requireCleanCheckout(repositoryRoot);
+    if (!/^feature\//u.test(featureBranch) || !await this.localBranchExists(repositoryRoot, featureBranch)) {
+      throw new ConflictError(`Feature branch is missing or unmanaged: ${featureBranch}`);
+    }
+    const pushed = await this.runGit(
+      repositoryRoot,
+      ['push', '--set-upstream', 'origin', featureBranch],
+      undefined,
+      true,
+    );
+    if (pushed.exitCode !== 0) {
+      throw new GitCommandError(`Unable to push feature branch ${featureBranch}: ${formatFailure(pushed)}`, pushed);
+    }
+  }
+
+  public async inspectBranches(repositoryPath: string): Promise<BranchSnapshot> {
+    const repositoryRoot = await this.validateRepository(repositoryPath);
+    const currentBranch = await this.currentBranch(repositoryRoot);
+    const branches = await this.runGit(
+      repositoryRoot,
+      ['for-each-ref', '--format=%(refname:short)', 'refs/heads'],
+      undefined,
+      true,
+    );
+    if (branches.exitCode !== 0) {
+      throw new GitCommandError(`Unable to list repository branches: ${formatFailure(branches)}`, branches);
+    }
+    return {
+      currentBranch,
+      localBranches: branches.stdout.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean),
+    };
+  }
+
   /** Removes a task branch after merge verification, or force-removes explicitly rejected work. */
   public async removeTaskBranch(
     repositoryPath: string,
@@ -248,12 +294,12 @@ export class GitService {
     const current = await this.currentBranch(repositoryRoot);
     const expectedBase = baseBranch ?? current;
 
-    if (AGENT_BRANCH_PATTERN.test(expectedBase) || current !== expectedBase) {
+    if (MANAGED_BRANCH_PATTERN.test(expectedBase) || current !== expectedBase) {
       throw new ConflictError(
         `Repository must be on the task base branch ${expectedBase} before removing ${taskBranch}; it is on ${current}.`
       );
     }
-    if (!AGENT_BRANCH_PATTERN.test(taskBranch)) {
+    if (!MANAGED_BRANCH_PATTERN.test(taskBranch)) {
       throw new ConflictError(`Task branch is not managed by the orchestrator: ${taskBranch}`);
     }
     if (!await this.localBranchExists(repositoryRoot, taskBranch)) {
@@ -395,6 +441,9 @@ function deriveBranchName(task: Task): string {
     throw new ValidationError('Task must have a positive integer id before preparing a branch.');
   }
   const branchName = task.branch_name ?? `agent/${task.id}-${slugifyTaskTitle(task.title)}`;
+  if (/^feature\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u.test(branchName)) {
+    return branchName;
+  }
   const branchOwnerId = task.source_task_id ?? task.id;
   const branchPattern = new RegExp(
     `^agent/${branchOwnerId}-([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)$`,

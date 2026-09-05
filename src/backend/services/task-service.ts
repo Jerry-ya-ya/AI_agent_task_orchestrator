@@ -10,6 +10,7 @@ import type {
   UpdateTaskInput
 } from '../domain/types.js';
 import { ProjectRepository } from '../database/project-repository.js';
+import { FeatureRepository } from '../database/feature-repository.js';
 import { type TaskFilters, TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
 import { GitService } from './git-service.js';
@@ -29,7 +30,8 @@ export class TaskService {
     private readonly tasks: TaskRepository,
     private readonly projects: ProjectRepository,
     private readonly runs: TaskRunRepository,
-    private readonly git: GitService
+    private readonly git: GitService,
+    private readonly features?: FeatureRepository,
   ) {}
 
   public list(filters: TaskFilters = {}): TaskListItem[] {
@@ -55,12 +57,14 @@ export class TaskService {
 
   public create(input: CreateTaskInput): Task {
     this.requireProject(input.project_id);
+    if (input.feature_id !== undefined) this.requireFeature(input.feature_id, input.project_id);
     const title = input.title.trim();
     if (title.length === 0) {
       throw new ValidationError('Task title is required.');
     }
     return this.tasks.create({
       project_id: input.project_id,
+      feature_id: input.feature_id,
       title,
       description: input.description?.trim() ?? '',
       priority: input.priority ?? 'MEDIUM',
@@ -80,6 +84,12 @@ export class TaskService {
       this.requireProject(input.project_id);
       if (existing.branch_name !== null && input.project_id !== existing.project_id) {
         throw new ConflictError('A task with an existing Git branch cannot move to another project.');
+      }
+    }
+    if (input.feature_id !== undefined) {
+      this.requireFeature(input.feature_id, input.project_id ?? existing.project_id);
+      if (existing.branch_name !== null && input.feature_id !== existing.feature_id) {
+        throw new ConflictError('A task with existing work cannot move to another feature.');
       }
     }
     const updated = this.tasks.update(id, {
@@ -163,6 +173,13 @@ export class TaskService {
       throw new NotFoundError(`Project ${task.project_id} was not found.`);
     }
 
+    if (task.feature_id !== null && task.feature_id !== undefined) {
+      await this.git.pushFeatureBranch(project.repository_path, task.branch_name);
+      const completed = this.tasks.transition(id, 'PENDING_PUSH', 'DONE');
+      if (completed === null) throw new ConflictError('Task state changed while its feature branch was pushed.');
+      return completed;
+    }
+
     const published = await this.git.publishBranch(
       project.repository_path,
       task.branch_name,
@@ -180,6 +197,9 @@ export class TaskService {
 
   public async removeBranch(id: number): Promise<Task> {
     const task = this.requireTask(id);
+    if (task.feature_id !== null && task.feature_id !== undefined) {
+      throw new ConflictError('Shared feature branches are retained until the feature is merged manually.');
+    }
     if (task.status !== 'PENDING_BRANCH_REMOVAL') {
       throw new ConflictError('Only PENDING_BRANCH_REMOVAL tasks can remove their task branch.');
     }
@@ -237,6 +257,13 @@ export class TaskService {
   private requireProject(id: number): void {
     if (this.projects.findById(id) === null) {
       throw new ValidationError(`Project ${id} does not exist.`);
+    }
+  }
+
+  private requireFeature(id: number, projectId: number): void {
+    const feature = this.features?.findById(id);
+    if (feature === null || feature === undefined || feature.project_id !== projectId) {
+      throw new ValidationError(`Feature ${id} does not belong to project ${projectId}.`);
     }
   }
 }

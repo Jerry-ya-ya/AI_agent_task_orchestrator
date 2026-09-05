@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
-export type AppPage = 'taskboard' | 'history';
+export type AppPage = 'features' | 'taskboard' | 'history';
 
 @Component({
   selector: 'app-navigation',

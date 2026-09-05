@@ -12,9 +12,22 @@ const SCHEMA = `
     updated_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS features (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    name TEXT NOT NULL,
+    branch_name TEXT NOT NULL,
+    base_branch TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(project_id, name),
+    UNIQUE(project_id, branch_name)
+  );
+
   CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    feature_id INTEGER REFERENCES features(id) ON DELETE SET NULL,
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'TODO'
@@ -50,6 +63,8 @@ const SCHEMA = `
     ON tasks(status, priority, created_at, id);
   CREATE INDEX IF NOT EXISTS idx_task_runs_task_started
     ON task_runs(task_id, started_at DESC, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_features_project
+    ON features(project_id, created_at, id);
 `;
 
 export type Clock = () => string;
@@ -81,6 +96,9 @@ export class OrchestratorDatabase {
     this.assertOpen();
     this.connection.exec(SCHEMA);
     const taskColumns = this.connection.prepare('PRAGMA table_info(tasks)').all();
+    if (!taskColumns.some((column) => column['name'] === 'feature_id')) {
+      this.connection.exec('ALTER TABLE tasks ADD COLUMN feature_id INTEGER REFERENCES features(id) ON DELETE SET NULL;');
+    }
     if (!taskColumns.some((column) => column['name'] === 'is_paused')) {
       this.connection.exec(`
         ALTER TABLE tasks
@@ -149,6 +167,7 @@ export class OrchestratorDatabase {
         CREATE TABLE tasks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+          feature_id INTEGER REFERENCES features(id) ON DELETE SET NULL,
           title TEXT NOT NULL,
           description TEXT NOT NULL DEFAULT '',
           status TEXT NOT NULL DEFAULT 'TODO'
@@ -170,12 +189,12 @@ export class OrchestratorDatabase {
         );
 
         INSERT INTO tasks (
-          id, project_id, title, description, status, priority, model_effort, retry_prompt,
+          id, project_id, feature_id, title, description, status, priority, model_effort, retry_prompt,
           branch_name, worktree_path, base_branch, commit_summary, source_task_id,
           is_rejected, is_paused, created_at, updated_at
         )
         SELECT
-          id, project_id, title, description,
+          id, project_id, feature_id, title, description,
           CASE
             WHEN status = 'DONE' AND branch_name IS NOT NULL THEN '${migratedDoneStatus}'
             ELSE status

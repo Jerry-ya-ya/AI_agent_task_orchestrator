@@ -1,6 +1,6 @@
 # AI Agent Task Orchestrator
 
-A local-first desktop MVP that queues coding tasks, runs each one on an isolated Git branch, executes Codex CLI and project verification, then requires separate review and push confirmations before publishing work.
+A local-first desktop MVP that groups coding tasks into Features, runs each Feature on one shared Git branch, executes Codex CLI and project verification, then requires review and push confirmation before publishing each task checkpoint.
 
 ## Stack
 
@@ -67,20 +67,20 @@ For a production-UI browser smoke test, set `ORCHESTRATOR_UI_PATH=dist/frontend/
 
 1. Create a Project and enter the absolute path of an existing local Git repository.
 2. Optionally add project context for Codex.
-3. Create one or more Tasks and set priority.
-4. Leave the desktop app running. The Worker claims one `TODO` task at a time in `URGENT`, `HIGH`, `MEDIUM`, `LOW` order, then oldest first.
+3. Open Features, create a Feature for the project, then create one or more Tasks assigned to it.
+4. Leave the desktop app running. The Worker claims one `TODO` task at a time. Tasks within a Feature run in creation order; a Feature waiting for review or push does not block work from another Feature.
 5. Open task cards to inspect branch, workspace, result, stdout, stderr, and all run attempts.
 6. Approve an `IN_REVIEW` task to move it to `PENDING_PUSH`.
-7. Confirm push to merge its task branch into the recorded base branch and push that branch to `origin`; it then waits in `PENDING_BRANCH_REMOVAL`.
-8. Approve branch removal to safely delete the merged local task branch and move the task to `DONE`. Retry a `FAILED` task after reviewing its logs.
+7. Confirm push to publish the shared Feature branch to `origin` and move that task checkpoint to `DONE`. Retry a `FAILED` task after reviewing its logs.
+8. Merge the completed Feature branch into the desired base branch manually when the Feature is ready as a whole.
 
-For task `101` titled `Login API`, the generated branch is:
+For a Feature titled `Login API`, the generated branch is:
 
 ```text
-agent/101-login-api
+feature/login-api
 ```
 
-The sequential Worker requires a clean repository, creates or reuses the task branch, runs Codex and project verification in the configured repository, commits task changes using Codex's canonical `write-worklog` summary, and restores the original branch. It never merges, pushes, or removes branches automatically; publishing and branch cleanup each require a separate user confirmation.
+The sequential Worker requires a clean repository, creates or reuses the Feature branch, runs Codex and project verification in the configured repository, commits task changes using Codex's canonical `write-worklog` summary, and restores the original branch. It never merges or pushes automatically. The Features page visualizes every local branch and each configured Feature's task history; a configured branch that has not been created yet is monochrome, and the checkpoint before the next unhandled task is highlighted.
 
 ## Test detection
 
@@ -106,7 +106,7 @@ Automated tests do not invoke real Codex or consume an authenticated session.
 - Project repositories are trusted local code: their test suite executes locally.
 - Codex runs with workspace-write sandboxing and approval policy `never`; it receives the prompt over stdin.
 - Logs are capped by the process runner before they are persisted.
-- Deleting an inactive task removes its database record and run history but deliberately leaves its Git branch intact to avoid destroying work.
-- Approval changes state only. A separate explicit confirmation merges locally and runs `git push origin <base-branch>` using the user's existing Git credentials.
-- Local task branches are removed only after another explicit approval and a Git merged-ancestor check; cleanup uses non-forced `git branch -d`.
+- Deleting an inactive task removes its database record and run history but deliberately leaves shared Feature history in Git intact.
+- Approval changes state only. A separate explicit confirmation runs `git push --set-upstream origin feature/<slug>` using the user's existing Git credentials.
+- Feature branches are not merged into the base branch or removed automatically. Existing legacy per-task branches retain their prior merge and cleanup flow.
 - No accounts, cloud sync, LAN binding, multi-user features, parallel workers, DAGs, notifications, remote access, PR automation, or GitHub API integration are included.

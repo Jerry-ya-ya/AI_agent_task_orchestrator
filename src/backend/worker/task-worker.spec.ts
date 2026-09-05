@@ -97,7 +97,7 @@ describe('TaskWorker', () => {
       result_summary: 'Implemented search and updated its tests.'
     });
     expect(taskRuns[0]?.finished_at).not.toBeNull();
-    expect(taskRuns[0]?.stdout).toContain('[git] Checking out isolated task branch...');
+    expect(taskRuns[0]?.stdout).toContain('[git] Checking out managed delivery branch...');
     expect(taskRuns[0]?.stdout).toContain('[git] Checkpointed');
     expect(taskRuns[0]?.stdout).toContain('[agent]\nAgent stdout');
     expect(taskRuns[0]?.stdout).toContain('[test] pnpm test\nTest stdout');

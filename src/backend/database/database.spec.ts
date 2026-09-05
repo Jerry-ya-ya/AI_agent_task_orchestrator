@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { OrchestratorDatabase } from './database.js';
+import { FeatureRepository } from './feature-repository.js';
 import { ProjectRepository } from './project-repository.js';
 import { TaskRepository } from './task-repository.js';
 import { TaskRunRepository } from './task-run-repository.js';
@@ -139,6 +140,7 @@ describe('OrchestratorDatabase schema', () => {
     const columns = database.connection.prepare('PRAGMA table_info(tasks)').all();
 
     expect(columns.some((column) => column['name'] === 'is_paused')).toBe(true);
+    expect(columns.some((column) => column['name'] === 'feature_id')).toBe(true);
     expect(columns.some((column) => column['name'] === 'base_branch')).toBe(true);
     expect(columns.some((column) => column['name'] === 'commit_summary')).toBe(true);
     expect(columns.some((column) => column['name'] === 'model_effort')).toBe(true);
@@ -265,5 +267,26 @@ describe('TaskRepository.claimNext', () => {
     expect(firstTasks.list().every((task) => task.status === 'CLAIMED')).toBe(true);
     expect(firstRuns.listForTask(urgentFirst.id)).toHaveLength(1);
     expect(secondRuns.listForTask(urgentSecond.id)).toHaveLength(1);
+  });
+
+  it('serializes tasks on the same feature while allowing another feature to proceed', () => {
+    const database = new OrchestratorDatabase(':memory:');
+    databases.push(database);
+    const projects = new ProjectRepository(database);
+    const runs = new TaskRunRepository(database);
+    const tasks = new TaskRepository(database, runs);
+    const features = new FeatureRepository(database);
+    const project = projects.create({ name: 'Example', repository_path: '/example', context: '' });
+    const search = features.create({ project_id: project.id, name: 'Search' }, 'feature/search', 'main');
+    const billing = features.create({ project_id: project.id, name: 'Billing' }, 'feature/billing', 'main');
+    const first = tasks.create({ project_id: project.id, feature_id: search.id, title: 'Index', description: '', priority: 'LOW' });
+    const blocked = tasks.create({ project_id: project.id, feature_id: search.id, title: 'Query', description: '', priority: 'URGENT' });
+    const independent = tasks.create({ project_id: project.id, feature_id: billing.id, title: 'Invoice', description: '', priority: 'HIGH' });
+
+    expect(tasks.claimNext()?.id).toBe(independent.id);
+    expect(tasks.claimNext()?.id).toBe(first.id);
+    expect(tasks.claimNext()).toBeNull();
+    expect(tasks.transition(first.id, 'CLAIMED', 'DONE')).not.toBeNull();
+    expect(tasks.claimNext()?.id).toBe(blocked.id);
   });
 });
