@@ -235,6 +235,30 @@ describe('TaskWorker', () => {
     });
   });
 
+  it('pauses new task claims and resumes processing without cancelling active work', async () => {
+    const task = createTask('Wait for resume');
+    const checkAvailability = vi.fn(async () => ({ available: true, message: 'Codex CLI is available.' }));
+    const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
+      branchName: `agent/${claimed.id}-wait-for-resume`,
+      workspacePath: project.repository_path,
+      originalBranch: 'main'
+    }));
+    const execute = vi.fn(async (): Promise<AgentExecutionResult> => successfulAgent());
+    const git = { prepareBranch, completeBranch: vi.fn(async () => true) } as unknown as GitService;
+    const agent: AgentExecutor = { checkAvailability, execute };
+    const tests = { execute: vi.fn(async () => successfulTests()) } as unknown as TestService;
+    const worker = new TaskWorker(tasks, runs, git, agent, tests);
+
+    expect(worker.pause()).toMatchObject({ paused: true, busy: false });
+    await expect(worker.processNext()).resolves.toBe(false);
+    expect(tasks.findById(task.id)?.status).toBe('TODO');
+    expect(checkAvailability).not.toHaveBeenCalled();
+
+    expect(worker.resume()).toMatchObject({ paused: false });
+    await expect(worker.processNext()).resolves.toBe(true);
+    expect(tasks.findById(task.id)?.status).toBe('IN_REVIEW');
+  });
+
   it('cancels the active task and waits for its pipeline to finish', async () => {
     const task = createTask('Cancel active task');
     const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({

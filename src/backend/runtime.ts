@@ -67,6 +67,8 @@ export class OrchestratorRuntime {
       taskService: this.taskService,
       featureService: this.featureService,
       workerStatus: () => this.worker.getStatus(),
+      pauseWorker: () => this.worker.pause(),
+      resumeWorker: () => this.worker.resume(),
       agentUsage: () => agentUsage.read(),
       cancelTask: (taskId) => this.worker.cancelTask(taskId)
     });

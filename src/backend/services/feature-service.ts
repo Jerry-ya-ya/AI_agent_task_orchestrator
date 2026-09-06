@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { ConflictError, NotFoundError, ValidationError } from '../domain/errors.js';
-import type { BranchLane, CreateFeatureInput, Feature, ProjectBranchMap } from '../domain/types.js';
+import type { BranchCommit, BranchLane, CreateFeatureInput, Feature, ProjectBranchMap } from '../domain/types.js';
 import { FeatureRepository } from '../database/feature-repository.js';
 import { ProjectRepository } from '../database/project-repository.js';
 import { TaskRepository } from '../database/task-repository.js';
@@ -41,11 +41,17 @@ export class FeatureService {
     const allFeatures = this.features.list();
     return Promise.all(this.projects.list().map(async (project) => {
       let currentBranch: string | null = null;
+      let primaryBranch: string | null = null;
+      let primaryCommits: BranchCommit[] = [];
       let localBranches: string[] = [];
+      let branchRelations: Awaited<ReturnType<GitService['inspectBranches']>>['branchRelations'] = {};
       try {
         const snapshot = await this.git.inspectBranches(project.repository_path);
         currentBranch = snapshot.currentBranch;
+        primaryBranch = snapshot.primaryBranch ?? snapshot.currentBranch;
+        primaryCommits = (snapshot.primaryCommits ?? []).map(toDomainCommit);
         localBranches = snapshot.localBranches;
+        branchRelations = snapshot.branchRelations ?? {};
       } catch {
         // A missing repository is represented by monochrome lanes instead of failing the whole map.
       }
@@ -57,6 +63,12 @@ export class FeatureService {
           name,
           exists: localBranches.includes(name),
           is_current: name === currentBranch,
+          is_primary: name === primaryBranch,
+          ahead: branchRelations[name]?.ahead ?? null,
+          behind: branchRelations[name]?.behind ?? null,
+          fork_commit: branchRelations[name] === undefined
+            ? null
+            : toDomainCommit(branchRelations[name].forkCommit),
           feature,
           tasks: feature === null ? [] : allTasks
             .filter((task) => task.feature_id === feature.id)
@@ -71,9 +83,29 @@ export class FeatureService {
             })),
         };
       });
-      return { project, current_branch: currentBranch, branches };
+      return {
+        project,
+        current_branch: currentBranch,
+        primary_branch: primaryBranch,
+        primary_commits: primaryCommits,
+        branches,
+      };
     }));
   }
+}
+
+function toDomainCommit(commit: {
+  sha: string;
+  shortSha: string;
+  summary: string;
+  committedAt: string;
+}): BranchCommit {
+  return {
+    sha: commit.sha,
+    short_sha: commit.shortSha,
+    summary: commit.summary,
+    committed_at: commit.committedAt,
+  };
 }
 
 export function createAvailableFeatureBranch(name: string, reservedBranches: readonly string[]): string {

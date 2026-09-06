@@ -1,5 +1,5 @@
 <div class="app-shell">
-  <app-header [connected]="connected" [apiBaseUrl]="apiBaseUrl" [workerStatus]="workerStatus" [agentUsage]="agentUsage" [projectCount]="projects.length" (createProject)="openProjectEditor()" (createTask)="openCreateTask()" (minimizeApplication)="minimizeApplication()" (closeApplication)="closeApplication()" />
+  <app-header [connected]="connected" [apiBaseUrl]="apiBaseUrl" [workerStatus]="workerStatus" [agentUsage]="agentUsage" [projectCount]="projects.length" (createProject)="openProjectEditor()" (createTask)="openCreateTask()" (workerToggled)="toggleWorkerDispatch()" (minimizeApplication)="minimizeApplication()" (closeApplication)="closeApplication()" />
   <div class="app-workspace" [class.app-workspace--navigation-expanded]="navigationExpanded">
     <app-navigation
       [expanded]="navigationExpanded"

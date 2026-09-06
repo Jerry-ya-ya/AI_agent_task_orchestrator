@@ -69,6 +69,7 @@ For a production-UI browser smoke test, set `ORCHESTRATOR_UI_PATH=dist/frontend/
 2. Optionally add project context for Codex.
 3. Open Features, create a Feature for the project, then create one or more Tasks assigned to it.
 4. Leave the desktop app running. The Worker claims one `TODO` task at a time. Tasks within a Feature run in creation order; a Feature waiting for review or push does not block work from another Feature.
+   Use the header pause/play control to stop or resume new task claims. Pausing lets the current task finish and prevents the next `TODO` task from starting.
 5. Open task cards to inspect branch, workspace, result, stdout, stderr, and all run attempts.
 6. Approve an `IN_REVIEW` task to move it to `PENDING_PUSH`.
 7. Confirm push to publish the shared Feature branch to `origin` and move that task checkpoint to `DONE`. Retry a `FAILED` task after reviewing its logs.

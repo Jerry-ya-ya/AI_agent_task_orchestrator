@@ -40,17 +40,28 @@ describe('backend API', () => {
     tasks = new TaskRepository(database, runs);
     const features = new FeatureRepository(database);
     const git = new GitService(new ProcessRunner());
+    let workerPaused = false;
+    const workerStatus = () => ({
+      running: true,
+      paused: workerPaused,
+      busy: false,
+      activeTaskId: null,
+      agentAvailable: true,
+      message: workerPaused ? 'Worker paused.' : 'Codex CLI is available.'
+    });
     app = createApi({
       projectService: new ProjectService(projects, git),
       featureService: new FeatureService(features, projects, tasks, git),
       taskService: new TaskService(tasks, projects, runs, git, features),
-      workerStatus: () => ({
-        running: true,
-        busy: false,
-        activeTaskId: null,
-        agentAvailable: true,
-        message: 'Codex CLI is available.'
-      }),
+      workerStatus,
+      pauseWorker: () => {
+        workerPaused = true;
+        return workerStatus();
+      },
+      resumeWorker: () => {
+        workerPaused = false;
+        return workerStatus();
+      },
       agentUsage: async () => ({
         available: true,
         planType: 'plus',
@@ -92,6 +103,15 @@ describe('backend API', () => {
       error: 'CONFLICT',
       message: 'Feature 成就系統 is already configured for this project.',
     });
+  });
+
+  it('pauses and resumes Worker task claiming through explicit endpoints', async () => {
+    await request(app).post('/worker/pause').send({}).expect(200)
+      .expect((response) => expect(response.body).toMatchObject({ running: true, paused: true }));
+    await request(app).get('/health').expect(200)
+      .expect((response) => expect(response.body.worker).toMatchObject({ paused: true }));
+    await request(app).post('/worker/resume').send({}).expect(200)
+      .expect((response) => expect(response.body).toMatchObject({ running: true, paused: false }));
   });
 
   afterEach(async () => {

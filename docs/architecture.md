@@ -123,6 +123,8 @@ TODO --atomic claim--> CLAIMED --> IN_PROGRESS --> TESTING --> IN_REVIEW
 8. Successful verification sets `IN_REVIEW`. If neither tests nor a build are available—or a detected command cannot be started—the task still enters `IN_REVIEW` with an `UNVERIFIED` warning. Only a verification command that actually runs and returns non-zero sets `FAILED`; Git or agent pipeline failures also remain failures.
 9. The Worker immediately polls for the next eligible task; review is not part of the worker loop. Earlier non-terminal tasks block later tasks on the same Feature, while another Feature may proceed.
 
+The header pause/play control is an in-memory dispatch gate. Pause never cancels active Codex work; it prevents the Worker from claiming another task after the active pipeline finishes. Resume wakes the polling loop immediately.
+
 Approving a Feature task moves it to `PENDING_PUSH`; it does not touch Git. Confirm push is a separate user action that pushes the shared Feature branch directly to `origin` and marks that task checkpoint `DONE`. The Feature branch remains available for its following tasks and is merged into the base branch manually when the Feature is complete. Legacy tasks with no Feature retain the earlier per-task merge and explicit branch-cleanup path.
 
 On application restart, orphaned `CLAIMED`, `IN_PROGRESS`, and `TESTING` tasks are marked `FAILED` rather than silently rerun. A user can then inspect logs and explicitly retry.
@@ -147,6 +149,7 @@ Required routes:
 
 - `GET /projects`, `POST /projects`
 - `GET /features`, `POST /features`, `GET /branches`
+- `POST /worker/pause`, `POST /worker/resume`
 - `GET /tasks`, `GET /tasks/:id`, `POST /tasks`, `PUT /tasks/:id`, `DELETE /tasks/:id`
 - `POST /tasks/:id/retry`, `POST /tasks/:id/approve`, `POST /tasks/:id/push`, `POST /tasks/:id/remove-branch`
 - `GET /tasks/:id/runs`

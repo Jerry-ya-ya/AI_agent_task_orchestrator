@@ -52,10 +52,21 @@ export interface BranchTaskHistory {
   updated_at: string;
 }
 
+export interface BranchCommit {
+  sha: string;
+  short_sha: string;
+  summary: string;
+  committed_at: string;
+}
+
 export interface BranchLane {
   name: string;
   exists: boolean;
   is_current: boolean;
+  is_primary: boolean;
+  ahead: number | null;
+  behind: number | null;
+  fork_commit: BranchCommit | null;
   feature: Feature | null;
   tasks: BranchTaskHistory[];
 }
@@ -63,6 +74,8 @@ export interface BranchLane {
 export interface ProjectBranchMap {
   project: Project;
   current_branch: string | null;
+  primary_branch: string | null;
+  primary_commits: BranchCommit[];
   branches: BranchLane[];
 }
 
@@ -106,6 +119,7 @@ export interface TaskDetail extends Task {
 
 export interface WorkerStatus {
   running: boolean;
+  paused?: boolean;
   busy: boolean;
   activeTaskId: number | null;
   agentAvailable: boolean;

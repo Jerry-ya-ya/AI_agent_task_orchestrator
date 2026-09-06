@@ -29,6 +29,7 @@ class PipelineFailure extends Error {
 
 export class TaskWorker {
   private running = false;
+  private paused = false;
   private busy = false;
   private activeTaskId: number | null = null;
   private activeController: AbortController | null = null;
@@ -75,11 +76,25 @@ export class TaskWorker {
   public getStatus(): WorkerStatus {
     return {
       running: this.running,
+      paused: this.paused,
       busy: this.busy,
       activeTaskId: this.activeTaskId,
       agentAvailable: this.availability.available,
-      message: this.availability.message
+      message: this.paused
+        ? (this.busy ? 'Worker will pause after the current task finishes.' : 'Worker is paused and will not claim new tasks.')
+        : this.availability.message
     };
+  }
+
+  public pause(): WorkerStatus {
+    this.paused = true;
+    return this.getStatus();
+  }
+
+  public resume(): WorkerStatus {
+    this.paused = false;
+    this.wakeIdle?.();
+    return this.getStatus();
   }
 
   public async cancelTask(taskId: number): Promise<boolean> {
@@ -93,12 +108,12 @@ export class TaskWorker {
   }
 
   public async processNext(): Promise<boolean> {
-    if (this.busy) {
+    if (this.busy || this.paused) {
       return false;
     }
 
     this.availability = await this.agent.checkAvailability();
-    if (!this.availability.available || this.stopRequested) {
+    if (!this.availability.available || this.stopRequested || this.paused) {
       return false;
     }
 

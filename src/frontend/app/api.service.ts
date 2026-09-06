@@ -14,6 +14,7 @@ import {
   Task,
   TaskDetail,
   TaskRun,
+  WorkerStatus,
 } from './models';
 
 const DEFAULT_API_BASE_URL = 'http://127.0.0.1:4317';
@@ -72,6 +73,14 @@ export class ApiService {
 
   createProject(input: CreateProjectInput): Observable<Project> {
     return this.http.post<Project>(`${this.baseUrl}/projects`, input);
+  }
+
+  pauseWorker(): Observable<WorkerStatus> {
+    return this.http.post<WorkerStatus>(`${this.baseUrl}/worker/pause`, {});
+  }
+
+  resumeWorker(): Observable<WorkerStatus> {
+    return this.http.post<WorkerStatus>(`${this.baseUrl}/worker/resume`, {});
   }
 
   getFeatures(): Observable<Feature[]> {

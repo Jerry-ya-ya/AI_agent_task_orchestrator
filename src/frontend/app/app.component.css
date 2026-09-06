@@ -264,6 +264,16 @@
   margin-right: 8px;
 }
 
+.worker-toggle__play {
+  fill: currentColor !important;
+  stroke: none !important;
+}
+
+.worker-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 header-usage {
   display: block;
   min-width: 0;

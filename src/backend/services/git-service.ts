@@ -22,6 +22,22 @@ export interface PublishedBranch {
 export interface BranchSnapshot {
   currentBranch: string;
   localBranches: string[];
+  primaryBranch: string;
+  primaryCommits: BranchCommit[];
+  branchRelations: Record<string, BranchRelation>;
+}
+
+export interface BranchCommit {
+  sha: string;
+  shortSha: string;
+  summary: string;
+  committedAt: string;
+}
+
+export interface BranchRelation {
+  forkCommit: BranchCommit;
+  ahead: number;
+  behind: number;
 }
 
 export class GitCommandError extends AppError {
@@ -276,10 +292,56 @@ export class GitService {
     if (branches.exitCode !== 0) {
       throw new GitCommandError(`Unable to list repository branches: ${formatFailure(branches)}`, branches);
     }
-    return {
-      currentBranch,
-      localBranches: branches.stdout.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean),
-    };
+    const localBranches = branches.stdout.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean);
+    const primaryBranch = localBranches.includes('main')
+      ? 'main'
+      : localBranches.includes('master') ? 'master' : currentBranch;
+    if (localBranches.length === 0) {
+      return {
+        currentBranch,
+        localBranches,
+        primaryBranch,
+        primaryCommits: [],
+        branchRelations: {},
+      };
+    }
+    const primaryLog = await this.runGit(
+      repositoryRoot,
+      ['log', primaryBranch, '--max-count=12', '--format=%H%x1f%h%x1f%s%x1f%cI'],
+      undefined,
+      true,
+    );
+    if (primaryLog.exitCode !== 0) {
+      throw new GitCommandError(`Unable to inspect ${primaryBranch} history: ${formatFailure(primaryLog)}`, primaryLog);
+    }
+    const primaryCommits = parseBranchCommits(primaryLog.stdout).reverse();
+    const branchRelations: Record<string, BranchRelation> = {};
+    await Promise.all(localBranches.filter((branch) => branch !== primaryBranch).map(async (branch) => {
+      const mergeBase = await this.runGit(repositoryRoot, ['merge-base', primaryBranch, branch], undefined, true);
+      const counts = await this.runGit(
+        repositoryRoot,
+        ['rev-list', '--left-right', '--count', `${primaryBranch}...${branch}`],
+        undefined,
+        true,
+      );
+      if (mergeBase.exitCode !== 0 || counts.exitCode !== 0) return;
+      const forkLog = await this.runGit(
+        repositoryRoot,
+        ['show', '-s', '--format=%H%x1f%h%x1f%s%x1f%cI', mergeBase.stdout.trim()],
+        undefined,
+        true,
+      );
+      const forkCommit = parseBranchCommits(forkLog.stdout)[0];
+      const [behindText, aheadText] = counts.stdout.trim().split(/\s+/u);
+      if (forkLog.exitCode === 0 && forkCommit !== undefined) {
+        branchRelations[branch] = {
+          forkCommit,
+          ahead: Number.parseInt(aheadText ?? '0', 10),
+          behind: Number.parseInt(behindText ?? '0', 10),
+        };
+      }
+    }));
+    return { currentBranch, localBranches, primaryBranch, primaryCommits, branchRelations };
   }
 
   /** Removes a task branch after merge verification, or force-removes explicitly rejected work. */
@@ -407,6 +469,15 @@ export class GitService {
     }
     return result;
   }
+}
+
+function parseBranchCommits(output: string): BranchCommit[] {
+  return output.split(/\r?\n/u).filter(Boolean).flatMap((line) => {
+    const [sha, shortSha, summary, committedAt] = line.split('\x1f');
+    return sha !== undefined && shortSha !== undefined && summary !== undefined && committedAt !== undefined
+      ? [{ sha, shortSha, summary, committedAt }]
+      : [];
+  });
 }
 
 export function requireCanonicalCommitSummary(summary: string): string {

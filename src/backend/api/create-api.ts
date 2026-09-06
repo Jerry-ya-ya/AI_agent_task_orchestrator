@@ -13,6 +13,8 @@ export interface ApiDependencies {
   workerStatus: () => WorkerStatus;
   agentUsage: () => Promise<AgentUsage>;
   cancelTask?: (taskId: number) => Promise<boolean>;
+  pauseWorker?: () => WorkerStatus;
+  resumeWorker?: () => WorkerStatus;
 }
 
 const idSchema = z.coerce.number().int().positive();
@@ -83,6 +85,14 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   app.post('/projects', async (request, response) => {
     const created = await dependencies.projectService.create(projectInput.parse(request.body));
     response.status(201).json(created);
+  });
+
+  app.post('/worker/pause', (_request, response) => {
+    response.json(dependencies.pauseWorker?.() ?? dependencies.workerStatus());
+  });
+
+  app.post('/worker/resume', (_request, response) => {
+    response.json(dependencies.resumeWorker?.() ?? dependencies.workerStatus());
   });
 
   app.get('/features', (request, response) => {

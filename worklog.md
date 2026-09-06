@@ -63,3 +63,5 @@
 - feat: group tasks by shared Feature branches and add a graphical branch history page.
 
 - fix: generate unique Feature branch names and report duplicate conflicts clearly.
+
+- feat: add a header play-pause control for gating Worker task claims.

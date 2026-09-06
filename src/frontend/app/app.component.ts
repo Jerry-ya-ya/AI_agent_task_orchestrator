@@ -162,6 +162,23 @@ export class AppComponent implements OnInit, OnDestroy {
     void window.desktopWindow?.minimize?.();
   }
 
+  async toggleWorkerDispatch(): Promise<void> {
+    if (this.workerStatus === null || !this.workerStatus.running) return;
+    this.clearError();
+    try {
+      this.workerStatus = await firstValueFrom(
+        this.workerStatus.paused ? this.api.resumeWorker() : this.api.pauseWorker(),
+      );
+      this.showNotice(this.workerStatus.paused
+        ? 'Worker paused. No new tasks will be claimed.'
+        : 'Worker resumed. Todo tasks may now be claimed.');
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.changeDetector.markForCheck();
+    }
+  }
+
   selectPage(page: AppPage): void {
     this.activePage = page;
     if (page === 'features') void this.refreshBranchMap();

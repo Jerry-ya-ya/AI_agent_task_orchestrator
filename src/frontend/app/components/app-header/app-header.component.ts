@@ -24,6 +24,7 @@ export class AppHeaderComponent {
 
   @Output() createProject = new EventEmitter<void>();
   @Output() createTask = new EventEmitter<void>();
+  @Output() workerToggled = new EventEmitter<void>();
   @Output() minimizeApplication = new EventEmitter<void>();
   @Output() closeApplication = new EventEmitter<void>();
 
@@ -31,6 +32,11 @@ export class AppHeaderComponent {
     if (!this.connected) return 'Worker unknown';
     if (this.workerStatus === null) return 'Worker status unavailable';
     if (!this.workerStatus.running) return 'Worker stopped';
+    if (this.workerStatus.paused) {
+      return this.workerStatus.busy && this.workerStatus.activeTaskId !== null
+        ? `Finishing task #${this.workerStatus.activeTaskId}`
+        : 'Worker paused';
+    }
     if (!this.workerStatus.agentAvailable) return 'Agent unavailable';
     if (this.workerStatus.busy) {
       return this.workerStatus.activeTaskId === null
@@ -50,5 +56,9 @@ export class AppHeaderComponent {
 
   workerWarning(): boolean {
     return Boolean(this.workerStatus && (!this.workerStatus.agentAvailable || !this.workerStatus.running));
+  }
+
+  workerPaused(): boolean {
+    return this.workerStatus?.paused ?? false;
   }
 }
