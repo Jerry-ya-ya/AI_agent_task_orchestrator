@@ -1,17 +1,33 @@
 <section class="feature-map" aria-labelledby="feature-map-title">
   <header class="feature-map__heading">
-    <div><p class="eyebrow">Repository delivery map</p><h2 id="feature-map-title">Features and branches</h2><p>Feature tasks share one branch and publish in sequence. Missing branches appear in monochrome.</p></div>
+    <div><p class="eyebrow">Repository delivery map</p><h2 id="feature-map-title">Features and branches</h2><p>Follow each colored line from its main-branch fork point through its task history. Rebasing keeps the Feature color on matching main commits.</p></div>
     <button class="button button--primary" type="button" (click)="createFeature.emit()">＋ New feature</button>
   </header>
   <div class="feature-map__loading" *ngIf="loading">Inspecting local repositories…</div>
   <div class="feature-project" *ngFor="let map of maps">
     <header class="feature-project__header"><div><h3>{{ map.project.name }}</h3><code>{{ map.project.repository_path }}</code></div><span>Current: {{ map.current_branch || 'unavailable' }}</span></header>
-    <div class="branch-lanes" *ngIf="map.branches.length > 0; else noBranches">
-      <article class="branch-lane" *ngFor="let lane of map.branches" [class.branch-lane--missing]="!lane.exists">
+    <div class="branch-lanes" *ngIf="featureLanes(map).length > 0; else noBranches" [style.--network-width]="networkWidth(map) + 'px'">
+      <div class="main-lane">
+        <div class="main-lane__identity"><span class="main-lane__mark"></span><div><strong>{{ map.primary_branch || 'main' }}</strong><small>Primary branch</small></div></div>
+        <div class="main-graph">
+          <span class="main-graph__line" aria-hidden="true"></span>
+          <div class="main-commit" *ngFor="let commit of orderedPrimaryCommits(map)" [title]="commit.summary">
+            <span class="main-commit__dot" [class.main-commit__dot--owned]="commitFeatureColors(map, commit.summary).length > 0" [style.background]="mainCommitFill(map, commit.summary)"></span>
+            <code>{{ commit.short_sha }}</code><strong>{{ commit.summary }}</strong>
+            <span class="main-commit__colors" *ngIf="commitFeatureColors(map, commit.summary).length > 0" aria-label="Feature colors now present on main"><i *ngFor="let color of commitFeatureColors(map, commit.summary)" [style.background]="color"></i></span>
+            <span class="main-commit__forks" *ngIf="forkFeatureColors(map, commit.sha).length > 0" aria-label="Feature branches fork here"><i *ngFor="let color of forkFeatureColors(map, commit.sha)" [style.background]="color"></i></span>
+          </div>
+          <span class="branch-empty" *ngIf="map.primary_commits.length === 0">No main history available</span>
+        </div>
+      </div>
+      <article class="branch-lane" *ngFor="let lane of featureLanes(map); let laneIndex = index" [class.branch-lane--missing]="!lane.exists" [style.--branch-color]="branchColor(laneIndex)">
         <div class="branch-lane__identity"><span class="branch-state-dot" [class.branch-state-dot--current]="lane.is_current"></span><div><strong>{{ lane.feature?.name || lane.name }}</strong><code>{{ lane.name }}</code></div><span class="branch-badge">{{ lane.exists ? (lane.is_current ? 'current' : 'local') : 'not created' }}</span></div>
-        <div class="branch-graph">
-          <svg aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 100 24"><path d="M0 12H100" /></svg>
-          <span class="branch-origin" [class.branch-origin--highlighted]="highlightStart(lane)" title="Feature branch start"></span>
+        <div class="branch-graph" [style.--fork-offset]="forkOffset(map, lane) + 'px'" [style.--connector-top]="connectorTop(laneIndex) + 'px'" [style.--connector-height]="connectorHeight(laneIndex) + 'px'">
+          <span class="branch-graph__elbow" aria-hidden="true"></span>
+          <div class="branch-fork" [title]="'Forked from ' + forkLabel(lane, map)">
+            <span class="branch-origin" [class.branch-origin--highlighted]="highlightStart(lane)"></span>
+            <small>from {{ forkLabel(lane, map) }}</small>
+          </div>
           <button class="branch-task-node" type="button" *ngFor="let task of lane.tasks" [attr.data-status]="task.status" [class.branch-task-node--checkpoint]="isCheckpoint(lane, task)" [title]="task.commit_summary || task.title" (click)="taskOpened.emit(task.id)">
             <span class="branch-task-node__dot"></span><strong>#{{ task.id }} {{ task.title }}</strong><small>{{ statusLabel(task.status) }}</small>
           </button>

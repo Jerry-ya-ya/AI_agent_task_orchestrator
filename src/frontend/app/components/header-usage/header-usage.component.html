@@ -10,8 +10,8 @@
   <span class="header-usage__name">Codex</span>
   <span class="header-usage__status" *ngIf="usage === null">Checking…</span>
   <span class="header-usage__status" *ngIf="usage !== null && !usage.available">Unavailable</span>
-  <span class="header-usage__window" *ngFor="let window of usageWindows()">
-    <small>{{ windowLabel(window) }}</small>
+  <span class="header-usage__window" *ngFor="let window of usageWindows()" [class.header-usage__window--with-reset]="isFiveHourWindow(window) && window.resetsAt !== null">
+    <small><span>{{ windowLabel(window) }}</span><ng-container *ngIf="isFiveHourWindow(window)"><time *ngIf="resetDate(window) as resetAt" [attr.datetime]="resetAt.toISOString()">↻ {{ resetAt | date: 'MM/dd HH:mm' }}</time></ng-container></small>
     <strong>{{ window.remainingPercent }}%</strong>
     <span class="header-usage__meter" role="meter" aria-label="Codex remaining usage" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="window.remainingPercent">
       <i [style.width.%]="window.remainingPercent"></i>

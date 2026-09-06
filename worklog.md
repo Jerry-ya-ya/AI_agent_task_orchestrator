@@ -69,3 +69,5 @@
 ## 2026/09/06
 
 - feat: rebase Feature branches onto main before fast-forwarding and pushing main.
+
+- feat: show precise Codex reset timing and render synchronized, color-coded Feature branch history with continuous fork connections.

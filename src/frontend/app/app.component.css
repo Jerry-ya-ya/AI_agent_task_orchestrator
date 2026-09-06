@@ -330,11 +330,27 @@ header-usage {
   align-items: baseline;
 }
 
+.header-usage__window--with-reset {
+  min-width: 105px;
+}
+
 .header-usage__window small {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
   color: #8f9aa6;
   font-size: 8px;
   font-weight: 700;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.header-usage__window small time {
+  color: #aeb8c4;
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .header-usage__window strong {
@@ -1593,10 +1609,17 @@ header-usage {
   font-size: 10px;
 }
 
+.branch-lanes {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.main-lane,
 .branch-lane {
   display: grid;
+  width: var(--network-width);
   grid-template-columns: 220px minmax(0, 1fr);
-  min-height: 112px;
+  height: 126px;
   border-bottom: 1px solid #edf0f2;
   transition: filter 140ms ease, opacity 140ms ease;
 }
@@ -1610,11 +1633,42 @@ header-usage {
   opacity: 0.52;
 }
 
+.main-lane__identity,
 .branch-lane__identity {
   justify-content: flex-start;
   padding: 16px 18px;
   border-right: 1px solid #e5e8eb;
   background: #f8fafc;
+}
+
+.main-lane__identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f2f5f8;
+}
+
+.main-lane__identity strong,
+.main-lane__identity small {
+  display: block;
+}
+
+.main-lane__identity strong {
+  font-size: 12px;
+}
+
+.main-lane__identity small {
+  margin-top: 3px;
+  color: #7b8590;
+  font-size: 9px;
+}
+
+.main-lane__mark {
+  width: 13px;
+  height: 13px;
+  border: 3px solid #303946;
+  border-radius: 50%;
+  background: #fff;
 }
 
 .branch-lane__identity > div {
@@ -1635,14 +1689,13 @@ header-usage {
   width: 10px;
   height: 10px;
   flex: 0 0 auto;
-  border: 2px solid #8e98a3;
+  border: 3px solid var(--branch-color, #8e98a3);
   border-radius: 50%;
   background: #fff;
 }
 
 .branch-state-dot--current {
-  border-color: #3977d4;
-  box-shadow: 0 0 0 4px rgba(57, 119, 212, 0.13);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--branch-color, #3977d4) 18%, transparent);
 }
 
 .branch-badge {
@@ -1655,37 +1708,147 @@ header-usage {
   white-space: nowrap;
 }
 
+.main-graph,
 .branch-graph {
   display: flex;
   position: relative;
   min-width: 0;
   align-items: center;
-  gap: 18px;
-  padding: 18px 24px;
-  overflow-x: auto;
+  gap: 24px;
+  padding: 20px 28px;
+  overflow: visible;
 }
 
-.branch-graph > svg {
+.main-graph__line {
   position: absolute;
   z-index: 0;
-  top: 42px;
-  right: 20px;
-  left: 20px;
-  width: calc(100% - 40px);
-  height: 24px;
-  fill: none;
-  stroke: #c9d2dc;
-  stroke-width: 2;
+  top: 47px;
+  right: 28px;
+  left: 28px;
+  height: 3px;
+  border-radius: 999px;
+  background: #46515e;
+}
+
+.main-commit {
+  display: grid;
+  z-index: 1;
+  position: relative;
+  width: 132px;
+  min-width: 132px;
+  grid-template-rows: 25px auto auto 5px;
+  justify-items: center;
+  text-align: center;
+}
+
+.main-commit__dot {
+  width: 17px;
+  height: 17px;
+  border: 3px solid #46515e;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 0 0 3px #fff;
+}
+
+.main-commit__dot--owned {
+  border-color: #fff;
+  outline: 2px solid #46515e;
+}
+
+.main-commit code {
+  color: #697581;
+  font-size: 8px;
+}
+
+.main-commit strong {
+  overflow: hidden;
+  width: 100%;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.main-commit__colors {
+  display: flex;
+  gap: 2px;
+  margin-top: 5px;
+}
+
+.main-commit__colors i {
+  width: 16px;
+  height: 3px;
+  border-radius: 999px;
+}
+
+.main-commit__forks {
+  display: flex;
+  position: absolute;
+  top: 54px;
+  gap: 3px;
+}
+
+.main-commit__forks i {
+  width: 4px;
+  height: 13px;
+  border-radius: 0 0 999px 999px;
+}
+
+.branch-graph {
+  padding-left: 28px;
+}
+
+.branch-graph::after {
+  position: absolute;
+  z-index: 0;
+  top: 47px;
+  right: 28px;
+  left: calc(94px + var(--fork-offset, 0px));
+  height: 3px;
+  border-radius: 999px;
+  background: var(--branch-color);
+  content: '';
+}
+
+.branch-graph__elbow {
+  position: absolute;
+  z-index: 0;
+  top: var(--connector-top, -79px);
+  left: calc(93px + var(--fork-offset, 0px));
+  width: 26px;
+  height: var(--connector-height, 128px);
+  border-bottom: 3px solid var(--branch-color);
+  border-left: 3px solid var(--branch-color);
+  border-bottom-left-radius: 16px;
+}
+
+.branch-fork {
+  display: grid;
+  z-index: 1;
+  width: 132px;
+  min-width: 132px;
+  margin-left: var(--fork-offset, 0px);
+  grid-template-rows: 25px auto;
+  justify-items: center;
+  text-align: center;
 }
 
 .branch-origin {
-  z-index: 1;
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
-  border: 3px solid #6f7d8c;
+  border: 3px solid var(--branch-color);
   border-radius: 50%;
   background: #fff;
+}
+
+.branch-fork small {
+  overflow: hidden;
+  width: 100%;
+  color: #697581;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .branch-origin--highlighted,
@@ -1711,7 +1874,7 @@ header-usage {
 .branch-task-node__dot {
   width: 16px;
   height: 16px;
-  border: 3px solid #3977d4;
+  border: 3px solid var(--branch-color);
   border-radius: 50%;
   background: #fff;
   transition: transform 120ms ease;

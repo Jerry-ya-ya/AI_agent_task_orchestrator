@@ -26,6 +26,14 @@ export class HeaderUsageComponent {
     return `${minutes}m`;
   }
 
+  isFiveHourWindow(window: AgentUsageWindow): boolean {
+    return window.windowDurationMins === 300;
+  }
+
+  resetDate(window: AgentUsageWindow): Date | null {
+    return window.resetsAt === null ? null : new Date(window.resetsAt * 1_000);
+  }
+
   statusTitle(): string {
     if (this.usage === null) return 'Checking Codex usage';
     if (!this.usage.available) return this.usage.message || 'Codex usage unavailable';
