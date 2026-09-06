@@ -72,8 +72,7 @@ For a production-UI browser smoke test, set `ORCHESTRATOR_UI_PATH=dist/frontend/
    Use the header pause/play control to stop or resume new task claims. Pausing lets the current task finish and prevents the next `TODO` task from starting.
 5. Open task cards to inspect branch, workspace, result, stdout, stderr, and all run attempts.
 6. Approve an `IN_REVIEW` task to move it to `PENDING_PUSH`.
-7. Confirm push to publish the shared Feature branch to `origin` and move that task checkpoint to `DONE`. Retry a `FAILED` task after reviewing its logs.
-8. Merge the completed Feature branch into the desired base branch manually when the Feature is ready as a whole.
+7. Confirm push to rebase the shared Feature branch onto `main`, fast-forward `main`, push `main` to `origin`, and move the task checkpoint to `DONE`. Retry a `FAILED` task after reviewing its logs.
 
 For a Feature titled `Login API`, the generated branch is:
 
@@ -108,6 +107,6 @@ Automated tests do not invoke real Codex or consume an authenticated session.
 - Codex runs with workspace-write sandboxing and approval policy `never`; it receives the prompt over stdin.
 - Logs are capped by the process runner before they are persisted.
 - Deleting an inactive task removes its database record and run history but deliberately leaves shared Feature history in Git intact.
-- Approval changes state only. A separate explicit confirmation runs `git push --set-upstream origin feature/<slug>` using the user's existing Git credentials.
-- Feature branches are not merged into the base branch or removed automatically. Existing legacy per-task branches retain their prior merge and cleanup flow.
+- Approval changes state only. A separate explicit confirmation rebases `feature/<slug>` onto `main`, fast-forwards `main`, and pushes `main` to `origin` using the user's existing Git credentials.
+- Rebase conflicts are aborted without force-pushing. Feature branches remain local for later tasks; existing legacy per-task branches retain their prior merge and cleanup flow.
 - No accounts, cloud sync, LAN binding, multi-user features, parallel workers, DAGs, notifications, remote access, PR automation, or GitHub API integration are included.

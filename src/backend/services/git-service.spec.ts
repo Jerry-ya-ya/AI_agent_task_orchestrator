@@ -87,7 +87,7 @@ describe('GitService', () => {
     await expect(service.removeTaskBranch(repository, prepared.branchName, 'main')).resolves.toBe(false);
   });
 
-  it('reuses and pushes a shared feature branch without merging it into main', async () => {
+  it('rebases a shared feature branch onto main, fast-forwards main, and pushes main', async () => {
     const { repository, runner } = await temporaryRepository();
     const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-feature-remote-'));
     temporaryPaths.push(remote);
@@ -105,18 +105,36 @@ describe('GitService', () => {
     await writeFile(path.join(repository, 'feature.txt'), 'first task\n');
     await service.completeBranch(firstRun, firstTask.id, 'feat: start authentication.');
 
+    await writeFile(path.join(repository, 'main-only.txt'), 'new main work\n');
+    await git(runner, repository, ['add', 'main-only.txt']);
+    await git(runner, repository, [
+      '-c', 'user.name=Test User',
+      '-c', 'user.email=test@example.invalid',
+      'commit', '-m', 'feat: advance main'
+    ]);
+
     const secondRun = await service.prepareBranch({ ...firstTask, id: 102 }, repository);
     expect((await readFile(path.join(repository, 'feature.txt'), 'utf8')).trim()).toBe('first task');
     await writeFile(path.join(repository, 'second.txt'), 'second task\n');
     await service.completeBranch(secondRun, 102, 'feat: finish authentication.');
-    await service.pushFeatureBranch(repository, 'feature/authentication');
+    await expect(service.publishFeatureBranch(repository, 'feature/authentication', 'main'))
+      .resolves.toEqual({ baseBranch: 'main' });
 
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
-    expect(await gitExitCode(runner, repository, ['cat-file', '-e', 'main:feature.txt'])).toBe(128);
+    expect((await git(runner, repository, ['show', 'main:feature.txt'])).trim()).toBe('first task');
+    expect((await git(runner, repository, ['show', 'main:second.txt'])).trim()).toBe('second task');
     expect((await git(runner, repository, [
-      '--git-dir', remote, 'show', 'feature/authentication:second.txt'
+      '--git-dir', remote, 'show', 'main:second.txt'
     ])).trim()).toBe('second task');
-  });
+    expect(await gitExitCode(runner, repository, [
+      '--git-dir', remote, 'show-ref', '--verify', '--quiet', 'refs/heads/feature/authentication'
+    ])).toBe(1);
+    expect((await git(runner, repository, ['rev-parse', 'main'])).trim())
+      .toBe((await git(runner, repository, ['rev-parse', 'feature/authentication'])).trim());
+
+    await expect(service.publishFeatureBranch(repository, 'feature/authentication', 'main'))
+      .resolves.toEqual({ baseBranch: 'main' });
+  }, 20_000);
 
   it('refuses to remove an unmerged task branch', async () => {
     const { repository, runner } = await temporaryRepository();
@@ -138,6 +156,36 @@ describe('GitService', () => {
       'show-ref', '--verify', '--quiet', `refs/heads/${prepared.branchName}`
     ])).toBe(1);
   });
+
+  it('aborts a conflicting feature rebase and leaves main unpushed', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-conflict-remote-'));
+    temporaryPaths.push(remote);
+    await git(runner, remote, ['init', '--bare']);
+    await git(runner, repository, ['remote', 'add', 'origin', remote]);
+    const service = new GitService(runner);
+    const task = { ...exampleTask(), branch_name: 'feature/conflict', base_branch: 'main' };
+
+    const prepared = await service.prepareBranch(task, repository);
+    await writeFile(path.join(repository, 'README.md'), 'feature version\n');
+    await service.completeBranch(prepared, task.id, 'feat: change README on feature.');
+    await writeFile(path.join(repository, 'README.md'), 'main version\n');
+    await git(runner, repository, ['add', 'README.md']);
+    await git(runner, repository, [
+      '-c', 'user.name=Test User',
+      '-c', 'user.email=test@example.invalid',
+      'commit', '-m', 'feat: change README on main'
+    ]);
+
+    await expect(service.publishFeatureBranch(repository, 'feature/conflict', 'main'))
+      .rejects.toThrow('Unable to rebase feature/conflict onto main');
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
+    expect((await readFile(path.join(repository, 'README.md'), 'utf8')).trim()).toBe('main version');
+    expect(await gitExitCode(runner, repository, ['rev-parse', '--verify', 'REBASE_HEAD'])).toBe(128);
+    expect(await gitExitCode(runner, repository, [
+      '--git-dir', remote, 'show-ref', '--verify', '--quiet', 'refs/heads/main'
+    ])).toBe(1);
+  }, 20_000);
 
   it('turns unsafe or non-ASCII-only titles into safe deterministic slugs', () => {
     expect(slugifyTaskTitle('../../ Login API; rm -rf')).toBe('login-api-rm-rf');

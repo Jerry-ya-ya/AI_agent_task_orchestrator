@@ -19,7 +19,7 @@ describe('TaskService state rules', () => {
   let service: TaskService;
   let project: Project;
   let publishBranch: ReturnType<typeof vi.fn>;
-  let pushFeatureBranch: ReturnType<typeof vi.fn>;
+  let publishFeatureBranch: ReturnType<typeof vi.fn>;
   let removeTaskBranch: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -29,9 +29,9 @@ describe('TaskService state rules', () => {
     tasks = new TaskRepository(database, runs);
     features = new FeatureRepository(database);
     publishBranch = vi.fn(async () => ({ baseBranch: 'main' }));
-    pushFeatureBranch = vi.fn(async () => undefined);
+    publishFeatureBranch = vi.fn(async () => ({ baseBranch: 'main' }));
     removeTaskBranch = vi.fn(async () => true);
-    const git = { publishBranch, pushFeatureBranch, removeTaskBranch } as unknown as GitService;
+    const git = { publishBranch, publishFeatureBranch, removeTaskBranch } as unknown as GitService;
     service = new TaskService(tasks, projects, runs, git, features);
     project = projects.create({
       name: 'Example',
@@ -263,7 +263,7 @@ describe('TaskService state rules', () => {
     service.approve(task.id);
 
     await expect(service.push(task.id)).resolves.toMatchObject({ status: 'DONE' });
-    expect(pushFeatureBranch).toHaveBeenCalledWith('/example', 'feature/search');
+    expect(publishFeatureBranch).toHaveBeenCalledWith('/example', 'feature/search', 'main');
     expect(publishBranch).not.toHaveBeenCalled();
     await expect(service.removeBranch(task.id)).rejects.toThrow(ConflictError);
   });

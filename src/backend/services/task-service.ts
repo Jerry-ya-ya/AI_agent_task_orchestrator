@@ -174,9 +174,13 @@ export class TaskService {
     }
 
     if (task.feature_id !== null && task.feature_id !== undefined) {
-      await this.git.pushFeatureBranch(project.repository_path, task.branch_name);
+      await this.git.publishFeatureBranch(
+        project.repository_path,
+        task.branch_name,
+        'main'
+      );
       const completed = this.tasks.transition(id, 'PENDING_PUSH', 'DONE');
-      if (completed === null) throw new ConflictError('Task state changed while its feature branch was pushed.');
+      if (completed === null) throw new ConflictError('Task state changed while its feature branch was published.');
       return completed;
     }
 

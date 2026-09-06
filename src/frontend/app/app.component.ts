@@ -462,9 +462,9 @@ export class AppComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const baseBranch = task.base_branch || 'the current base branch';
+    const baseBranch = task.feature_id ? 'main' : (task.base_branch || 'the current base branch');
     const confirmed = window.confirm(task.feature_id
-      ? `Push “${task.title}” to the shared feature branch ${task.branch_name}?`
+      ? `Rebase ${task.branch_name} onto ${baseBranch}, fast-forward ${baseBranch}, and push ${baseBranch} to origin?`
       : `Merge “${task.title}” into ${baseBranch} and push it to origin?`);
     if (!confirmed) {
       return;
@@ -475,7 +475,7 @@ export class AppComponent implements OnInit, OnDestroy {
     try {
       await firstValueFrom(this.api.pushTask(task.id));
       this.showNotice(task.feature_id
-        ? `“${task.title}” published to ${task.branch_name}.`
+        ? `“${task.title}” rebased and published through ${baseBranch}.`
         : `“${task.title}” pushed; branch cleanup is awaiting approval.`);
       await this.refreshBoard(false);
     } catch (error: unknown) {

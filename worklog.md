@@ -65,3 +65,7 @@
 - fix: generate unique Feature branch names and report duplicate conflicts clearly.
 
 - feat: add a header play-pause control for gating Worker task claims.
+
+## 2026/09/06
+
+- feat: rebase Feature branches onto main before fast-forwarding and pushing main.

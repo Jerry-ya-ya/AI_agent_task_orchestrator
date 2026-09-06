@@ -125,7 +125,7 @@ TODO --atomic claim--> CLAIMED --> IN_PROGRESS --> TESTING --> IN_REVIEW
 
 The header pause/play control is an in-memory dispatch gate. Pause never cancels active Codex work; it prevents the Worker from claiming another task after the active pipeline finishes. Resume wakes the polling loop immediately.
 
-Approving a Feature task moves it to `PENDING_PUSH`; it does not touch Git. Confirm push is a separate user action that pushes the shared Feature branch directly to `origin` and marks that task checkpoint `DONE`. The Feature branch remains available for its following tasks and is merged into the base branch manually when the Feature is complete. Legacy tasks with no Feature retain the earlier per-task merge and explicit branch-cleanup path.
+Approving a Feature task moves it to `PENDING_PUSH`; it does not touch Git. Confirm push is a separate user action that rebases the shared Feature branch onto `main`, fast-forwards `main`, and pushes `main` to `origin` before marking that task checkpoint `DONE`. A rebase conflict is aborted and leaves the task in `PENDING_PUSH`; force-push is never used. The local Feature branch remains available for following tasks. Legacy tasks with no Feature retain the earlier per-task merge and explicit branch-cleanup path.
 
 On application restart, orphaned `CLAIMED`, `IN_PROGRESS`, and `TESTING` tasks are marked `FAILED` rather than silently rerun. A user can then inspect logs and explicitly retry.
 

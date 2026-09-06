@@ -262,22 +262,71 @@ export class GitService {
     return { baseBranch };
   }
 
-  /** Pushes a shared feature branch without merging it into the base branch. */
-  public async pushFeatureBranch(repositoryPath: string, featureBranch: string): Promise<void> {
+  /** Rebases a shared feature branch onto its base, fast-forwards the base, then pushes the base. */
+  public async publishFeatureBranch(
+    repositoryPath: string,
+    featureBranch: string,
+    baseBranch = 'main'
+  ): Promise<PublishedBranch> {
     const repositoryRoot = await this.validateRepository(repositoryPath);
     await this.requireCleanCheckout(repositoryRoot);
+    const currentBranch = await this.currentBranch(repositoryRoot);
+    if (currentBranch !== baseBranch) {
+      throw new ConflictError(
+        `Repository must be on ${baseBranch} before publishing ${featureBranch}; it is on ${currentBranch}.`
+      );
+    }
     if (!/^feature\//u.test(featureBranch) || !await this.localBranchExists(repositoryRoot, featureBranch)) {
       throw new ConflictError(`Feature branch is missing or unmanaged: ${featureBranch}`);
     }
-    const pushed = await this.runGit(
+
+    const switchedToFeature = await this.runGit(
       repositoryRoot,
-      ['push', '--set-upstream', 'origin', featureBranch],
+      ['switch', featureBranch],
       undefined,
       true,
     );
-    if (pushed.exitCode !== 0) {
-      throw new GitCommandError(`Unable to push feature branch ${featureBranch}: ${formatFailure(pushed)}`, pushed);
+    if (switchedToFeature.exitCode !== 0) {
+      throw new GitCommandError(`Unable to switch to feature branch ${featureBranch}: ${formatFailure(switchedToFeature)}`, switchedToFeature);
     }
+
+    const rebased = await this.runGit(repositoryRoot, ['rebase', baseBranch], undefined, true);
+    if (rebased.exitCode !== 0) {
+      const aborted = await this.runGit(repositoryRoot, ['rebase', '--abort'], undefined, true);
+      await this.runGit(repositoryRoot, ['switch', baseBranch], undefined, true);
+      const abortDetail = aborted.exitCode === 0 ? '' : ` Rebase abort also failed: ${formatFailure(aborted)}`;
+      throw new GitCommandError(
+        `Unable to rebase ${featureBranch} onto ${baseBranch}: ${formatFailure(rebased)}${abortDetail}`,
+        rebased,
+      );
+    }
+
+    const switchedToBase = await this.runGit(repositoryRoot, ['switch', baseBranch], undefined, true);
+    if (switchedToBase.exitCode !== 0) {
+      throw new GitCommandError(`Unable to return to ${baseBranch}: ${formatFailure(switchedToBase)}`, switchedToBase);
+    }
+
+    const fastForwarded = await this.runGit(
+      repositoryRoot,
+      ['merge', '--ff-only', featureBranch],
+      undefined,
+      true,
+    );
+    if (fastForwarded.exitCode !== 0) {
+      throw new GitCommandError(
+        `Unable to fast-forward ${baseBranch} to ${featureBranch}: ${formatFailure(fastForwarded)}`,
+        fastForwarded,
+      );
+    }
+
+    const pushed = await this.runGit(repositoryRoot, ['push', 'origin', baseBranch], undefined, true);
+    if (pushed.exitCode !== 0) {
+      throw new GitCommandError(
+        `${baseBranch} was updated locally, but could not be pushed to origin: ${formatFailure(pushed)}`,
+        pushed,
+      );
+    }
+    return { baseBranch };
   }
 
   public async inspectBranches(repositoryPath: string): Promise<BranchSnapshot> {
