@@ -43,6 +43,9 @@ const featureInput = z.object({
   project_id: z.number().int().positive(),
   name: z.string().min(1).max(200)
 }).strict();
+const branchOrderInput = z.object({
+  branch_names: z.array(z.string().min(1).max(255)).max(500)
+}).strict();
 const reviewRetryInput = z.object({
   prompt: z.string().min(1).max(100_000)
 }).strict();
@@ -107,6 +110,13 @@ export function createApi(dependencies: ApiDependencies): express.Express {
 
   app.get('/branches', async (_request, response) => {
     response.json(await dependencies.featureService?.branchMap() ?? []);
+  });
+
+  app.put('/projects/:id/branches/order', async (request, response) => {
+    if (dependencies.featureService === undefined) throw new AppError('Feature service is unavailable.', 503, 'UNAVAILABLE');
+    const projectId = idSchema.parse(request.params.id);
+    await dependencies.featureService.reorderBranches(projectId, branchOrderInput.parse(request.body).branch_names);
+    response.sendStatus(204);
   });
 
   app.get('/tasks', (request, response) => {

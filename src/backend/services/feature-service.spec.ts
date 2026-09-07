@@ -64,6 +64,18 @@ describe('FeatureService', () => {
     expect(firstChineseFeature.branch_name).toBe('feature/task');
     expect(secondChineseFeature.branch_name).toMatch(/^feature\/task-[a-f0-9]{8}$/u);
     expect(secondChineseFeature.branch_name).not.toBe(firstChineseFeature.branch_name);
+
+    await service.reorderBranches(project.id, [
+      secondChineseFeature.branch_name,
+      feature.branch_name,
+      firstChineseFeature.branch_name,
+    ]);
+    const [reorderedMap] = await service.branchMap();
+    expect(reorderedMap?.branches
+      .filter((branch) => !branch.is_primary)
+      .sort((left, right) => (left.display_order ?? 999) - (right.display_order ?? 999))
+      .map((branch) => branch.name))
+      .toEqual([secondChineseFeature.branch_name, feature.branch_name, firstChineseFeature.branch_name]);
   });
 
   it('generates a stable fallback when normalized branch names collide', () => {

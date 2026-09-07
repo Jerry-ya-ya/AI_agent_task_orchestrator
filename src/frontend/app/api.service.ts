@@ -95,6 +95,12 @@ export class ApiService {
     return this.http.get<ProjectBranchMap[]>(`${this.baseUrl}/branches`);
   }
 
+  saveBranchOrder(projectId: number, branchNames: readonly string[]): Observable<void> {
+    return this.http.put<void>(`${this.baseUrl}/projects/${projectId}/branches/order`, {
+      branch_names: branchNames,
+    });
+  }
+
   getTasks(): Observable<Task[]> {
     return this.http.get<Task[]>(`${this.baseUrl}/tasks`);
   }

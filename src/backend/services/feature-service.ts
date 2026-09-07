@@ -36,6 +36,23 @@ export class FeatureService {
     return this.features.create({ project_id: project.id, name }, branchName, snapshot.currentBranch);
   }
 
+  public async reorderBranches(projectId: number, branchNames: readonly string[]): Promise<void> {
+    const project = this.projects.findById(projectId);
+    if (project === null) throw new NotFoundError(`Project ${projectId} was not found.`);
+    const snapshot = await this.git.inspectBranches(project.repository_path);
+    const primaryBranch = snapshot.primaryBranch ?? snapshot.currentBranch;
+    const available = new Set([
+      ...snapshot.localBranches,
+      ...this.features.list(projectId).map((feature) => feature.branch_name),
+    ].filter((name) => name !== primaryBranch));
+    const requested = new Set(branchNames);
+    if (requested.size !== branchNames.length || requested.size !== available.size
+      || [...requested].some((name) => !available.has(name))) {
+      throw new ValidationError('Branch order must contain every non-primary branch exactly once.');
+    }
+    this.features.saveBranchOrder(projectId, branchNames);
+  }
+
   public async branchMap(): Promise<ProjectBranchMap[]> {
     const allTasks = this.tasks.list();
     const allFeatures = this.features.list();
@@ -56,6 +73,7 @@ export class FeatureService {
         // A missing repository is represented by monochrome lanes instead of failing the whole map.
       }
       const projectFeatures = allFeatures.filter((feature) => feature.project_id === project.id);
+      const displayOrder = this.features.branchOrder(project.id);
       const names = new Set([...localBranches, ...projectFeatures.map((feature) => feature.branch_name)]);
       const branches: BranchLane[] = [...names].sort((a, b) => a.localeCompare(b)).map((name) => {
         const feature = projectFeatures.find((item) => item.branch_name === name) ?? null;
@@ -69,6 +87,7 @@ export class FeatureService {
           fork_commit: branchRelations[name] === undefined
             ? null
             : toDomainCommit(branchRelations[name].forkCommit),
+          display_order: displayOrder.get(name) ?? null,
           feature,
           tasks: feature === null ? [] : allTasks
             .filter((task) => task.feature_id === feature.id)

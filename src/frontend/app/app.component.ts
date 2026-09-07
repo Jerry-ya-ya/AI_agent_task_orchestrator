@@ -309,13 +309,16 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  openFeatureEditor(): void {
+  openFeatureEditor(projectId?: number): void {
     if (this.projects.length === 0) {
       this.openProjectEditor();
       return;
     }
     this.clearError();
     this.featureDraft = this.emptyFeatureDraft();
+    if (projectId !== undefined && this.projects.some((project) => project.id === projectId)) {
+      this.featureDraft.project_id = projectId;
+    }
     this.showFeatureEditor = true;
     this.activateModal();
   }
@@ -338,6 +341,18 @@ export class AppComponent implements OnInit, OnDestroy {
     } finally {
       this.saving = false;
       this.changeDetector.markForCheck();
+    }
+  }
+
+  async saveBranchOrder(change: { projectId: number; branchNames: string[] }): Promise<void> {
+    this.clearError();
+    try {
+      await firstValueFrom(this.api.saveBranchOrder(change.projectId, change.branchNames));
+      await this.refreshBranchMap();
+      this.showNotice('Branch order saved.');
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+      await this.refreshBranchMap();
     }
   }
 

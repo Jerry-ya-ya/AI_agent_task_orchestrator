@@ -96,6 +96,16 @@ describe('backend API', () => {
 
     expect(first.body.branch_name).toBe('feature/task');
     expect(second.body.branch_name).toMatch(/^feature\/task-[a-f0-9]{8}$/u);
+    await request(app).put(`/projects/${project.body.id}/branches/order`).send({
+      branch_names: [second.body.branch_name, first.body.branch_name],
+    }).expect(204);
+    await request(app).get('/branches').expect(200).expect((response) => {
+      const featureBranches = response.body[0].branches
+        .filter((branch: { feature: unknown }) => branch.feature !== null)
+        .sort((left: { display_order: number }, right: { display_order: number }) => left.display_order - right.display_order);
+      expect(featureBranches.map((branch: { name: string }) => branch.name))
+        .toEqual([second.body.branch_name, first.body.branch_name]);
+    });
     await request(app).post('/features').send({
       project_id: project.body.id,
       name: '成就系統',

@@ -143,6 +143,7 @@ export interface BranchLane {
   ahead: number | null;
   behind: number | null;
   fork_commit: BranchCommit | null;
+  display_order?: number | null;
   feature: Feature | null;
   tasks: BranchTaskHistory[];
 }

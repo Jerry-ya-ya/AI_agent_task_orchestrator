@@ -22,7 +22,7 @@
       </ng-container>
       <ng-container *ngSwitchCase="'features'">
         <div class="alert alert--error" role="alert" *ngIf="apiError"><span aria-hidden="true">!</span><p>{{ apiError }}</p><button type="button" aria-label="Dismiss error" (click)="apiError = ''">×</button></div>
-        <feature-map [maps]="branchMaps" [loading]="branchMapRefreshInFlight" (createFeature)="openFeatureEditor()" (taskOpened)="openTaskDetailById($event)" />
+        <feature-map [maps]="branchMaps" [loading]="branchMapRefreshInFlight" (createFeature)="openFeatureEditor($event)" (taskOpened)="openTaskDetailById($event)" (branchOrderChanged)="saveBranchOrder($event)" />
       </ng-container>
       <ng-container *ngSwitchCase="'history'">
         <div class="alert alert--error" role="alert" *ngIf="apiError"><span aria-hidden="true">!</span><p>{{ apiError }}</p><button type="button" aria-label="Dismiss error" (click)="apiError = ''">×</button></div>

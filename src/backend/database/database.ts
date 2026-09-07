@@ -24,6 +24,14 @@ const SCHEMA = `
     UNIQUE(project_id, branch_name)
   );
 
+  CREATE TABLE IF NOT EXISTS branch_display_order (
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    branch_name TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (project_id, branch_name),
+    UNIQUE (project_id, position)
+  );
+
   CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,

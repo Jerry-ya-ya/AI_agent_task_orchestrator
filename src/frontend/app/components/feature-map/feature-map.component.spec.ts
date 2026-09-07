@@ -64,6 +64,24 @@ describe('FeatureMapComponent', () => {
 
     expect(component.featureLanes(map).map((item) => item.feature?.id)).toEqual([2, 1]);
   });
+
+  it('emits a complete manual order when a branch moves', () => {
+    const component = new FeatureMapComponent();
+    const older = lane(1, '2026-09-01T00:00:00.000Z');
+    const younger = lane(2, '2026-09-06T00:00:00.000Z');
+    const map = { project: { id: 9, name: 'Project', repository_path: 'C:/repo', context: null, created_at: '', updated_at: '' }, current_branch: 'main', primary_branch: 'main', primary_commits: [], branches: [older, younger] };
+    let emitted: { projectId: number; branchNames: string[] } | undefined;
+    component.branchOrderChanged.subscribe((value) => { emitted = value; });
+
+    component.moveBranch(map, older, -1);
+
+    expect(emitted).toEqual({ projectId: 9, branchNames: ['feature/1', 'feature/2'] });
+
+    const manuallyOrdered = [{ ...older, display_order: 0 }, { ...younger, display_order: 1 }];
+    const newest = lane(3, '2026-09-07T00:00:00.000Z');
+    expect(component.featureLanes({ ...map, branches: [...manuallyOrdered, newest] }).map((item) => item.name))
+      .toEqual(['feature/3', 'feature/1', 'feature/2']);
+  });
 });
 
 function commit(sha: string, summary: string) {

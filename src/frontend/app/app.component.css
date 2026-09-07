@@ -1604,9 +1604,21 @@ header-usage {
   font-size: 9px;
 }
 
-.feature-project__header > span {
+.feature-project__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.feature-project__actions > span {
   color: #67717c;
   font-size: 10px;
+}
+
+.feature-project__actions .button {
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 9px;
 }
 
 .branch-lanes {
@@ -1635,8 +1647,10 @@ header-usage {
 
 .main-lane__identity,
 .branch-lane__identity {
+  position: relative;
   justify-content: flex-start;
-  padding: 16px 18px;
+  gap: 10px;
+  padding: 25px 18px 12px;
   border-right: 1px solid #e5e8eb;
   background: #f8fafc;
 }
@@ -1645,6 +1659,7 @@ header-usage {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 16px 18px;
   background: #f2f5f8;
 }
 
@@ -1699,6 +1714,9 @@ header-usage {
 }
 
 .branch-badge {
+  position: absolute;
+  top: 7px;
+  right: 10px;
   padding: 3px 6px;
   border-radius: 999px;
   background: #e8edf3;
@@ -1706,6 +1724,35 @@ header-usage {
   font-size: 8px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.branch-order-actions {
+  display: flex;
+  flex: 0 0 auto !important;
+  gap: 3px;
+}
+
+.branch-order-actions button {
+  width: 23px;
+  height: 23px;
+  padding: 0;
+  border: 1px solid #d4dae1;
+  border-radius: 6px;
+  background: #fff;
+  color: #56616d;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.branch-order-actions button:hover:not(:disabled) {
+  border-color: var(--branch-color);
+  color: var(--branch-color);
+}
+
+.branch-order-actions button:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 .main-graph,
@@ -1736,7 +1783,10 @@ header-usage {
   position: relative;
   width: 132px;
   min-width: 132px;
-  grid-template-rows: 25px auto auto 5px;
+  height: 86px;
+  grid-template-rows: 18px 17px auto;
+  align-content: start;
+  align-items: center;
   justify-items: center;
   text-align: center;
 }
@@ -1766,31 +1816,6 @@ header-usage {
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.main-commit__colors {
-  display: flex;
-  gap: 2px;
-  margin-top: 5px;
-}
-
-.main-commit__colors i {
-  width: 16px;
-  height: 3px;
-  border-radius: 999px;
-}
-
-.main-commit__forks {
-  display: flex;
-  position: absolute;
-  top: 54px;
-  gap: 3px;
-}
-
-.main-commit__forks i {
-  width: 4px;
-  height: 13px;
-  border-radius: 0 0 999px 999px;
 }
 
 .branch-graph {

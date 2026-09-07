@@ -39,4 +39,22 @@ export class FeatureRepository {
       throw error;
     }
   }
+
+  public branchOrder(projectId: number): Map<string, number> {
+    const rows = this.database.connection.prepare(`
+      SELECT branch_name, position FROM branch_display_order
+      WHERE project_id = ? ORDER BY position
+    `).all(projectId) as Array<{ branch_name: string; position: number }>;
+    return new Map(rows.map((row) => [row.branch_name, row.position]));
+  }
+
+  public saveBranchOrder(projectId: number, branchNames: readonly string[]): void {
+    this.database.transaction(() => {
+      this.database.connection.prepare('DELETE FROM branch_display_order WHERE project_id = ?').run(projectId);
+      const insert = this.database.connection.prepare(`
+        INSERT INTO branch_display_order (project_id, branch_name, position) VALUES (?, ?, ?)
+      `);
+      branchNames.forEach((name, position) => insert.run(projectId, name, position));
+    });
+  }
 }

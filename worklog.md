@@ -71,3 +71,7 @@
 - feat: rebase Feature branches onto main before fast-forwarding and pushing main.
 
 - feat: show precise Codex reset timing and render synchronized, color-coded Feature branch history with continuous fork connections.
+
+## 2026/09/07
+
+- feat: refine Feature maps with persistent branch ordering, clean main connectors, and project-scoped Feature creation controls.
