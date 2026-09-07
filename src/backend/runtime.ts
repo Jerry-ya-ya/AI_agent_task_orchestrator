@@ -110,6 +110,8 @@ export class OrchestratorRuntime {
     const address = this.server.address() as AddressInfo;
     this.baseUrlValue = `http://127.0.0.1:${address.port}`;
     this.started = true;
+    // The renderer restores the persisted dispatch preference before allowing claims.
+    this.worker.pause();
     this.worker.start();
     return this.baseUrlValue;
   }

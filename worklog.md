@@ -75,3 +75,5 @@
 ## 2026/09/07
 
 - feat: refine Feature maps with persistent branch ordering, clean main connectors, and project-scoped Feature creation controls.
+
+- fix: preserve Worker dispatch state across restarts and return interrupted tasks to paused Todo.

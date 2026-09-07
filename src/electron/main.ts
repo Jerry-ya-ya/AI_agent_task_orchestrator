@@ -46,7 +46,9 @@ if (!app.requestSingleInstanceLock()) {
       const uiPath = resolve(currentDirectory, '../../frontend/browser');
       runtime = new OrchestratorRuntime({
         databasePath: join(app.getPath('userData'), 'data', 'orchestrator.sqlite'),
-        uiPath
+        uiPath,
+        // Keep the packaged renderer origin stable so its localStorage persists across launches.
+        port: process.env['ORCHESTRATOR_DEV_URL'] === undefined ? 4317 : 0
       });
       const apiUrl = await runtime.start();
       await createWindow(apiUrl);

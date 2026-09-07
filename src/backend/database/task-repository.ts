@@ -315,6 +315,15 @@ export class TaskRepository {
     return result.changes > 0 ? this.findById(id) : null;
   }
 
+  public requeueAfterShutdown(id: number): Task | null {
+    const result = this.database.connection.prepare(`
+      UPDATE tasks
+      SET status = 'TODO', is_paused = 1, updated_at = ?
+      WHERE id = ? AND status IN ('CLAIMED', 'IN_PROGRESS', 'TESTING')
+    `).run(this.clock(), id);
+    return result.changes > 0 ? this.findById(id) : null;
+  }
+
   public recoverInterrupted(): number {
     return this.database.transaction(() => {
       const now = this.clock();
@@ -329,19 +338,19 @@ export class TaskRepository {
       const placeholders = taskIds.map(() => '?').join(', ');
       const taskResult = this.database.connection.prepare(`
         UPDATE tasks
-        SET status = 'FAILED', updated_at = ?
+        SET status = 'TODO', is_paused = 1, updated_at = ?
         WHERE id IN (${placeholders})
       `).run(now, ...taskIds);
       this.database.connection.prepare(`
         UPDATE task_runs
         SET finished_at = ?, exit_code = 130,
             stderr = stderr || ?,
-            result_summary = 'Application stopped before the task pipeline completed.'
+            result_summary = 'Application stopped; task returned to paused TODO.'
         WHERE finished_at IS NULL
           AND task_id IN (${placeholders})
       `).run(
         now,
-        '\n[orchestrator] Interrupted during application shutdown or restart.\n',
+        '\n[orchestrator] Interrupted during shutdown; task returned to paused TODO.\n',
         ...taskIds
       );
       return Number(taskResult.changes);

@@ -238,12 +238,19 @@ export class TaskWorker {
     } catch (error) {
       const failure = this.normalizeFailure(error, signal);
       exitCode = failure.exitCode;
-      summary = failure.message;
+      const stoppedDuringShutdown = signal.aborted && this.stopRequested;
+      summary = stoppedDuringShutdown
+        ? 'Application stopped; task returned to paused TODO.'
+        : failure.message;
       if (failure.stdout.length > 0 || failure.stderr.length > 0) {
         this.runs.appendOutput(claimed.run_id, failure.stdout, failure.stderr);
       }
-      this.runs.appendOutput(claimed.run_id, '', `[orchestrator] ${failure.message}\n`);
-      this.tasks.transition(claimed.id, ['CLAIMED', 'IN_PROGRESS', 'TESTING'], 'FAILED');
+      this.runs.appendOutput(claimed.run_id, '', `[orchestrator] ${summary}\n`);
+      if (stoppedDuringShutdown) {
+        this.tasks.requeueAfterShutdown(claimed.id);
+      } else {
+        this.tasks.transition(claimed.id, ['CLAIMED', 'IN_PROGRESS', 'TESTING'], 'FAILED');
+      }
     } finally {
       this.runs.finish(claimed.run_id, exitCode, summary);
     }

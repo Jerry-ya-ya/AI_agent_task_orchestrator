@@ -105,7 +105,8 @@ describe('AppComponent initialization', () => {
       getFeatures: vi.fn(() => of([])),
       getTasks: vi.fn(() => of([task])),
       getHealth: vi.fn(() => of({ ok: true, worker })),
-      getAgentUsage: vi.fn(() => of(usage))
+      getAgentUsage: vi.fn(() => of(usage)),
+      resumeWorker: vi.fn(() => of(worker))
     } as unknown as ApiService;
     const markForCheck = vi.fn();
     const changeDetector = { markForCheck } as unknown as ChangeDetectorRef;
@@ -124,7 +125,43 @@ describe('AppComponent initialization', () => {
       expect(component.loading).toBe(false);
       expect(component.connected).toBe(true);
       expect(markForCheck).toHaveBeenCalled();
+      expect(api.resumeWorker).toHaveBeenCalledOnce();
     });
+  });
+
+  it('restores and updates the Worker pause preference from local storage', async () => {
+    const values = new Map<string, string>([['agentboard.workerPaused', 'true']]);
+    const storage = {
+      getItem: vi.fn((key: string) => values.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => values.set(key, value)),
+    };
+    vi.stubGlobal('localStorage', storage);
+    const pausedWorker: WorkerStatus = {
+      running: true, paused: true, busy: false, activeTaskId: null,
+      agentAvailable: true, message: 'Worker paused.'
+    };
+    const resumedWorker: WorkerStatus = { ...pausedWorker, paused: false, message: 'Worker idle.' };
+    const api = {
+      baseUrl: 'http://127.0.0.1:4317',
+      pauseWorker: vi.fn(() => of(pausedWorker)),
+      resumeWorker: vi.fn(() => of(resumedWorker)),
+      getProjects: vi.fn(() => of([])),
+      getFeatures: vi.fn(() => of([])),
+      getTasks: vi.fn(() => of([])),
+      getHealth: vi.fn(() => of({ ok: true, worker: pausedWorker })),
+      getAgentUsage: vi.fn(() => of(null)),
+    } as unknown as ApiService;
+    vi.spyOn(globalThis, 'setInterval').mockReturnValue(1 as unknown as ReturnType<typeof setInterval>);
+    const component = new AppComponent(api, { markForCheck: vi.fn() } as unknown as ChangeDetectorRef);
+
+    component.ngOnInit();
+    await vi.waitFor(() => expect(api.pauseWorker).toHaveBeenCalledOnce());
+    component.connected = true;
+    component.workerStatus = pausedWorker;
+    await component.toggleWorkerDispatch();
+
+    expect(api.resumeWorker).toHaveBeenCalledOnce();
+    expect(storage.setItem).toHaveBeenCalledWith('agentboard.workerPaused', 'false');
   });
 
   it('shows only completed and failed tasks in newest-first history order', () => {

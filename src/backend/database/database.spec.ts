@@ -101,6 +101,26 @@ describe('OrchestratorDatabase schema', () => {
     expect(runs.listForTask(task.id)).toEqual([]);
   });
 
+  it('recovers an abruptly interrupted task as paused TODO', () => {
+    database = new OrchestratorDatabase(':memory:');
+    const projects = new ProjectRepository(database);
+    const runs = new TaskRunRepository(database);
+    const tasks = new TaskRepository(database, runs);
+    const project = projects.create({ name: 'Example', repository_path: '/example', context: '' });
+    const task = tasks.create({ project_id: project.id, title: 'Resume later', description: '', priority: 'MEDIUM' });
+    const claimed = tasks.claimNext();
+    expect(claimed?.id).toBe(task.id);
+    expect(tasks.transition(task.id, 'CLAIMED', 'IN_PROGRESS')?.status).toBe('IN_PROGRESS');
+
+    expect(tasks.recoverInterrupted()).toBe(1);
+
+    expect(tasks.findById(task.id)).toMatchObject({ status: 'TODO', is_paused: true });
+    expect(runs.listForTask(task.id)[0]).toMatchObject({
+      exit_code: 130,
+      result_summary: 'Application stopped; task returned to paused TODO.'
+    });
+  });
+
   it('migrates earlier databases and restores unpushed DONE branches to PENDING_PUSH', async () => {
     const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'orchestrator-migrate-'));
     const databasePath = path.join(temporaryRoot, 'legacy.sqlite');

@@ -294,6 +294,43 @@ describe('TaskWorker', () => {
     expect(worker.getStatus()).toMatchObject({ busy: false, activeTaskId: null });
   });
 
+  it('returns an active task to paused TODO during application shutdown', async () => {
+    const task = createTask('Continue after restart');
+    const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
+      branchName: `feature/${claimed.id}-continue-after-restart`,
+      workspacePath: project.repository_path,
+      originalBranch: 'main'
+    }));
+    const executeAgent = vi.fn(async (
+      _task: Task,
+      _workspace: string,
+      signal: AbortSignal
+    ): Promise<AgentExecutionResult> => await new Promise((resolve) => {
+      signal.addEventListener('abort', () => resolve({
+        exitCode: 130,
+        stdout: 'Partial work remains on the branch.\n',
+        stderr: '',
+        timedOut: false,
+        aborted: true,
+        summary: 'Task interrupted.'
+      }), { once: true });
+    }));
+    const { worker } = createWorker(prepareBranch, executeAgent, async () => successfulTests());
+
+    worker.start();
+    await vi.waitFor(() => expect(worker.getStatus()).toMatchObject({
+      busy: true, activeTaskId: task.id
+    }));
+    await worker.stop();
+
+    expect(tasks.findById(task.id)).toMatchObject({ status: 'TODO', is_paused: true });
+    expect(runs.listForTask(task.id)[0]).toMatchObject({
+      exit_code: 130,
+      result_summary: 'Application stopped; task returned to paused TODO.'
+    });
+    expect(runs.listForTask(task.id)[0]?.stderr).toContain('task returned to paused TODO');
+  });
+
   function createTask(title: string): Task {
     return tasks.create({
       project_id: project.id,

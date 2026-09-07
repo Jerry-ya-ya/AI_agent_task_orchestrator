@@ -40,6 +40,7 @@ import {
 } from './models';
 
 type TaskEditorMode = 'create' | 'edit';
+const WORKER_PAUSED_STORAGE_KEY = 'agentboard.workerPaused';
 
 const STATUS_COLUMNS: readonly StatusColumn[] = [
   { status: 'TODO', label: 'Todo', hint: 'Waiting for the worker' },
@@ -126,8 +127,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    void this.refreshBoard(false);
-    void this.refreshAgentUsage();
+    void this.initializeDashboard();
     this.pollingTimer = setInterval(() => {
       void this.refreshBoard(true);
     }, 2_000);
@@ -169,6 +169,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.workerStatus = await firstValueFrom(
         this.workerStatus.paused ? this.api.resumeWorker() : this.api.pauseWorker(),
       );
+      this.storeWorkerDispatchPreference(Boolean(this.workerStatus.paused));
       this.showNotice(this.workerStatus.paused
         ? 'Worker paused. No new tasks will be claimed.'
         : 'Worker resumed. Todo tasks may now be claimed.');
@@ -711,6 +712,11 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  private async initializeDashboard(): Promise<void> {
+    await this.restoreWorkerDispatchPreference();
+    await Promise.all([this.refreshBoard(false), this.refreshAgentUsage()]);
+  }
+
   private async refreshAgentUsage(): Promise<void> {
     if (this.usageRefreshInFlight) {
       return;
@@ -731,6 +737,34 @@ export class AppComponent implements OnInit, OnDestroy {
     } finally {
       this.usageRefreshInFlight = false;
       this.changeDetector.markForCheck();
+    }
+  }
+
+  private async restoreWorkerDispatchPreference(): Promise<void> {
+    const paused = this.readWorkerDispatchPreference() ?? false;
+    try {
+      this.workerStatus = await firstValueFrom(paused ? this.api.pauseWorker() : this.api.resumeWorker());
+    } catch {
+      // Regular health polling will report a backend that is still starting or unavailable.
+    } finally {
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  private readWorkerDispatchPreference(): boolean | null {
+    try {
+      const stored = globalThis.localStorage?.getItem(WORKER_PAUSED_STORAGE_KEY);
+      return stored === 'true' ? true : stored === 'false' ? false : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private storeWorkerDispatchPreference(paused: boolean): void {
+    try {
+      globalThis.localStorage?.setItem(WORKER_PAUSED_STORAGE_KEY, String(paused));
+    } catch {
+      // The current session still works when storage is unavailable.
     }
   }
 
