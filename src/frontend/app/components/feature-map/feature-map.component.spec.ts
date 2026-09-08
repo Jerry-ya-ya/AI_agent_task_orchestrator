@@ -5,6 +5,13 @@ import type { BranchLane } from '../../models';
 import { FeatureMapComponent } from './feature-map.component';
 
 describe('FeatureMapComponent', () => {
+  it('tracks refreshed project maps by project id', () => {
+    const component = new FeatureMapComponent();
+    const map = { project: { id: 12 } } as Parameters<FeatureMapComponent['trackProject']>[1];
+
+    expect(component.trackProject(0, map)).toBe(12);
+  });
+
   it('places the youngest feature directly below main', () => {
     const component = new FeatureMapComponent();
     const older = lane(1, '2026-09-01T00:00:00.000Z');
@@ -12,7 +19,9 @@ describe('FeatureMapComponent', () => {
     const primary = { ...lane(3, '2026-08-01T00:00:00.000Z'), is_primary: true };
     const map = { project: { id: 1, name: 'Project', repository_path: 'C:/repo', context: null, created_at: '', updated_at: '' }, current_branch: 'main', primary_branch: 'main', primary_commits: [], branches: [older, primary, younger] };
 
-    expect(component.featureLanes(map).map((item) => item.feature?.id)).toEqual([2, 1]);
+    const sortedLanes = component.featureLanes(map);
+    expect(sortedLanes.map((item) => item.feature?.id)).toEqual([2, 1]);
+    expect(component.featureLanes(map)).toBe(sortedLanes);
   });
 
   it('emits a complete manual order when a branch moves', () => {

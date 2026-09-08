@@ -791,6 +791,11 @@ header-usage {
   background: #197c83;
 }
 
+[data-status='REBASE_CONFLICT'] .status-indicator {
+  border-color: #d06b28;
+  background: #d06b28;
+}
+
 [data-status='PENDING_BRANCH_REMOVAL'] .status-indicator {
   border-color: #47748f;
   background: #47748f;
@@ -963,6 +968,11 @@ header-usage {
 .status-chip[data-status='PENDING_PUSH'] {
   background: #e0f4f4;
   color: #176d73;
+}
+
+.status-chip[data-status='REBASE_CONFLICT'] {
+  background: #fff0e4;
+  color: #a84e17;
 }
 
 .status-chip[data-status='PENDING_BRANCH_REMOVAL'] {

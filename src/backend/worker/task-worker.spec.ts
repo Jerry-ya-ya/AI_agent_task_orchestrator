@@ -104,6 +104,35 @@ describe('TaskWorker', () => {
     expect(worker.getStatus()).toMatchObject({ busy: false, activeTaskId: null });
   });
 
+  it('lets Codex resolve each controlled Feature rebase conflict round before testing', async () => {
+    const task = createTask('Resolve rebase conflicts');
+    expect(tasks.transition(task.id, 'TODO', 'REBASE_CONFLICT')).not.toBeNull();
+    expect(tasks.queueRebaseResolution(task.id, 'high')).toMatchObject({ agent_mode: 'rebase_resolution' });
+    const prepareBranch = vi.fn(async (): Promise<PreparedBranch> => ({
+      branchName: 'feature/conflicted', workspacePath: project.repository_path, originalBranch: 'main',
+    }));
+    const executeAgent = vi.fn(async () => successfulAgent('Resolve Feature rebase conflicts.'));
+    const { worker, beginFeatureRebase, continueFeatureRebase, abortFeatureRebase } = createWorker(
+      prepareBranch,
+      executeAgent,
+      async () => successfulTests(),
+    );
+    beginFeatureRebase.mockResolvedValueOnce(false);
+    continueFeatureRebase.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    await expect(worker.processNext()).resolves.toBe(true);
+
+    expect(beginFeatureRebase).toHaveBeenCalledWith(
+      project.repository_path, 'feature/conflicted', 'main', expect.any(AbortSignal),
+    );
+    expect(executeAgent).toHaveBeenCalledTimes(2);
+    expect(continueFeatureRebase).toHaveBeenCalledTimes(2);
+    expect(abortFeatureRebase).not.toHaveBeenCalled();
+    expect(tasks.findById(task.id)).toMatchObject({
+      status: 'IN_REVIEW', agent_mode: 'implementation', commit_summary: null,
+    });
+  });
+
   it('marks an agent failure FAILED and can immediately process the next TODO task', async () => {
     const first = createTask('First task');
     const second = createTask('Second task');
@@ -344,9 +373,20 @@ describe('TaskWorker', () => {
     prepareBranch: (task: Task) => Promise<PreparedBranch>,
     executeAgent: (task: Task) => Promise<AgentExecutionResult>,
     executeTests: () => Promise<TestExecutionResult>
-  ): { worker: TaskWorker; completeBranch: ReturnType<typeof vi.fn> } {
+  ): {
+    worker: TaskWorker;
+    completeBranch: ReturnType<typeof vi.fn>;
+    beginFeatureRebase: ReturnType<typeof vi.fn>;
+    continueFeatureRebase: ReturnType<typeof vi.fn>;
+    abortFeatureRebase: ReturnType<typeof vi.fn>;
+  } {
     const completeBranch = vi.fn(async () => true);
-    const git = { prepareBranch, completeBranch } as unknown as GitService;
+    const beginFeatureRebase = vi.fn(async () => true);
+    const continueFeatureRebase = vi.fn(async () => true);
+    const abortFeatureRebase = vi.fn(async () => undefined);
+    const git = {
+      prepareBranch, completeBranch, beginFeatureRebase, continueFeatureRebase, abortFeatureRebase,
+    } as unknown as GitService;
     const agent: AgentExecutor = {
       checkAvailability: async () => ({ available: true, message: 'Codex CLI is available.' }),
       execute: executeAgent
@@ -354,7 +394,10 @@ describe('TaskWorker', () => {
     const testService = { execute: executeTests } as unknown as TestService;
     return {
       worker: new TaskWorker(tasks, runs, git, agent, testService, { pollIntervalMs: 1 }),
-      completeBranch
+      completeBranch,
+      beginFeatureRebase,
+      continueFeatureRebase,
+      abortFeatureRebase,
     };
   }
 });

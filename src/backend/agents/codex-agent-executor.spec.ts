@@ -81,6 +81,19 @@ describe('CodexAgentExecutor', () => {
     );
   });
 
+  it('limits rebase-resolution agents to editing the orchestrator-managed conflict files', () => {
+    const prompt = buildCodexPrompt({
+      ...exampleTask(),
+      branch_name: 'feature/authentication',
+      agent_mode: 'rebase_resolution',
+    });
+
+    expect(prompt).toContain('Rebase conflict resolution:');
+    expect(prompt).toContain('resolve every conflicted file while preserving the intent of both sides');
+    expect(prompt).toContain('Do not run git add, commit, rebase --continue, or rebase --abort');
+    expect(prompt).not.toContain('the orchestrator creates the checkpoint commit');
+  });
+
   it('extracts the final agent message from JSONL', () => {
     const result = successResult(
       [
@@ -187,6 +200,7 @@ function exampleTask(): Task {
     status: 'IN_PROGRESS',
     priority: 'HIGH',
     model_effort: 'medium',
+    agent_mode: 'implementation',
     retry_prompt: null,
     branch_name: 'agent/101-add-login-api',
     worktree_path: null,

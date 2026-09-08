@@ -11,6 +11,7 @@ import { CytoscapeBranchGraphComponent } from '../cytoscape-branch-graph/cytosca
 })
 export class FeatureMapComponent {
   private readonly branchColors = ['#3977d4', '#9b59b6', '#df7b24', '#199b83', '#d34f74', '#6876d8', '#4f8f31', '#b65f42'];
+  private readonly laneCache = new WeakMap<ProjectBranchMap, BranchLane[]>();
 
   @Input({ required: true }) maps: readonly ProjectBranchMap[] = [];
   @Input({ required: true }) loading = false;
@@ -22,12 +23,20 @@ export class FeatureMapComponent {
     return this.branchColors[index % this.branchColors.length]!;
   }
 
+  trackProject(_index: number, map: ProjectBranchMap): number {
+    return map.project.id;
+  }
+
   featureLanes(map: ProjectBranchMap): BranchLane[] {
+    const cached = this.laneCache.get(map);
+    if (cached !== undefined) return cached;
     const lanes = map.branches.filter((lane) => !lane.is_primary);
     const hasManualOrder = lanes.some((lane) => lane.display_order !== null && lane.display_order !== undefined);
-    return lanes.sort((left, right) => hasManualOrder
+    lanes.sort((left, right) => hasManualOrder
       ? this.manualBranchComparison(left, right)
       : this.defaultBranchComparison(left, right));
+    this.laneCache.set(map, lanes);
+    return lanes;
   }
 
   moveBranch(map: ProjectBranchMap, lane: BranchLane, offset: -1 | 1): void {
@@ -35,8 +44,9 @@ export class FeatureMapComponent {
     const currentIndex = lanes.findIndex((item) => item.name === lane.name);
     const destination = currentIndex + offset;
     if (currentIndex < 0 || destination < 0 || destination >= lanes.length) return;
-    [lanes[currentIndex], lanes[destination]] = [lanes[destination]!, lanes[currentIndex]!];
-    this.branchOrderChanged.emit({ projectId: map.project.id, branchNames: lanes.map((item) => item.name) });
+    const reordered = [...lanes];
+    [reordered[currentIndex], reordered[destination]] = [reordered[destination]!, reordered[currentIndex]!];
+    this.branchOrderChanged.emit({ projectId: map.project.id, branchNames: reordered.map((item) => item.name) });
   }
 
   canMoveBranch(map: ProjectBranchMap, lane: BranchLane, offset: -1 | 1): boolean {

@@ -41,8 +41,18 @@ export interface BranchRelation {
 }
 
 export class GitCommandError extends AppError {
-  public constructor(message: string, public readonly result: ProcessResult) {
-    super(message, 409, 'GIT_ERROR');
+  public constructor(message: string, public readonly result: ProcessResult, code = 'GIT_ERROR') {
+    super(message, 409, code);
+  }
+}
+
+export class RebaseConflictError extends GitCommandError {
+  public constructor(
+    message: string,
+    result: ProcessResult,
+    public readonly conflictedFiles: readonly string[],
+  ) {
+    super(message, result, 'REBASE_CONFLICT');
   }
 }
 
@@ -179,6 +189,57 @@ export class GitService {
     return hasChanges;
   }
 
+  /** Starts a controlled Feature rebase, leaving conflict files available for the agent. */
+  public async beginFeatureRebase(
+    workspacePath: string,
+    featureBranch: string,
+    baseBranch: string,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    const current = await this.currentBranch(workspacePath, signal);
+    if (current !== featureBranch || !/^feature\//u.test(featureBranch)) {
+      throw new ConflictError(`Rebase resolution requires the managed Feature branch ${featureBranch} to be checked out.`);
+    }
+    const rebased = await this.runGit(workspacePath, ['rebase', baseBranch], signal, true);
+    if (rebased.exitCode === 0) return true;
+    if ((await this.rebaseConflictFiles(workspacePath, signal)).length > 0) return false;
+    throw new GitCommandError(
+      `Unable to start rebase of ${featureBranch} onto ${baseBranch}: ${formatFailure(rebased)}`,
+      rebased,
+    );
+  }
+
+  /** Stages files resolved by the agent and advances one rebase step. */
+  public async continueFeatureRebase(workspacePath: string, signal?: AbortSignal): Promise<boolean> {
+    const markerCheck = await this.runGit(workspacePath, ['diff', '--check'], signal, true);
+    if (markerCheck.exitCode !== 0) {
+      throw new GitCommandError(
+        `Conflict markers remain in the agent's rebase resolution: ${formatFailure(markerCheck)}`,
+        markerCheck,
+      );
+    }
+    const staged = await this.runGit(workspacePath, ['add', '--all'], signal, true);
+    if (staged.exitCode !== 0) {
+      throw new GitCommandError(`Unable to stage resolved rebase files: ${formatFailure(staged)}`, staged);
+    }
+    const continued = await this.runGit(
+      workspacePath,
+      ['-c', 'core.editor=true', 'rebase', '--continue'],
+      signal,
+      true,
+    );
+    if (continued.exitCode === 0) return true;
+    if ((await this.rebaseConflictFiles(workspacePath, signal)).length > 0) return false;
+    throw new GitCommandError(`Unable to continue the Feature rebase: ${formatFailure(continued)}`, continued);
+  }
+
+  public async abortFeatureRebase(workspacePath: string): Promise<void> {
+    const aborted = await this.runGit(workspacePath, ['rebase', '--abort'], undefined, true);
+    if (aborted.exitCode !== 0) {
+      throw new GitCommandError(`Unable to abort the Feature rebase safely: ${formatFailure(aborted)}`, aborted);
+    }
+  }
+
   /** Merges an approved task branch into its base branch and pushes that branch to origin. */
   public async publishBranch(
     repositoryPath: string,
@@ -286,11 +347,24 @@ export class GitService {
 
     const rebased = await this.runGit(repositoryRoot, ['rebase', baseBranch], undefined, true);
     if (rebased.exitCode !== 0) {
+      const conflictedFiles = await this.rebaseConflictFiles(repositoryRoot);
       const aborted = await this.runGit(repositoryRoot, ['rebase', '--abort'], undefined, true);
-      await this.runGit(repositoryRoot, ['switch', baseBranch], undefined, true);
-      const abortDetail = aborted.exitCode === 0 ? '' : ` Rebase abort also failed: ${formatFailure(aborted)}`;
+      if (aborted.exitCode !== 0) {
+        throw new GitCommandError(`Rebase failed and could not be aborted safely: ${formatFailure(aborted)}`, aborted);
+      }
+      const switchedBack = await this.runGit(repositoryRoot, ['switch', baseBranch], undefined, true);
+      if (switchedBack.exitCode !== 0) {
+        throw new GitCommandError(`Rebase was aborted, but Git could not return to ${baseBranch}: ${formatFailure(switchedBack)}`, switchedBack);
+      }
+      if (conflictedFiles.length > 0) {
+        throw new RebaseConflictError(
+          `Rebase conflict detected in ${conflictedFiles.join(', ')} while rebasing ${featureBranch} onto ${baseBranch}.`,
+          rebased,
+          conflictedFiles,
+        );
+      }
       throw new GitCommandError(
-        `Unable to rebase ${featureBranch} onto ${baseBranch}: ${formatFailure(rebased)}${abortDetail}`,
+        `Unable to rebase ${featureBranch} onto ${baseBranch}: ${formatFailure(rebased)}`,
         rebased,
       );
     }
@@ -490,6 +564,18 @@ export class GitService {
     if (result.exitCode === 0) return true;
     if (result.exitCode === 1) return false;
     throw new GitCommandError(`Unable to inspect branch ${branchName}: ${formatFailure(result)}`, result);
+  }
+
+  private async rebaseConflictFiles(repositoryPath: string, signal?: AbortSignal): Promise<string[]> {
+    const conflicts = await this.runGit(
+      repositoryPath,
+      ['diff', '--name-only', '--diff-filter=U'],
+      signal,
+      true,
+    );
+    return conflicts.exitCode === 0
+      ? conflicts.stdout.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean)
+      : [];
   }
 
   private async runGit(

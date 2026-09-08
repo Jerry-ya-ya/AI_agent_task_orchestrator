@@ -5,6 +5,7 @@ export const TASK_STATUSES = [
   'TESTING',
   'IN_REVIEW',
   'PENDING_PUSH',
+  'REBASE_CONFLICT',
   'PENDING_BRANCH_REMOVAL',
   'DONE',
   'REJECTED',
@@ -17,6 +18,7 @@ export const MODEL_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 export type ModelEffort = (typeof MODEL_EFFORTS)[number];
+export type AgentMode = 'implementation' | 'rebase_resolution';
 
 export interface StatusColumn {
   status: TaskStatus;
@@ -100,6 +102,7 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   model_effort: ModelEffort;
+  agent_mode: AgentMode;
   retry_prompt: string | null;
   branch_name: string | null;
   worktree_path: string | null;

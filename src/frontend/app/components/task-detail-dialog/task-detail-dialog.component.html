@@ -10,6 +10,7 @@
         <button *ngIf="current.status === 'IN_REVIEW'" class="button button--approve" type="button" [disabled]="pending" (click)="approveRequested.emit(current)">{{ pending ? 'Approving…' : 'Approve task' }}</button>
         <button *ngIf="current.status === 'PENDING_BRANCH_REMOVAL'" class="button button--cleanup" type="button" [disabled]="pending" (click)="branchRemovalRequested.emit(current)">{{ pending ? 'Removing…' : 'Approve branch removal' }}</button>
         <button *ngIf="current.status === 'PENDING_PUSH'" class="button button--approve" type="button" [disabled]="pending" (click)="pushRequested.emit(current)">{{ pending ? 'Pushing…' : 'Confirm push' }}</button>
+        <button *ngIf="current.status === 'REBASE_CONFLICT'" class="button button--retry" type="button" [disabled]="pending" (click)="rebaseResolutionRequested.emit(current)">{{ pending ? 'Queuing…' : 'Resolve conflict' }}</button>
         <button class="button button--retry" type="button" [disabled]="pending" (click)="retryRequested.emit(current)">{{ pending ? 'Queuing…' : 'Retry task' }}</button>
         <button class="button button--danger" type="button" [disabled]="pending" (click)="rejectRequested.emit(current)">{{ pending ? 'Rejecting…' : 'Reject task' }}</button>
       </div></div>

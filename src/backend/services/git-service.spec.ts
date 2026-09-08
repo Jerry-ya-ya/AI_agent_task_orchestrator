@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { Task } from '../domain/types.js';
 import { ProcessRunner } from '../infra/process-runner.js';
-import { GitService, slugifyTaskTitle } from './git-service.js';
+import { GitService, RebaseConflictError, slugifyTaskTitle } from './git-service.js';
 
 const temporaryPaths: string[] = [];
 
@@ -198,13 +198,20 @@ describe('GitService', () => {
     ]);
 
     await expect(service.publishFeatureBranch(repository, 'feature/conflict', 'main'))
-      .rejects.toThrow('Unable to rebase feature/conflict onto main');
+      .rejects.toBeInstanceOf(RebaseConflictError);
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
     expect((await readFile(path.join(repository, 'README.md'), 'utf8')).trim()).toBe('main version');
     expect(await gitExitCode(runner, repository, ['rev-parse', '--verify', 'REBASE_HEAD'])).toBe(128);
     expect(await gitExitCode(runner, repository, [
       '--git-dir', remote, 'show-ref', '--verify', '--quiet', 'refs/heads/main'
     ])).toBe(1);
+
+    await git(runner, repository, ['switch', 'feature/conflict']);
+    await expect(service.beginFeatureRebase(repository, 'feature/conflict', 'main')).resolves.toBe(false);
+    await writeFile(path.join(repository, 'README.md'), 'resolved version\n');
+    await expect(service.continueFeatureRebase(repository)).resolves.toBe(true);
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('feature/conflict');
+    expect((await readFile(path.join(repository, 'README.md'), 'utf8')).trim()).toBe('resolved version');
   }, 20_000);
 
   it('turns unsafe or non-ASCII-only titles into safe deterministic slugs', () => {

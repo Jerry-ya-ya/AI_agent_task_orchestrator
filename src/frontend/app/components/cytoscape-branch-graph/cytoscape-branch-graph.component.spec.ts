@@ -5,6 +5,16 @@ import type { BranchLane, ProjectBranchMap } from '../../models';
 import { CytoscapeBranchGraphComponent } from './cytoscape-branch-graph.component';
 
 describe('CytoscapeBranchGraphComponent', () => {
+  it('uses normal zoom speed by default and accepts supported zoom multipliers', () => {
+    const component = new CytoscapeBranchGraphComponent();
+
+    expect(component.zoomSensitivity).toBe(1);
+    component.setZoomSensitivity('3');
+    expect(component.zoomSensitivity).toBe(3);
+    component.setZoomSensitivity('4');
+    expect(component.zoomSensitivity).toBe(3);
+  });
+
   it('builds Cytoscape nodes and edges for main, fork, and task history', () => {
     const component = new CytoscapeBranchGraphComponent();
     const feature = lane();
@@ -17,7 +27,9 @@ describe('CytoscapeBranchGraphComponent', () => {
     const checkpoint = model.elements.find((element) => element.data.id === 'branch:0:task:2');
     const waiting = model.elements.find((element) => element.data.id === 'branch:0:task:3');
 
-    expect(featureCommit).toMatchObject({ data: { color: '#3977d4' }, classes: 'primary feature-owned' });
+    expect(featureCommit).toMatchObject({
+      data: { color: '#3977d4' }, classes: 'primary feature-owned', grabbable: false, pannable: true,
+    });
     expect(forkEdge).toMatchObject({
       data: { source: 'primary:base', target: 'branch:0:fork', color: '#3977d4' },
       classes: 'fork-edge',

@@ -27,6 +27,8 @@ class PipelineFailure extends Error {
   }
 }
 
+const MAX_REBASE_CONFLICT_ROUNDS = 20;
+
 export class TaskWorker {
   private running = false;
   private paused = false;
@@ -174,6 +176,7 @@ export class TaskWorker {
       let agentResult: AgentExecutionResult | undefined;
       let testResult: TestExecutionResult | undefined;
       let canonicalSummary: string | undefined;
+      let rebaseInProgress = false;
       try {
         const task = this.tasks.setArtifacts(
           claimed.id,
@@ -192,15 +195,35 @@ export class TaskWorker {
           status: 'IN_PROGRESS',
           project: claimed.project
         };
-        agentResult = await this.agent.execute(agentTask, prepared.workspacePath, signal);
-        this.appendAgentResult(claimed.run_id, agentResult);
-        if (agentResult.exitCode !== 0) {
-          throw new PipelineFailure(
-            agentResult.timedOut ? 'Codex execution timed out.' : 'Codex execution failed.',
-            agentResult.exitCode
+        if (agentTask.agent_mode === 'rebase_resolution') {
+          const completed = await this.git.beginFeatureRebase(
+            prepared.workspacePath,
+            prepared.branchName,
+            agentTask.base_branch ?? 'main',
+            signal,
           );
+          rebaseInProgress = !completed;
         }
-        canonicalSummary = requireCanonicalCommitSummary(agentResult.summary);
+
+        let conflictRound = 0;
+        do {
+          conflictRound += 1;
+          if (conflictRound > MAX_REBASE_CONFLICT_ROUNDS) {
+            throw new PipelineFailure('Rebase conflict resolution exceeded the safe round limit.', 1);
+          }
+          agentResult = await this.agent.execute(agentTask, prepared.workspacePath, signal);
+          this.appendAgentResult(claimed.run_id, agentResult);
+          if (agentResult.exitCode !== 0) {
+            throw new PipelineFailure(
+              agentResult.timedOut ? 'Codex execution timed out.' : 'Codex execution failed.',
+              agentResult.exitCode
+            );
+          }
+          canonicalSummary = requireCanonicalCommitSummary(agentResult.summary);
+          if (rebaseInProgress) {
+            rebaseInProgress = !await this.git.continueFeatureRebase(prepared.workspacePath, signal);
+          }
+        } while (rebaseInProgress);
 
         if (this.tasks.transition(claimed.id, 'IN_PROGRESS', 'TESTING') === null) {
           throw new PipelineFailure('Task state changed before testing.', 1);
@@ -214,9 +237,16 @@ export class TaskWorker {
           );
         }
       } finally {
+        if (rebaseInProgress) {
+          await this.git.abortFeatureRebase(prepared.workspacePath);
+        }
         const checkpointed = await this.git.completeBranch(prepared, claimed.id, canonicalSummary);
         if (canonicalSummary !== undefined) {
-          this.tasks.setCommitSummary(claimed.id, canonicalSummary);
+          if (claimed.agent_mode === 'rebase_resolution') {
+            this.tasks.finishRebaseResolution(claimed.id);
+          } else {
+            this.tasks.setCommitSummary(claimed.id, canonicalSummary);
+          }
         }
         this.runs.appendOutput(
           claimed.run_id,

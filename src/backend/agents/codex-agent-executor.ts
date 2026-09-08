@@ -162,6 +162,19 @@ export function buildCodexPrompt(task: AgentTask): string {
         'Continue from the existing implementation in this same task branch; do not start a separate branch.',
         ''
       ];
+  const rebaseResolutionContext = task.agent_mode === 'rebase_resolution'
+    ? [
+        'Rebase conflict resolution:',
+        `The orchestrator is rebasing the current Feature branch onto ${task.base_branch ?? 'main'}.`,
+        'Inspect the current Git conflict state and resolve every conflicted file while preserving the intent of both sides.',
+        'Do not run git add, commit, rebase --continue, or rebase --abort; the orchestrator controls each rebase step after you edit the files.',
+        'Do not redo the original task or make unrelated product changes.',
+        ''
+      ]
+    : [];
+  const gitConstraint = task.agent_mode === 'rebase_resolution'
+    ? '- Do not run Git state-changing commands; only edit the conflicted working-tree files for the orchestrator to continue the active rebase.'
+    : '- Do not commit, push, merge, rebase, or fetch from remotes; the orchestrator creates the checkpoint commit.';
 
   return [
     `You are implementing orchestrator task #${task.id} on an isolated Git task branch.`,
@@ -176,10 +189,11 @@ export function buildCodexPrompt(task: AgentTask): string {
     '',
     ...revisionContext,
     ...retryContext,
+    ...rebaseResolutionContext,
     'Execution constraints:',
     '- Work only inside the current repository workspace and checked-out task branch.',
     '- Do not create, check out, switch, delete, or rewrite Git branches or worktrees.',
-    '- Do not commit, push, merge, rebase, or fetch from remotes; the orchestrator creates the checkpoint commit.',
+    gitConstraint,
     '- Do not change Git remotes or Git configuration.',
     '- Do not modify, merge into, or rewrite the base branch.',
     '- Do not require interactive input or approval.',

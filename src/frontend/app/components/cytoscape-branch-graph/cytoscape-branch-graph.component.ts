@@ -21,10 +21,18 @@ const FIRST_NODE_X = 250;
 const COMMIT_GAP = 190;
 const FIRST_BRANCH_Y = 220;
 const BRANCH_GAP = 152;
+const INITIAL_ZOOM = 0.88;
+const INITIAL_PAN: cytoscape.Position = { x: 24, y: 30 };
+const ZOOM_SENSITIVITIES = [1, 2, 3] as const;
 
 interface BranchGraphModel {
   elements: cytoscape.ElementDefinition[];
   height: number;
+}
+
+interface GraphViewport {
+  zoom: number;
+  pan: cytoscape.Position;
 }
 
 @Component({
@@ -35,20 +43,26 @@ interface BranchGraphModel {
   styleUrl: './cytoscape-branch-graph.component.css',
 })
 export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, OnDestroy {
+  private static readonly viewportByProject = new Map<number, GraphViewport>();
+
   @Input({ required: true }) map!: ProjectBranchMap;
   @Input({ required: true }) lanes: readonly BranchLane[] = [];
   @Output() taskOpened = new EventEmitter<number>();
   @ViewChild('graphHost', { static: true }) private graphHost!: ElementRef<HTMLDivElement>;
 
   graphHeight = 360;
+  graphReady = false;
+  zoomSensitivity = 1;
   private graph: cytoscape.Core | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private viewReady = false;
   private renderVersion = 0;
+  private requestedSignature: string | null = null;
+  private renderedProjectId: number | null = null;
 
   ngAfterViewInit(): void {
     this.viewReady = true;
-    void this.renderGraph();
+    this.requestRender();
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.graph?.resize());
       this.resizeObserver.observe(this.graphHost.nativeElement);
@@ -56,13 +70,32 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   }
 
   ngOnChanges(_changes: SimpleChanges): void {
-    if (this.viewReady) void this.renderGraph();
+    if (this.viewReady) this.requestRender();
   }
 
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
     this.renderVersion += 1;
+    this.saveViewport();
     this.graph?.destroy();
+    this.graph = null;
+    this.graphReady = false;
+  }
+
+  resetView(): void {
+    if (this.graph === null) return;
+    const viewport = this.initialViewport();
+    CytoscapeBranchGraphComponent.viewportByProject.set(this.map.project.id, viewport);
+    this.graph.stop();
+    this.graph.zoom(viewport.zoom);
+    this.graph.pan(viewport.pan);
+  }
+
+  setZoomSensitivity(value: string): void {
+    const sensitivity = Number(value);
+    if (!ZOOM_SENSITIVITIES.some((option) => option === sensitivity)) return;
+    this.zoomSensitivity = sensitivity;
+    if (this.viewReady) this.requestRender();
   }
 
   graphModel(): BranchGraphModel {
@@ -148,29 +181,83 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     };
   }
 
+  private requestRender(): void {
+    const signature = this.graphSignature();
+    if (signature === this.requestedSignature) return;
+    this.requestedSignature = signature;
+    void this.renderGraph();
+  }
+
   private async renderGraph(): Promise<void> {
     const version = ++this.renderVersion;
     const { default: createCytoscape } = await import('cytoscape');
     if (!this.viewReady || version !== this.renderVersion) return;
+    this.saveViewport();
     this.graph?.destroy();
+    this.graphReady = false;
     const model = this.graphModel();
     this.graphHeight = model.height;
+    const viewport = CytoscapeBranchGraphComponent.viewportByProject.get(this.map.project.id)
+      ?? this.initialViewport();
     this.graph = createCytoscape({
       container: this.graphHost.nativeElement,
       elements: model.elements,
       layout: { name: 'preset', fit: false },
       style: this.graphStyles(),
-      zoom: 0.88,
-      pan: { x: 24, y: 30 },
+      zoom: viewport.zoom,
+      pan: viewport.pan,
       minZoom: 0.35,
       maxZoom: 2,
-      wheelSensitivity: 0.16,
+      wheelSensitivity: this.zoomSensitivity,
       boxSelectionEnabled: false,
       selectionType: 'single',
     });
+    this.renderedProjectId = this.map.project.id;
+    this.graphReady = true;
+    this.graph.on('pan zoom', () => this.saveViewport());
     this.graph.on('tap', 'node.task', (event) => {
       const taskId = Number(event.target.data('taskId'));
       if (Number.isInteger(taskId)) this.taskOpened.emit(taskId);
+    });
+  }
+
+  private saveViewport(): void {
+    if (this.graph === null || this.renderedProjectId === null) return;
+    const pan = this.graph.pan();
+    CytoscapeBranchGraphComponent.viewportByProject.set(this.renderedProjectId, {
+      zoom: this.graph.zoom(),
+      pan: { x: pan.x, y: pan.y },
+    });
+  }
+
+  private initialViewport(): GraphViewport {
+    return { zoom: INITIAL_ZOOM, pan: { ...INITIAL_PAN } };
+  }
+
+  private graphSignature(): string {
+    return JSON.stringify({
+      projectId: this.map.project.id,
+      zoomSensitivity: this.zoomSensitivity,
+      currentBranch: this.map.current_branch,
+      primaryBranch: this.map.primary_branch,
+      primaryCommits: this.map.primary_commits.map((commit) => [
+        commit.sha, commit.short_sha, commit.summary, commit.committed_at,
+      ]),
+      lanes: this.lanes.map((lane) => ({
+        name: lane.name,
+        exists: lane.exists,
+        current: lane.is_current,
+        order: lane.display_order,
+        fork: lane.fork_commit === null
+          ? null
+          : [lane.fork_commit.sha, lane.fork_commit.short_sha, lane.fork_commit.summary],
+        feature: lane.feature === null
+          ? null
+          : [lane.feature.id, lane.feature.name, lane.feature.branch_name, lane.feature.base_branch],
+        tasks: lane.tasks.map((task) => [
+          task.id, task.title, task.status, task.commit_summary, task.created_at, task.updated_at,
+        ]),
+      })),
     });
   }
 
@@ -194,6 +281,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       { selector: 'node.task', style: { width: 19, height: 19 } },
       { selector: 'node.status-done', style: { 'border-color': '#29966a', 'background-color': '#dff4e9' } },
       { selector: 'node.status-failed', style: { 'border-color': '#c84545', 'background-color': '#fae2e2' } },
+      { selector: 'node.status-rebase_conflict', style: { 'border-color': '#d06b28', 'background-color': '#fff0e4' } },
       { selector: 'node.status-rejected', style: { 'border-color': '#8c6b6b', 'background-color': '#eee5e5' } },
       { selector: 'node.status-todo', style: { 'border-color': '#9ba5b0' } },
       { selector: 'node.checkpoint', style: { 'border-color': '#f0a52e', 'border-width': 5 } },
@@ -218,7 +306,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     data: Record<string, string | number>,
     classes: string,
   ): cytoscape.NodeDefinition {
-    return { data: { id, ...data }, position: { x, y }, classes, grabbable: false };
+    return { data: { id, ...data }, position: { x, y }, classes, grabbable: false, pannable: true };
   }
 
   private edge(id: string, source: string, target: string, color: string, classes: string): cytoscape.EdgeDefinition {

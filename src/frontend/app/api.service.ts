@@ -129,6 +129,12 @@ export class ApiService {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/push`, {});
   }
 
+  resolveRebaseConflict(taskId: number, modelEffort: ModelEffort): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/resolve-rebase`, {
+      model_effort: modelEffort,
+    });
+  }
+
   removeTaskBranch(taskId: number): Observable<Task> {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/remove-branch`, {});
   }

@@ -183,6 +183,14 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     response.json(await dependencies.taskService.push(idSchema.parse(request.params.id)));
   });
 
+  app.post('/tasks/:id/resolve-rebase', (request, response) => {
+    const input = z.object({ model_effort: z.enum(MODEL_EFFORTS) }).strict().parse(request.body);
+    response.json(dependencies.taskService.resolveRebaseConflict(
+      idSchema.parse(request.params.id),
+      input.model_effort,
+    ));
+  });
+
   app.post('/tasks/:id/remove-branch', async (request, response) => {
     response.json(await dependencies.taskService.removeBranch(idSchema.parse(request.params.id)));
   });

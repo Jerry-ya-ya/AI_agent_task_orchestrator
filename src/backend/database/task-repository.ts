@@ -156,6 +156,16 @@ export class TaskRepository {
     return result.changes > 0 ? this.findById(id) : null;
   }
 
+  public queueRebaseResolution(id: number, modelEffort: Task['model_effort']): Task | null {
+    const result = this.database.connection.prepare(`
+      UPDATE tasks
+      SET status = 'TODO', model_effort = ?, agent_mode = 'rebase_resolution',
+          retry_prompt = NULL, is_paused = 0, updated_at = ?
+      WHERE id = ? AND status = 'REBASE_CONFLICT'
+    `).run(modelEffort, this.clock(), id);
+    return result.changes > 0 ? this.findById(id) : null;
+  }
+
   public reject(id: number): Task | null {
     const result = this.database.connection.prepare(`
       UPDATE tasks
@@ -233,7 +243,7 @@ export class TaskRepository {
                 SELECT 1 FROM tasks earlier
                 WHERE earlier.feature_id = tasks.feature_id
                   AND earlier.id < tasks.id
-                  AND earlier.status IN ('TODO', 'CLAIMED', 'IN_PROGRESS', 'TESTING', 'FAILED')
+                  AND earlier.status IN ('TODO', 'CLAIMED', 'IN_PROGRESS', 'TESTING', 'REBASE_CONFLICT', 'FAILED')
               )
             )
           ORDER BY
@@ -287,7 +297,7 @@ export class TaskRepository {
 
   public setCommitSummary(id: number, commitSummary: string): Task | null {
     const result = this.database.connection.prepare(`
-      UPDATE tasks SET commit_summary = ?, updated_at = ?
+      UPDATE tasks SET commit_summary = ?, agent_mode = 'implementation', updated_at = ?
       WHERE id = ? AND status = 'TESTING'
     `).run(commitSummary, this.clock(), id);
     return result.changes > 0 ? this.findById(id) : null;
@@ -312,6 +322,14 @@ export class TaskRepository {
       UPDATE tasks SET status = ?, updated_at = ?
       WHERE id = ? AND status IN (${placeholders})
     `).run(to, this.clock(), id, ...fromStatuses);
+    return result.changes > 0 ? this.findById(id) : null;
+  }
+
+  public finishRebaseResolution(id: number): Task | null {
+    const result = this.database.connection.prepare(`
+      UPDATE tasks SET agent_mode = 'implementation', updated_at = ?
+      WHERE id = ? AND status = 'TESTING' AND agent_mode = 'rebase_resolution'
+    `).run(this.clock(), id);
     return result.changes > 0 ? this.findById(id) : null;
   }
 

@@ -39,11 +39,13 @@ const SCHEMA = `
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'TODO'
-      CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
+      CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','REBASE_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
     priority TEXT NOT NULL DEFAULT 'MEDIUM'
       CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
     model_effort TEXT NOT NULL DEFAULT 'medium'
       CHECK (model_effort IN ('low','medium','high','xhigh')),
+    agent_mode TEXT NOT NULL DEFAULT 'implementation'
+      CHECK (agent_mode IN ('implementation','rebase_resolution')),
     retry_prompt TEXT,
     branch_name TEXT,
     worktree_path TEXT,
@@ -128,6 +130,12 @@ export class OrchestratorDatabase {
     if (!taskColumns.some((column) => column['name'] === 'retry_prompt')) {
       this.connection.exec('ALTER TABLE tasks ADD COLUMN retry_prompt TEXT;');
     }
+    if (!taskColumns.some((column) => column['name'] === 'agent_mode')) {
+      this.connection.exec(`
+        ALTER TABLE tasks ADD COLUMN agent_mode TEXT NOT NULL DEFAULT 'implementation'
+          CHECK (agent_mode IN ('implementation','rebase_resolution'));
+      `);
+    }
     if (!taskColumns.some((column) => column['name'] === 'source_task_id')) {
       this.connection.exec('ALTER TABLE tasks ADD COLUMN source_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL;');
     }
@@ -139,8 +147,10 @@ export class OrchestratorDatabase {
       SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'
     `).get() as { sql?: string } | undefined;
     const hadPendingPush = taskDefinition?.sql?.includes('PENDING_PUSH') ?? false;
-    if (!taskDefinition?.sql?.includes('PENDING_BRANCH_REMOVAL') || !taskDefinition?.sql?.includes('REJECTED')) {
-      this.rebuildTasksForPublishing(hadPendingPush);
+    const needsPublishingMigration = !taskDefinition?.sql?.includes('PENDING_BRANCH_REMOVAL')
+      || !taskDefinition?.sql?.includes('REJECTED');
+    if (needsPublishingMigration || !taskDefinition?.sql?.includes('REBASE_CONFLICT')) {
+      this.rebuildTasksForPublishing(hadPendingPush, needsPublishingMigration);
     }
 
     this.connection.exec(`
@@ -160,8 +170,10 @@ export class OrchestratorDatabase {
     `);
   }
 
-  private rebuildTasksForPublishing(hadPendingPush: boolean): void {
-    const migratedDoneStatus = hadPendingPush ? 'PENDING_BRANCH_REMOVAL' : 'PENDING_PUSH';
+  private rebuildTasksForPublishing(hadPendingPush: boolean, migrateLegacyDone: boolean): void {
+    const migratedDoneStatus = migrateLegacyDone
+      ? (hadPendingPush ? 'PENDING_BRANCH_REMOVAL' : 'PENDING_PUSH')
+      : 'DONE';
     this.connection.exec('PRAGMA foreign_keys = OFF;');
     try {
       this.connection.exec(`
@@ -179,11 +191,13 @@ export class OrchestratorDatabase {
           title TEXT NOT NULL,
           description TEXT NOT NULL DEFAULT '',
           status TEXT NOT NULL DEFAULT 'TODO'
-            CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
+            CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','REBASE_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
           priority TEXT NOT NULL DEFAULT 'MEDIUM'
             CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
           model_effort TEXT NOT NULL DEFAULT 'medium'
             CHECK (model_effort IN ('low','medium','high','xhigh')),
+          agent_mode TEXT NOT NULL DEFAULT 'implementation'
+            CHECK (agent_mode IN ('implementation','rebase_resolution')),
           retry_prompt TEXT,
           branch_name TEXT,
           worktree_path TEXT,
@@ -197,7 +211,7 @@ export class OrchestratorDatabase {
         );
 
         INSERT INTO tasks (
-          id, project_id, feature_id, title, description, status, priority, model_effort, retry_prompt,
+          id, project_id, feature_id, title, description, status, priority, model_effort, agent_mode, retry_prompt,
           branch_name, worktree_path, base_branch, commit_summary, source_task_id,
           is_rejected, is_paused, created_at, updated_at
         )
@@ -207,7 +221,7 @@ export class OrchestratorDatabase {
             WHEN status = 'DONE' AND branch_name IS NOT NULL THEN '${migratedDoneStatus}'
             ELSE status
           END,
-          priority, model_effort, retry_prompt, branch_name, worktree_path, base_branch, commit_summary,
+          priority, model_effort, agent_mode, retry_prompt, branch_name, worktree_path, base_branch, commit_summary,
           source_task_id, is_rejected, is_paused, created_at, updated_at
         FROM tasks_before_publishing;
 

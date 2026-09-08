@@ -190,6 +190,7 @@ describe('AppComponent initialization', () => {
       'TESTING',
       'IN_REVIEW',
       'PENDING_PUSH',
+      'REBASE_CONFLICT',
       'PENDING_BRANCH_REMOVAL',
       'DONE',
       'REJECTED',

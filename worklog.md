@@ -83,3 +83,5 @@
 - fix: keep retries and interrupted Feature tasks dispatchable across restarts while preserving the user's inspected branch.
 
 - feat: replace Feature branch maps with lazy-loaded interactive Cytoscape graphs.
+
+- fix: preserve Cytoscape branch graph view state across refreshes and add a reset-view control.

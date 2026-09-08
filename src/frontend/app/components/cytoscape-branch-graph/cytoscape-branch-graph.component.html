@@ -1,3 +1,24 @@
+<div class="cytoscape-branch-graph__toolbar">
+  <span>Interactive branch canvas</span>
+  <div class="cytoscape-branch-graph__controls">
+    <label class="cytoscape-branch-graph__speed">
+      <span>Zoom speed</span>
+      <select [value]="zoomSensitivity" (change)="setZoomSensitivity($any($event.target).value)">
+        <option value="1">1×</option>
+        <option value="2">2×</option>
+        <option value="3">3×</option>
+      </select>
+    </label>
+    <button
+      type="button"
+      class="cytoscape-branch-graph__reset"
+      [disabled]="!graphReady"
+      (click)="resetView()"
+      title="Reset zoom and position"
+      aria-label="Reset branch graph view"
+    ><span aria-hidden="true">↺</span> Reset view</button>
+  </div>
+</div>
 <div
   #graphHost
   class="cytoscape-branch-graph"

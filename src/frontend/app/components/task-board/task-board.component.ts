@@ -15,6 +15,7 @@ export class TaskBoardComponent {
   @Output() pauseToggled = new EventEmitter<Task>();
   @Output() branchRemovalRequested = new EventEmitter<Task>();
   @Output() pushRequested = new EventEmitter<Task>();
+  @Output() rebaseResolutionRequested = new EventEmitter<Task>();
   @Output() reviewRetryRequested = new EventEmitter<Task>();
   @Output() rejectRequested = new EventEmitter<Task>();
   @Output() approveRequested = new EventEmitter<Task>();
@@ -34,7 +35,7 @@ export class TaskBoardComponent {
 
   private blockingPredecessor(task: Task): Task | null {
     if (task.status !== 'TODO' || task.feature_id === null || task.feature_id === undefined) return null;
-    const blockingStatuses: readonly TaskStatus[] = ['TODO', 'CLAIMED', 'IN_PROGRESS', 'TESTING', 'FAILED'];
+    const blockingStatuses: readonly TaskStatus[] = ['TODO', 'CLAIMED', 'IN_PROGRESS', 'TESTING', 'REBASE_CONFLICT', 'FAILED'];
     return this.tasks
       .filter((candidate) => candidate.feature_id === task.feature_id
         && candidate.id < task.id
