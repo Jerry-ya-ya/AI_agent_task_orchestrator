@@ -23,7 +23,22 @@ export class TaskBoardComponent {
   readonly trackTask = trackTask;
   tasksFor(status: TaskStatus): Task[] { return tasksForStatus(this.tasks, status); }
   projectName(projectId: number): string { return projectName(this.projects, projectId); }
-  latestResult(task: Task): string { return latestTaskResult(task); }
+  latestResult(task: Task): string {
+    const blocker = this.blockingPredecessor(task);
+    return blocker === null
+      ? latestTaskResult(task)
+      : `Waiting for #${blocker.id} “${blocker.title}” (${this.statusLabel(blocker.status)}).`;
+  }
   statusLabel(status: TaskStatus): string { return statusLabel(this.columns, status); }
   isPending(taskId: number): boolean { return this.pendingTaskIds.has(taskId); }
+
+  private blockingPredecessor(task: Task): Task | null {
+    if (task.status !== 'TODO' || task.feature_id === null || task.feature_id === undefined) return null;
+    const blockingStatuses: readonly TaskStatus[] = ['TODO', 'CLAIMED', 'IN_PROGRESS', 'TESTING', 'FAILED'];
+    return this.tasks
+      .filter((candidate) => candidate.feature_id === task.feature_id
+        && candidate.id < task.id
+        && blockingStatuses.includes(candidate.status))
+      .sort((left, right) => left.id - right.id)[0] ?? null;
+  }
 }

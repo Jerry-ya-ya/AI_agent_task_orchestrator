@@ -122,6 +122,13 @@ describe('TaskService state rules', () => {
       branch_name: 'agent/1-retry-me',
       worktree_path: '/example/repository'
     });
+    expect(service.retry(failed.id, { prompt: '   ' })).toMatchObject({
+      status: 'TODO',
+      model_effort: 'high',
+      retry_prompt: null,
+      branch_name: 'agent/1-retry-me',
+      worktree_path: '/example/repository'
+    });
     const queued = service.create({
       project_id: project.id,
       title: 'Not failed',

@@ -135,7 +135,7 @@ export class ApiService {
 
   retryTask(taskId: number, prompt: string, modelEffort: ModelEffort): Observable<Task> {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry`, {
-      prompt,
+      prompt: prompt.trim() || undefined,
       model_effort: modelEffort
     });
   }

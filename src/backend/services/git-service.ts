@@ -97,12 +97,6 @@ export class GitService {
     await this.requireCleanCheckout(repositoryRoot, signal);
 
     const originalBranch = await this.currentBranch(repositoryRoot, signal);
-    if (MANAGED_BRANCH_PATTERN.test(originalBranch)) {
-      throw new ConflictError(
-        `Repository is already on agent branch ${originalBranch}. Check out its base branch before running the Worker.`
-      );
-    }
-
     const branchExists = await this.localBranchExists(repositoryRoot, branchName, signal);
     if (!branchExists && task.base_branch !== null && originalBranch !== task.base_branch) {
       throw new ConflictError(

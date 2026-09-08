@@ -200,8 +200,13 @@ describe('backend API', () => {
       .expect((response) => expect(response.body.primary.remainingPercent).toBe(75));
     await request(app)
       .post(`/tasks/${taskId}/retry`)
-      .send({ prompt: '   ', model_effort: 'high' })
-      .expect(400);
+      .send({ model_effort: 'high' })
+      .expect(200)
+      .expect((response) => expect(response.body).toMatchObject({
+        status: 'TODO',
+        model_effort: 'high',
+        retry_prompt: null
+      }));
     await request(app)
       .post(`/tasks/${taskId}/retry`)
       .send({ prompt: '  Try again with the updated requirements.  ', model_effort: 'high' })

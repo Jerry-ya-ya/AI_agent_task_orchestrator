@@ -116,10 +116,7 @@ export class TaskService {
     if (RUNNING_STATUSES.includes(existing.status)) {
       throw new ConflictError('The active task must stop before it can be retried.');
     }
-    const prompt = input.prompt.trim();
-    if (prompt.length === 0) {
-      throw new ValidationError('A retry prompt is required.');
-    }
+    const prompt = input.prompt?.trim() || null;
     const updated = this.tasks.retry(id, input.model_effort ?? existing.model_effort, prompt);
     if (updated === null) {
       throw new ConflictError('Task state changed while it was being retried.');

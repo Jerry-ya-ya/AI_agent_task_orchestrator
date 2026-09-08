@@ -101,7 +101,7 @@ describe('OrchestratorDatabase schema', () => {
     expect(runs.listForTask(task.id)).toEqual([]);
   });
 
-  it('recovers an abruptly interrupted task as paused TODO', () => {
+  it('recovers an abruptly interrupted task as runnable TODO', () => {
     database = new OrchestratorDatabase(':memory:');
     const projects = new ProjectRepository(database);
     const runs = new TaskRunRepository(database);
@@ -114,10 +114,10 @@ describe('OrchestratorDatabase schema', () => {
 
     expect(tasks.recoverInterrupted()).toBe(1);
 
-    expect(tasks.findById(task.id)).toMatchObject({ status: 'TODO', is_paused: true });
+    expect(tasks.findById(task.id)).toMatchObject({ status: 'TODO', is_paused: false });
     expect(runs.listForTask(task.id)[0]).toMatchObject({
       exit_code: 130,
-      result_summary: 'Application stopped; task returned to paused TODO.'
+      result_summary: 'Application stopped; task returned to TODO.'
     });
   });
 
@@ -306,7 +306,9 @@ describe('TaskRepository.claimNext', () => {
     expect(tasks.claimNext()?.id).toBe(independent.id);
     expect(tasks.claimNext()?.id).toBe(first.id);
     expect(tasks.claimNext()).toBeNull();
-    expect(tasks.transition(first.id, 'CLAIMED', 'DONE')).not.toBeNull();
+    expect(tasks.transition(first.id, 'CLAIMED', 'FAILED')).not.toBeNull();
+    expect(tasks.claimNext()).toBeNull();
+    expect(tasks.transition(first.id, 'FAILED', 'IN_REVIEW')).not.toBeNull();
     expect(tasks.claimNext()?.id).toBe(blocked.id);
   });
 });

@@ -77,3 +77,9 @@
 - feat: refine Feature maps with persistent branch ordering, clean main connectors, and project-scoped Feature creation controls.
 
 - fix: preserve Worker dispatch state across restarts and return interrupted tasks to paused Todo.
+
+## 2026/09/08
+
+- fix: keep retries and interrupted Feature tasks dispatchable across restarts while preserving the user's inspected branch.
+
+- feat: replace Feature branch maps with lazy-loaded interactive Cytoscape graphs.

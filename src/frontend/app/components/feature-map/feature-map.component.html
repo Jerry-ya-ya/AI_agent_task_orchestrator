@@ -5,33 +5,16 @@
   <div class="feature-map__loading" *ngIf="loading">Inspecting local repositories…</div>
   <div class="feature-project" *ngFor="let map of maps">
     <header class="feature-project__header"><div><h3>{{ map.project.name }}</h3><code>{{ map.project.repository_path }}</code></div><div class="feature-project__actions"><span>Current: {{ map.current_branch || 'unavailable' }}</span><button class="button button--primary" type="button" (click)="createFeature.emit(map.project.id)">＋ New feature</button></div></header>
-    <div class="branch-lanes" *ngIf="featureLanes(map).length > 0; else noBranches" [style.--network-width]="networkWidth(map) + 'px'">
-      <div class="main-lane">
-        <div class="main-lane__identity"><span class="main-lane__mark"></span><div><strong>{{ map.primary_branch || 'main' }}</strong><small>Primary branch</small></div></div>
-        <div class="main-graph">
-          <span class="main-graph__line" aria-hidden="true"></span>
-          <div class="main-commit" *ngFor="let commit of orderedPrimaryCommits(map)" [title]="commit.summary">
-            <strong>{{ commit.summary }}</strong>
-            <span class="main-commit__dot" [class.main-commit__dot--owned]="commitFeatureColors(map, commit.summary).length > 0" [style.background]="mainCommitFill(map, commit.summary)"></span>
-            <code>{{ commit.short_sha }}</code>
-          </div>
-          <span class="branch-empty" *ngIf="map.primary_commits.length === 0">No main history available</span>
+    <div class="branch-network" *ngIf="featureLanes(map).length > 0; else noBranches">
+      <div class="branch-order-strip" aria-label="Feature branch display order">
+        <div class="branch-order-item" *ngFor="let lane of featureLanes(map); let laneIndex = index" [class.branch-order-item--missing]="!lane.exists" [style.--branch-color]="branchColor(laneIndex)">
+          <span class="branch-order-item__color" aria-hidden="true"></span>
+          <span><strong>{{ lane.feature?.name || lane.name }}</strong><code>{{ lane.name }}</code></span>
+          <span class="branch-order-item__state">{{ lane.exists ? (lane.is_current ? 'current' : 'local') : 'not created' }}</span>
+          <span class="branch-order-actions"><button type="button" [disabled]="!canMoveBranch(map, lane, -1)" title="Move branch up" [attr.aria-label]="'Move ' + lane.name + ' up'" (click)="moveBranch(map, lane, -1)">↑</button><button type="button" [disabled]="!canMoveBranch(map, lane, 1)" title="Move branch down" [attr.aria-label]="'Move ' + lane.name + ' down'" (click)="moveBranch(map, lane, 1)">↓</button></span>
         </div>
       </div>
-      <article class="branch-lane" *ngFor="let lane of featureLanes(map); let laneIndex = index" [class.branch-lane--missing]="!lane.exists" [style.--branch-color]="branchColor(laneIndex)">
-        <div class="branch-lane__identity"><span class="branch-state-dot" [class.branch-state-dot--current]="lane.is_current"></span><div><strong>{{ lane.feature?.name || lane.name }}</strong><code>{{ lane.name }}</code></div><div class="branch-order-actions"><button type="button" [disabled]="!canMoveBranch(map, lane, -1)" title="Move branch up" [attr.aria-label]="'Move ' + lane.name + ' up'" (click)="moveBranch(map, lane, -1)">↑</button><button type="button" [disabled]="!canMoveBranch(map, lane, 1)" title="Move branch down" [attr.aria-label]="'Move ' + lane.name + ' down'" (click)="moveBranch(map, lane, 1)">↓</button></div><span class="branch-badge">{{ lane.exists ? (lane.is_current ? 'current' : 'local') : 'not created' }}</span></div>
-        <div class="branch-graph" [style.--fork-offset]="forkOffset(map, lane) + 'px'" [style.--connector-top]="connectorTop(laneIndex) + 'px'" [style.--connector-height]="connectorHeight(laneIndex) + 'px'">
-          <span class="branch-graph__elbow" aria-hidden="true"></span>
-          <div class="branch-fork" [title]="'Forked from ' + forkLabel(lane, map)">
-            <span class="branch-origin" [class.branch-origin--highlighted]="highlightStart(lane)"></span>
-            <small>from {{ forkLabel(lane, map) }}</small>
-          </div>
-          <button class="branch-task-node" type="button" *ngFor="let task of lane.tasks" [attr.data-status]="task.status" [class.branch-task-node--checkpoint]="isCheckpoint(lane, task)" [title]="task.commit_summary || task.title" (click)="taskOpened.emit(task.id)">
-            <span class="branch-task-node__dot"></span><strong>#{{ task.id }} {{ task.title }}</strong><small>{{ statusLabel(task.status) }}</small>
-          </button>
-          <span class="branch-empty" *ngIf="lane.tasks.length === 0">No task publications</span>
-        </div>
-      </article>
+      <cytoscape-branch-graph [map]="map" [lanes]="featureLanes(map)" (taskOpened)="taskOpened.emit($event)"></cytoscape-branch-graph>
     </div>
     <ng-template #noBranches><div class="history-empty"><p>No local branches or configured features found.</p></div></ng-template>
   </div>

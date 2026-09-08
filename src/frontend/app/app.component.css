@@ -1621,6 +1621,70 @@ header-usage {
   font-size: 9px;
 }
 
+.branch-network {
+  min-width: 0;
+}
+
+.branch-order-strip {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  overflow-x: auto;
+  border-bottom: 1px solid #e8ebee;
+  background: #f7f9fb;
+  overscroll-behavior-x: contain;
+}
+
+.branch-order-item {
+  display: grid;
+  min-width: 220px;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid #dfe4e9;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.branch-order-item--missing {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.branch-order-item__color {
+  width: 8px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--branch-color);
+}
+
+.branch-order-item strong,
+.branch-order-item code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-order-item strong {
+  margin-bottom: 2px;
+  font-size: 10px;
+}
+
+.branch-order-item code {
+  max-width: 110px;
+  color: #7b8590;
+  font-size: 8px;
+}
+
+.branch-order-item__state {
+  color: #68737e;
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .branch-lanes {
   overflow-x: auto;
   overscroll-behavior-x: contain;

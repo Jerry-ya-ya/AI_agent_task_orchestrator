@@ -28,6 +28,7 @@
     "@angular/core": "22.1.4",
     "@angular/forms": "22.1.4",
     "@angular/platform-browser": "22.1.4",
+    "cytoscape": "3.34.3",
     "express": "5.2.1",
     "rxjs": "7.8.2",
     "zod": "4.5.2",

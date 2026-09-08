@@ -294,7 +294,7 @@ describe('TaskWorker', () => {
     expect(worker.getStatus()).toMatchObject({ busy: false, activeTaskId: null });
   });
 
-  it('returns an active task to paused TODO during application shutdown', async () => {
+  it('returns an active task to runnable TODO during application shutdown', async () => {
     const task = createTask('Continue after restart');
     const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
       branchName: `feature/${claimed.id}-continue-after-restart`,
@@ -323,12 +323,12 @@ describe('TaskWorker', () => {
     }));
     await worker.stop();
 
-    expect(tasks.findById(task.id)).toMatchObject({ status: 'TODO', is_paused: true });
+    expect(tasks.findById(task.id)).toMatchObject({ status: 'TODO', is_paused: false });
     expect(runs.listForTask(task.id)[0]).toMatchObject({
       exit_code: 130,
-      result_summary: 'Application stopped; task returned to paused TODO.'
+      result_summary: 'Application stopped; task returned to TODO.'
     });
-    expect(runs.listForTask(task.id)[0]?.stderr).toContain('task returned to paused TODO');
+    expect(runs.listForTask(task.id)[0]?.stderr).toContain('task returned to TODO');
   });
 
   function createTask(title: string): Task {

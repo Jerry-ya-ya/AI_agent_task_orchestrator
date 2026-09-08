@@ -240,7 +240,7 @@ export class TaskWorker {
       exitCode = failure.exitCode;
       const stoppedDuringShutdown = signal.aborted && this.stopRequested;
       summary = stoppedDuringShutdown
-        ? 'Application stopped; task returned to paused TODO.'
+        ? 'Application stopped; task returned to TODO.'
         : failure.message;
       if (failure.stdout.length > 0 || failure.stderr.length > 0) {
         this.runs.appendOutput(claimed.run_id, failure.stdout, failure.stderr);

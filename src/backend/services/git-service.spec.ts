@@ -56,6 +56,26 @@ describe('GitService', () => {
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
   });
 
+  it('runs from a clean managed branch and restores the branch the user was inspecting', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const service = new GitService(runner);
+    const firstTask = { ...exampleTask(), feature_id: 1, branch_name: 'feature/first', base_branch: 'main' };
+    const secondTask = { ...exampleTask(), id: 102, feature_id: 2, branch_name: 'feature/second', base_branch: 'main' };
+
+    const first = await service.prepareBranch(firstTask, repository);
+    await service.completeBranch(first, firstTask.id);
+    const second = await service.prepareBranch(secondTask, repository);
+    await service.completeBranch(second, secondTask.id);
+    await git(runner, repository, ['switch', firstTask.branch_name]);
+
+    const prepared = await service.prepareBranch(secondTask, repository);
+    expect(prepared.originalBranch).toBe(firstTask.branch_name);
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe(secondTask.branch_name);
+
+    await expect(service.completeBranch(prepared, secondTask.id)).resolves.toBe(false);
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe(firstTask.branch_name);
+  });
+
   it('publishes an approved task branch to its base branch and origin', async () => {
     const { repository, runner } = await temporaryRepository();
     const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-remote-'));

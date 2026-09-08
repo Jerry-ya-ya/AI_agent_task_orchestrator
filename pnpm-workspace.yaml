@@ -9,3 +9,4 @@ allowBuilds:
   msgpackr-extract: true
 minimumReleaseAgeExclude:
   - zod@4.5.2
+  - cytoscape@3.34.3

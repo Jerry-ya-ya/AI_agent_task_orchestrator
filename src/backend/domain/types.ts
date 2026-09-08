@@ -110,7 +110,7 @@ export interface UpdateTaskInput {
 }
 
 export interface RetryTaskInput {
-  prompt: string;
+  prompt?: string;
   model_effort?: ModelEffort;
 }
 

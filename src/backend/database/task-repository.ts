@@ -146,7 +146,7 @@ export class TaskRepository {
     });
   }
 
-  public retry(id: number, modelEffort: Task['model_effort'], prompt: string): Task | null {
+  public retry(id: number, modelEffort: Task['model_effort'], prompt: string | null): Task | null {
     const result = this.database.connection.prepare(`
       UPDATE tasks
       SET status = 'TODO', model_effort = ?, retry_prompt = ?, commit_summary = NULL,
@@ -233,7 +233,7 @@ export class TaskRepository {
                 SELECT 1 FROM tasks earlier
                 WHERE earlier.feature_id = tasks.feature_id
                   AND earlier.id < tasks.id
-                  AND earlier.status NOT IN ('DONE', 'REJECTED')
+                  AND earlier.status IN ('TODO', 'CLAIMED', 'IN_PROGRESS', 'TESTING', 'FAILED')
               )
             )
           ORDER BY
@@ -318,7 +318,7 @@ export class TaskRepository {
   public requeueAfterShutdown(id: number): Task | null {
     const result = this.database.connection.prepare(`
       UPDATE tasks
-      SET status = 'TODO', is_paused = 1, updated_at = ?
+      SET status = 'TODO', is_paused = 0, updated_at = ?
       WHERE id = ? AND status IN ('CLAIMED', 'IN_PROGRESS', 'TESTING')
     `).run(this.clock(), id);
     return result.changes > 0 ? this.findById(id) : null;
@@ -338,19 +338,19 @@ export class TaskRepository {
       const placeholders = taskIds.map(() => '?').join(', ');
       const taskResult = this.database.connection.prepare(`
         UPDATE tasks
-        SET status = 'TODO', is_paused = 1, updated_at = ?
+        SET status = 'TODO', is_paused = 0, updated_at = ?
         WHERE id IN (${placeholders})
       `).run(now, ...taskIds);
       this.database.connection.prepare(`
         UPDATE task_runs
         SET finished_at = ?, exit_code = 130,
             stderr = stderr || ?,
-            result_summary = 'Application stopped; task returned to paused TODO.'
+            result_summary = 'Application stopped; task returned to TODO.'
         WHERE finished_at IS NULL
           AND task_id IN (${placeholders})
       `).run(
         now,
-        '\n[orchestrator] Interrupted during shutdown; task returned to paused TODO.\n',
+        '\n[orchestrator] Interrupted during shutdown; task returned to TODO.\n',
         ...taskIds
       );
       return Number(taskResult.changes);
