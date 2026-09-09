@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -217,7 +217,39 @@ describe('backend API', () => {
         retry_prompt: 'Try again with the updated requirements.'
       }));
 
-    expect(tasks.transition(taskId, 'TODO', 'IN_REVIEW')).not.toBeNull();
+    const reviewSourceBranch = `agent/${taskId}-review-source`;
+    await writeFile(path.join(repositoryPath, 'README.md'), 'main\n');
+    execFileSync('git', ['add', 'README.md'], { cwd: repositoryPath, windowsHide: true });
+    execFileSync('git', [
+      '-c', 'user.name=Test User', '-c', 'user.email=test@example.invalid',
+      'commit', '-m', 'initial',
+    ], { cwd: repositoryPath, windowsHide: true });
+    execFileSync('git', ['switch', '-c', reviewSourceBranch], { cwd: repositoryPath, windowsHide: true });
+    await writeFile(path.join(repositoryPath, 'review.txt'), 'review me\n');
+    execFileSync('git', ['add', 'review.txt'], { cwd: repositoryPath, windowsHide: true });
+    execFileSync('git', [
+      '-c', 'user.name=Test User', '-c', 'user.email=test@example.invalid',
+      'commit', '-m', 'feat: add review fixture',
+    ], { cwd: repositoryPath, windowsHide: true });
+    execFileSync('git', ['switch', 'main'], { cwd: repositoryPath, windowsHide: true });
+    expect(tasks.transition(taskId, 'TODO', 'CLAIMED')).not.toBeNull();
+    tasks.setArtifacts(taskId, reviewSourceBranch, repositoryPath, 'main');
+    expect(tasks.transition(taskId, 'CLAIMED', 'IN_REVIEW')).not.toBeNull();
+    await request(app)
+      .post(`/tasks/${taskId}/start-review`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.status).toBe('REVIEWING');
+      });
+    expect(execFileSync('git', ['branch', '--show-current'], { cwd: repositoryPath, encoding: 'utf8' }).trim())
+      .toBe(`agent/${taskId}-review`);
+    await request(app)
+      .post(`/tasks/${taskId}/exit-review`)
+      .expect(200)
+      .expect((response) => expect(response.body.status).toBe('IN_REVIEW'));
+    expect(execFileSync('git', ['branch', '--show-current'], { cwd: repositoryPath, encoding: 'utf8' }).trim())
+      .toBe('main');
+    await request(app).post(`/tasks/${taskId}/start-review`).expect(200);
     await request(app)
       .post(`/tasks/${taskId}/approve`)
       .expect(200)
@@ -227,8 +259,10 @@ describe('backend API', () => {
 
     await request(app).post(`/tasks/${taskId}/push`).expect(409);
     expect(tasks.transition(taskId, 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL')).not.toBeNull();
-    await request(app).post(`/tasks/${taskId}/remove-branch`).expect(409);
-    expect(tasks.transition(taskId, 'PENDING_BRANCH_REMOVAL', 'DONE')).not.toBeNull();
+    await request(app)
+      .post(`/tasks/${taskId}/remove-branch`)
+      .expect(200)
+      .expect((response) => expect(response.body.status).toBe('DONE'));
 
     await request(app).delete(`/tasks/${taskId}`).expect(204);
     await request(app).get(`/tasks/${taskId}`).expect(404);

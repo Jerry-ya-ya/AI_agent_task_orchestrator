@@ -238,6 +238,11 @@ export class TaskRepository {
         WHERE id = (
           SELECT id FROM tasks
           WHERE status = 'TODO' AND is_paused = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM tasks reviewing
+              WHERE reviewing.project_id = tasks.project_id
+                AND reviewing.status = 'REVIEWING'
+            )
             AND (
               feature_id IS NULL OR NOT EXISTS (
                 SELECT 1 FROM tasks earlier

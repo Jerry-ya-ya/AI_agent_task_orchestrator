@@ -290,6 +290,62 @@ export class GitService {
     return result.stdout.trim();
   }
 
+  /** Checks out an exact task snapshot on a disposable branch for human review. */
+  public async beginTaskReview(task: Task, repositoryPath: string): Promise<string> {
+    if (task.branch_name === null || !MANAGED_BRANCH_PATTERN.test(task.branch_name)) {
+      throw new ConflictError('The task has no managed Git branch to review.');
+    }
+    const repositoryRoot = await this.validateRepository(repositoryPath);
+    await this.requireCleanCheckout(repositoryRoot);
+    const baseBranch = task.base_branch ?? 'main';
+    const current = await this.currentBranch(repositoryRoot);
+    if (current !== baseBranch) {
+      throw new ConflictError(
+        `Repository must be on ${baseBranch} before starting Review; it is on ${current}.`,
+      );
+    }
+    const targetCommit = task.feature_id === null || task.feature_id === undefined
+      ? await this.commitAtRef(repositoryRoot, task.branch_name)
+      : await this.resolveTaskCommit(
+          repositoryRoot,
+          task.branch_name,
+          task.publish_commit_sha,
+          task.commit_summary,
+        );
+    const reviewBranch = `agent/${task.id}-review`;
+    if (await this.localBranchExists(repositoryRoot, reviewBranch)) {
+      const removed = await this.runGit(repositoryRoot, ['branch', '--delete', '--force', reviewBranch], undefined, true);
+      if (removed.exitCode !== 0) {
+        throw new GitCommandError(`Unable to reset Review branch ${reviewBranch}: ${formatFailure(removed)}`, removed);
+      }
+    }
+    const switched = await this.runGit(repositoryRoot, ['switch', '-c', reviewBranch, targetCommit], undefined, true);
+    if (switched.exitCode !== 0) {
+      throw new GitCommandError(`Unable to check out Review branch ${reviewBranch}: ${formatFailure(switched)}`, switched);
+    }
+    return reviewBranch;
+  }
+
+  /** Restores the base branch and removes the disposable human Review branch. */
+  public async endTaskReview(task: Task, repositoryPath: string): Promise<void> {
+    const repositoryRoot = await this.validateRepository(repositoryPath);
+    await this.requireCleanCheckout(repositoryRoot);
+    const reviewBranch = `agent/${task.id}-review`;
+    const current = await this.currentBranch(repositoryRoot);
+    if (current !== reviewBranch) {
+      throw new ConflictError(`Repository must be on ${reviewBranch} to finish Review; it is on ${current}.`);
+    }
+    const baseBranch = task.base_branch ?? 'main';
+    const restored = await this.runGit(repositoryRoot, ['switch', baseBranch], undefined, true);
+    if (restored.exitCode !== 0) {
+      throw new GitCommandError(`Unable to restore ${baseBranch} after Review: ${formatFailure(restored)}`, restored);
+    }
+    const removed = await this.runGit(repositoryRoot, ['branch', '--delete', '--force', reviewBranch], undefined, true);
+    if (removed.exitCode !== 0) {
+      throw new GitCommandError(`Unable to remove Review branch ${reviewBranch}: ${formatFailure(removed)}`, removed);
+    }
+  }
+
   /** Merges an approved task branch into its base branch and pushes that branch to origin. */
   public async publishBranch(
     repositoryPath: string,

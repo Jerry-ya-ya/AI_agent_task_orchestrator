@@ -56,6 +56,33 @@ describe('GitService', () => {
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
   });
 
+  it('checks out an exact disposable Review branch and restores main when Review ends', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const service = new GitService(runner);
+    const task = exampleTask();
+    const prepared = await service.prepareBranch(task, repository);
+    await writeFile(path.join(repository, 'review-me.txt'), 'review snapshot\n');
+    await service.completeBranch(prepared, task.id, 'feat: add the review snapshot.');
+    const reviewTask = {
+      ...task,
+      status: 'IN_REVIEW' as const,
+      branch_name: prepared.branchName,
+      base_branch: 'main',
+    };
+
+    await expect(service.beginTaskReview(reviewTask, repository))
+      .resolves.toBe(`agent/${task.id}-review`);
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim())
+      .toBe(`agent/${task.id}-review`);
+    expect((await readFile(path.join(repository, 'review-me.txt'), 'utf8')).trim()).toBe('review snapshot');
+
+    await service.endTaskReview({ ...reviewTask, status: 'REVIEWING' }, repository);
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
+    expect(await gitExitCode(runner, repository, [
+      'show-ref', '--verify', '--quiet', `refs/heads/agent/${task.id}-review`,
+    ])).toBe(1);
+  });
+
   it('runs from a clean managed branch and restores the branch the user was inspecting', async () => {
     const { repository, runner } = await temporaryRepository();
     const service = new GitService(runner);

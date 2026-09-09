@@ -159,7 +159,7 @@ export function createApi(dependencies: ApiDependencies): express.Express {
       .parse(request.body ?? {});
     const taskId = idSchema.parse(request.params.id);
     await dependencies.cancelTask?.(taskId);
-    response.json(dependencies.taskService.retry(taskId, input));
+    response.json(await dependencies.taskService.retry(taskId, input));
   });
 
   app.post('/tasks/:id/retry-review', (request, response) => {
@@ -175,8 +175,16 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     response.json(await dependencies.taskService.reject(taskId));
   });
 
-  app.post('/tasks/:id/approve', (request, response) => {
-    response.json(dependencies.taskService.approve(idSchema.parse(request.params.id)));
+  app.post('/tasks/:id/start-review', async (request, response) => {
+    response.json(await dependencies.taskService.startReview(idSchema.parse(request.params.id)));
+  });
+
+  app.post('/tasks/:id/exit-review', async (request, response) => {
+    response.json(await dependencies.taskService.exitReview(idSchema.parse(request.params.id)));
+  });
+
+  app.post('/tasks/:id/approve', async (request, response) => {
+    response.json(await dependencies.taskService.approve(idSchema.parse(request.params.id)));
   });
 
   app.post('/tasks/:id/push', async (request, response) => {

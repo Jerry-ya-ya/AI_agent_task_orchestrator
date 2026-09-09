@@ -786,6 +786,11 @@ header-usage {
   background: #8c4ea9;
 }
 
+[data-status='REVIEWING'] .status-indicator {
+  border-color: #6f48b8;
+  background: #6f48b8;
+}
+
 [data-status='PENDING_PUSH'] .status-indicator {
   border-color: #197c83;
   background: #197c83;
@@ -965,6 +970,11 @@ header-usage {
   color: #7d3f99;
 }
 
+.status-chip[data-status='REVIEWING'] {
+  background: #ece4fb;
+  color: #6038a5;
+}
+
 .status-chip[data-status='PENDING_PUSH'] {
   background: #e0f4f4;
   color: #176d73;
@@ -1041,6 +1051,24 @@ header-usage {
 
 .inline-action--approve:hover:not(:disabled) {
   background: #ebf8f2;
+}
+
+.inline-action--review {
+  border-color: #bda9e3;
+  color: #6038a5;
+}
+
+.inline-action--review:hover:not(:disabled) {
+  background: #f3eefc;
+}
+
+.inline-action--quiet {
+  border-color: #c7ced8;
+  color: #586575;
+}
+
+.inline-action--quiet:hover:not(:disabled) {
+  background: #f0f3f7;
 }
 
 .inline-action--push {

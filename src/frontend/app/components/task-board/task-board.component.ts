@@ -19,6 +19,8 @@ export class TaskBoardComponent {
   @Output() reviewRetryRequested = new EventEmitter<Task>();
   @Output() rejectRequested = new EventEmitter<Task>();
   @Output() approveRequested = new EventEmitter<Task>();
+  @Output() reviewStarted = new EventEmitter<Task>();
+  @Output() reviewExited = new EventEmitter<Task>();
   @Output() retryRequested = new EventEmitter<Task>();
 
   readonly trackTask = trackTask;

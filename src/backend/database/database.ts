@@ -39,7 +39,7 @@ const SCHEMA = `
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'TODO'
-      CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','CHERRY_PICK_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
+      CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','REVIEWING','PENDING_PUSH','CHERRY_PICK_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
     priority TEXT NOT NULL DEFAULT 'MEDIUM'
       CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
     model_effort TEXT NOT NULL DEFAULT 'medium'
@@ -153,7 +153,8 @@ export class OrchestratorDatabase {
     const hadPendingPush = taskDefinition?.sql?.includes('PENDING_PUSH') ?? false;
     const needsPublishingMigration = !taskDefinition?.sql?.includes('PENDING_BRANCH_REMOVAL')
       || !taskDefinition?.sql?.includes('REJECTED');
-    if (needsPublishingMigration || !taskDefinition?.sql?.includes('CHERRY_PICK_CONFLICT')) {
+    if (needsPublishingMigration || !taskDefinition?.sql?.includes('CHERRY_PICK_CONFLICT')
+      || !taskDefinition?.sql?.includes('REVIEWING')) {
       this.rebuildTasksForPublishing(hadPendingPush, needsPublishingMigration);
     }
 
@@ -204,7 +205,7 @@ export class OrchestratorDatabase {
           title TEXT NOT NULL,
           description TEXT NOT NULL DEFAULT '',
           status TEXT NOT NULL DEFAULT 'TODO'
-            CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','CHERRY_PICK_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
+            CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','REVIEWING','PENDING_PUSH','CHERRY_PICK_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
           priority TEXT NOT NULL DEFAULT 'MEDIUM'
             CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
           model_effort TEXT NOT NULL DEFAULT 'medium'

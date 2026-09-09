@@ -7,7 +7,9 @@
     <div class="detail-loading" *ngIf="loading && !detail" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Loading task details…</div>
     <ng-container *ngIf="task as current">
       <div class="detail-actions"><div><strong>Task actions</strong><p>Retry places this task back in Todo. Reject stops further work and keeps branch removal under your approval.</p></div><div class="detail-actions__buttons">
-        <button *ngIf="current.status === 'IN_REVIEW'" class="button button--approve" type="button" [disabled]="pending" (click)="approveRequested.emit(current)">{{ pending ? 'Approving…' : 'Approve task' }}</button>
+        <button *ngIf="current.status === 'IN_REVIEW'" class="button button--approve" type="button" [disabled]="pending" (click)="reviewStarted.emit(current)">{{ pending ? 'Switching…' : 'Start review' }}</button>
+        <button *ngIf="current.status === 'REVIEWING'" class="button button--quiet" type="button" [disabled]="pending" (click)="reviewExited.emit(current)">{{ pending ? 'Switching…' : 'Exit review' }}</button>
+        <button *ngIf="current.status === 'REVIEWING'" class="button button--approve" type="button" [disabled]="pending" (click)="approveRequested.emit(current)">{{ pending ? 'Approving…' : 'Review passed' }}</button>
         <button *ngIf="current.status === 'PENDING_BRANCH_REMOVAL'" class="button button--cleanup" type="button" [disabled]="pending" (click)="branchRemovalRequested.emit(current)">{{ pending ? 'Removing…' : 'Approve branch removal' }}</button>
         <button *ngIf="current.status === 'PENDING_PUSH'" class="button button--approve" type="button" [disabled]="pending" (click)="pushRequested.emit(current)">{{ pending ? 'Pushing…' : 'Confirm push' }}</button>
         <button *ngIf="current.status === 'CHERRY_PICK_CONFLICT'" class="button button--retry" type="button" [disabled]="pending" (click)="cherryPickResolutionRequested.emit(current)">{{ pending ? 'Queuing…' : 'Resolve conflict' }}</button>

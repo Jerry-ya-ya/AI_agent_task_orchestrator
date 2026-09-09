@@ -95,3 +95,5 @@
 ## 2026/09/10
 
 - Publish only approved Feature task commits to main with cherry-pick and review-gated Codex conflict resolution.
+
+- Add user-selected Review branches with explicit exit, approval, and project-level Worker blocking.

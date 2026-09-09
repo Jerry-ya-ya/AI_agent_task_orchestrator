@@ -17,6 +17,8 @@ export class TaskDetailDialogComponent {
   @Output() editRequested = new EventEmitter<Task>();
   @Output() deleteRequested = new EventEmitter<Task>();
   @Output() approveRequested = new EventEmitter<Task>();
+  @Output() reviewStarted = new EventEmitter<Task>();
+  @Output() reviewExited = new EventEmitter<Task>();
   @Output() branchRemovalRequested = new EventEmitter<Task>();
   @Output() pushRequested = new EventEmitter<Task>();
   @Output() cherryPickResolutionRequested = new EventEmitter<Task>();
@@ -27,7 +29,7 @@ export class TaskDetailDialogComponent {
   projectName(projectId: number): string { return projectName(this.projects, projectId); }
   statusLabel(value: TaskStatus): string { return statusLabel(this.columns, value); }
   canModify(task: Task): boolean {
-    return !['CLAIMED', 'IN_PROGRESS', 'TESTING', 'PENDING_PUSH', 'CHERRY_PICK_CONFLICT', 'PENDING_BRANCH_REMOVAL'].includes(task.status);
+    return !['CLAIMED', 'IN_PROGRESS', 'TESTING', 'REVIEWING', 'PENDING_PUSH', 'CHERRY_PICK_CONFLICT', 'PENDING_BRANCH_REMOVAL'].includes(task.status);
   }
   runLabel(_run: TaskRun, index: number, total: number): string { return `Attempt ${total - index}`; }
   hasOutput(value: string | null | undefined): boolean { return Boolean(value?.trim()); }

@@ -48,6 +48,7 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
   { status: 'IN_PROGRESS', label: 'In progress', hint: 'Agent is working' },
   { status: 'TESTING', label: 'Testing', hint: 'Running project checks' },
   { status: 'IN_REVIEW', label: 'In review', hint: 'Ready for your review' },
+  { status: 'REVIEWING', label: 'Reviewing', hint: 'Repository switched for review' },
   { status: 'PENDING_PUSH', label: 'Pending push', hint: 'Approved; waiting to publish' },
   { status: 'CHERRY_PICK_CONFLICT', label: 'Cherry-pick conflict', hint: 'Waiting for Codex resolution' },
   { status: 'PENDING_BRANCH_REMOVAL', label: 'Remove branch', hint: 'Legacy branch cleanup' },
@@ -431,7 +432,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   async approveTask(task: Task, event?: Event): Promise<void> {
     event?.stopPropagation();
-    if (this.isTaskPending(task.id)) {
+    if (task.status !== 'REVIEWING' || this.isTaskPending(task.id)) {
       return;
     }
 
@@ -668,6 +669,7 @@ export class AppComponent implements OnInit, OnDestroy {
     return task.status !== 'CLAIMED' &&
       task.status !== 'IN_PROGRESS' &&
       task.status !== 'TESTING' &&
+      task.status !== 'REVIEWING' &&
       task.status !== 'PENDING_PUSH' &&
       task.status !== 'CHERRY_PICK_CONFLICT' &&
       task.status !== 'PENDING_BRANCH_REMOVAL';
@@ -789,6 +791,42 @@ export class AppComponent implements OnInit, OnDestroy {
     } catch {
       // Regular health polling will report a backend that is still starting or unavailable.
     } finally {
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  async startTaskReview(task: Task, event?: Event): Promise<void> {
+    event?.stopPropagation();
+    if (task.status !== 'IN_REVIEW' || this.isTaskPending(task.id)) return;
+    this.setTaskPending(task.id, true);
+    this.clearError();
+    try {
+      await firstValueFrom(this.api.startReview(task.id));
+      if (this.selectedTaskId === task.id) this.closeModal();
+      this.showNotice(`“${task.title}” is checked out for Review.`);
+      await this.refreshBoard(false);
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.setTaskPending(task.id, false);
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  async exitTaskReview(task: Task, event?: Event): Promise<void> {
+    event?.stopPropagation();
+    if (task.status !== 'REVIEWING' || this.isTaskPending(task.id)) return;
+    this.setTaskPending(task.id, true);
+    this.clearError();
+    try {
+      await firstValueFrom(this.api.exitReview(task.id));
+      if (this.selectedTaskId === task.id) this.closeModal();
+      this.showNotice(`Exited Review for “${task.title}” and restored the base branch.`);
+      await this.refreshBoard(false);
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.setTaskPending(task.id, false);
       this.changeDetector.markForCheck();
     }
   }

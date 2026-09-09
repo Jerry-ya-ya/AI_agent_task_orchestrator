@@ -71,7 +71,7 @@ For a production-UI browser smoke test, set `ORCHESTRATOR_UI_PATH=dist/frontend/
 4. Leave the desktop app running. The Worker claims one `TODO` task at a time. Tasks within a Feature run in creation order; a Feature waiting for review or push does not block work from another Feature.
    Use the header pause/play control to stop or resume new task claims. Pausing lets the current task finish and prevents the next `TODO` task from starting.
 5. Open task cards to inspect branch, workspace, result, stdout, stderr, and all run attempts.
-6. Approve an `IN_REVIEW` task to move it to `PENDING_PUSH`.
+6. Select an `IN_REVIEW` task to check out its exact commit on a disposable Review branch. Exit Review to restore `main` and return it to `IN_REVIEW`, or pass Review to restore `main` and move it to `PENDING_PUSH`.
 7. Confirm push to cherry-pick only the approved task commit from its shared Feature branch onto `main`, push `main` to `origin`, and move the task checkpoint to `DONE`. Retry a `FAILED` task after reviewing its logs.
 
 For a Feature titled `Login API`, the generated branch is:
@@ -108,5 +108,6 @@ Automated tests do not invoke real Codex or consume an authenticated session.
 - Logs are capped by the process runner before they are persisted.
 - Deleting an inactive task removes its database record and run history but deliberately leaves shared Feature history in Git intact.
 - Approval changes state only. A separate explicit confirmation cherry-picks the selected task commit from `feature/<slug>` onto `main` and pushes `main` to `origin` using the user's existing Git credentials.
+- Active human Review uses a disposable `agent/<task-id>-review` branch and blocks new Worker claims only for that project until Review is exited or passed.
 - Cherry-pick conflicts are aborted on `main`. After the user selects a model strength, Codex resolves the conflict on a disposable branch based on `main`; the resolved single commit returns to Review before it can be published. Shared Feature branches remain local for later tasks, while existing legacy per-task branches retain their prior merge and cleanup flow.
 - No accounts, cloud sync, LAN binding, multi-user features, parallel workers, DAGs, notifications, remote access, PR automation, or GitHub API integration are included.

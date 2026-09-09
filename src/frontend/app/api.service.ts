@@ -125,6 +125,14 @@ export class ApiService {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/approve`, {});
   }
 
+  startReview(taskId: number): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/start-review`, {});
+  }
+
+  exitReview(taskId: number): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/exit-review`, {});
+  }
+
   pushTask(taskId: number): Observable<Task> {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/push`, {});
   }

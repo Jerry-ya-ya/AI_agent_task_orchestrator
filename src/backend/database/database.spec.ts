@@ -64,6 +64,12 @@ describe('OrchestratorDatabase schema', () => {
       '2026-01-01T00:00:00.000Z'
     )).not.toThrow();
     expect(() => insertTask.run(
+      'REVIEWING',
+      'MEDIUM',
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z'
+    )).not.toThrow();
+    expect(() => insertTask.run(
       'CHERRY_PICK_CONFLICT',
       'MEDIUM',
       '2026-01-01T00:00:00.000Z',
@@ -336,6 +342,25 @@ describe('TaskRepository.claimNext', () => {
     expect(tasks.transition(first.id, 'CLAIMED', 'FAILED')).not.toBeNull();
     expect(tasks.claimNext()).toBeNull();
     expect(tasks.transition(first.id, 'FAILED', 'IN_REVIEW')).not.toBeNull();
+    expect(tasks.claimNext()?.id).toBe(blocked.id);
+  });
+
+  it('does not claim work from a project while its repository is checked out for Review', () => {
+    const database = new OrchestratorDatabase(':memory:');
+    databases.push(database);
+    const projects = new ProjectRepository(database);
+    const runs = new TaskRunRepository(database);
+    const tasks = new TaskRepository(database, runs);
+    const firstProject = projects.create({ name: 'Reviewing', repository_path: '/reviewing', context: '' });
+    const secondProject = projects.create({ name: 'Available', repository_path: '/available', context: '' });
+    const reviewing = tasks.create({ project_id: firstProject.id, title: 'Inspect', priority: 'LOW' });
+    const blocked = tasks.create({ project_id: firstProject.id, title: 'Wait', priority: 'URGENT' });
+    const available = tasks.create({ project_id: secondProject.id, title: 'Proceed', priority: 'HIGH' });
+    expect(tasks.transition(reviewing.id, 'TODO', 'REVIEWING')).not.toBeNull();
+
+    expect(tasks.claimNext()?.id).toBe(available.id);
+    expect(tasks.claimNext()).toBeNull();
+    expect(tasks.transition(reviewing.id, 'REVIEWING', 'IN_REVIEW')).not.toBeNull();
     expect(tasks.claimNext()?.id).toBe(blocked.id);
   });
 });

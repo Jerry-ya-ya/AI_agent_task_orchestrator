@@ -21,6 +21,8 @@ describe('TaskService state rules', () => {
   let publishBranch: ReturnType<typeof vi.fn>;
   let publishFeatureTask: ReturnType<typeof vi.fn>;
   let removeTaskBranch: ReturnType<typeof vi.fn>;
+  let beginTaskReview: ReturnType<typeof vi.fn>;
+  let endTaskReview: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     database = new OrchestratorDatabase(':memory:');
@@ -31,7 +33,11 @@ describe('TaskService state rules', () => {
     publishBranch = vi.fn(async () => ({ baseBranch: 'main' }));
     publishFeatureTask = vi.fn(async () => ({ baseBranch: 'main' }));
     removeTaskBranch = vi.fn(async () => true);
-    const git = { publishBranch, publishFeatureTask, removeTaskBranch } as unknown as GitService;
+    beginTaskReview = vi.fn(async (task: Task) => `agent/${task.id}-review`);
+    endTaskReview = vi.fn(async () => undefined);
+    const git = {
+      publishBranch, publishFeatureTask, removeTaskBranch, beginTaskReview, endTaskReview,
+    } as unknown as GitService;
     service = new TaskService(tasks, projects, runs, git, features);
     project = projects.create({
       name: 'Example',
@@ -78,7 +84,7 @@ describe('TaskService state rules', () => {
     expect(() => service.create({ project_id: 9999, title: 'Orphan' })).toThrow(ValidationError);
   });
 
-  it.each(['CLAIMED', 'IN_PROGRESS', 'TESTING', 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL'] as const)(
+  it.each(['CLAIMED', 'IN_PROGRESS', 'TESTING', 'REVIEWING', 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL'] as const)(
     'rejects edits and deletion while a task is %s',
     (activeStatus) => {
       const task = createTask(`Task in ${activeStatus}`);
@@ -105,13 +111,13 @@ describe('TaskService state rules', () => {
     expect(tasks.findById(task.id)?.project_id).toBe(project.id);
   });
 
-  it('retries tasks from every inactive state and preserves their branch and workspace', () => {
+  it('retries tasks from every inactive state and preserves their branch and workspace', async () => {
     const failed = createTask('Retry me');
     expect(tasks.transition(failed.id, 'TODO', 'CLAIMED')).not.toBeNull();
     tasks.setArtifacts(failed.id, 'agent/1-retry-me', '/example/repository', 'main');
     expect(tasks.transition(failed.id, 'CLAIMED', 'FAILED')).not.toBeNull();
 
-    const retried = service.retry(failed.id, {
+    const retried = await service.retry(failed.id, {
       prompt: 'Fix the failing implementation and rerun verification.',
       model_effort: 'high'
     });
@@ -122,7 +128,7 @@ describe('TaskService state rules', () => {
       branch_name: 'agent/1-retry-me',
       worktree_path: '/example/repository'
     });
-    expect(service.retry(failed.id, { prompt: '   ' })).toMatchObject({
+    expect(await service.retry(failed.id, { prompt: '   ' })).toMatchObject({
       status: 'TODO',
       model_effort: 'high',
       retry_prompt: null,
@@ -135,7 +141,7 @@ describe('TaskService state rules', () => {
       model_effort: 'low'
     });
     expect(service.pause(queued.id).is_paused).toBe(true);
-    expect(service.retry(queued.id, {
+    expect(await service.retry(queued.id, {
       prompt: 'Try this task now.',
       model_effort: 'xhigh'
     })).toMatchObject({
@@ -145,7 +151,7 @@ describe('TaskService state rules', () => {
     for (const status of ['IN_REVIEW', 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL', 'DONE', 'REJECTED'] as const) {
       const task = createTask(`Retry ${status}`);
       expect(tasks.transition(task.id, 'TODO', status)).not.toBeNull();
-      expect(service.retry(task.id, { prompt: `Retry from ${status}.` })).toMatchObject({
+      expect(await service.retry(task.id, { prompt: `Retry from ${status}.` })).toMatchObject({
         status: 'TODO', retry_prompt: `Retry from ${status}.`, is_rejected: false
       });
     }
@@ -156,7 +162,7 @@ describe('TaskService state rules', () => {
     async (status) => {
       const task = createTask(`Running ${status}`);
       expect(tasks.transition(task.id, 'TODO', status)).not.toBeNull();
-      expect(() => service.retry(task.id, { prompt: 'Restart after cancellation.' })).toThrow(ConflictError);
+      await expect(service.retry(task.id, { prompt: 'Restart after cancellation.' })).rejects.toThrow(ConflictError);
       await expect(service.reject(task.id)).rejects.toThrow(ConflictError);
     }
   );
@@ -176,15 +182,36 @@ describe('TaskService state rules', () => {
     });
   });
 
-  it('approves only IN_REVIEW tasks into PENDING_PUSH', () => {
+  it('checks out one selected task for Review, supports exit, and only approves REVIEWING tasks', async () => {
     const review = createTask('Review me');
     const todo = createTask('Still queued');
     expect(tasks.transition(review.id, 'TODO', 'IN_REVIEW')).not.toBeNull();
 
-    expect(service.approve(review.id).status).toBe('PENDING_PUSH');
-    expect(() => service.approve(review.id)).toThrow(ConflictError);
-    expect(() => service.approve(todo.id)).toThrow(ConflictError);
+    await expect(service.startReview(review.id)).resolves.toMatchObject({ status: 'REVIEWING' });
+    expect(beginTaskReview).toHaveBeenCalledWith(expect.objectContaining({ id: review.id }), '/example');
+    const secondReview = createTask('Review later');
+    expect(tasks.transition(secondReview.id, 'TODO', 'IN_REVIEW')).not.toBeNull();
+    await expect(service.startReview(secondReview.id)).rejects.toThrow('already being reviewed');
+    await expect(service.exitReview(review.id)).resolves.toMatchObject({ status: 'IN_REVIEW' });
+    expect(endTaskReview).toHaveBeenCalledWith(expect.objectContaining({ id: review.id }), '/example');
+    await service.startReview(review.id);
+    await expect(service.approve(review.id)).resolves.toMatchObject({ status: 'PENDING_PUSH' });
+    await expect(service.approve(review.id)).rejects.toThrow(ConflictError);
+    await expect(service.approve(todo.id)).rejects.toThrow(ConflictError);
     expect(tasks.findById(todo.id)?.status).toBe('TODO');
+  });
+
+  it('restores the base checkout before retrying or rejecting a REVIEWING task', async () => {
+    const retried = createTask('Retry active Review');
+    expect(tasks.transition(retried.id, 'TODO', 'REVIEWING')).not.toBeNull();
+    await expect(service.retry(retried.id, { prompt: 'Rework this.' }))
+      .resolves.toMatchObject({ status: 'TODO' });
+    expect(endTaskReview).toHaveBeenCalledWith(expect.objectContaining({ id: retried.id }), '/example');
+
+    const rejected = createTask('Reject active Review');
+    expect(tasks.transition(rejected.id, 'TODO', 'REVIEWING')).not.toBeNull();
+    await expect(service.reject(rejected.id)).resolves.toMatchObject({ status: 'REJECTED' });
+    expect(endTaskReview).toHaveBeenCalledWith(expect.objectContaining({ id: rejected.id }), '/example');
   });
 
   it('creates a revision linked to its reviewed source and marks the previous version rejected', () => {
@@ -226,7 +253,8 @@ describe('TaskService state rules', () => {
     expect(tasks.transition(review.id, 'TODO', 'CLAIMED')).not.toBeNull();
     tasks.setArtifacts(review.id, `agent/${review.id}-publish-me`, '/example/repository', 'main');
     expect(tasks.transition(review.id, 'CLAIMED', 'IN_REVIEW')).not.toBeNull();
-    service.approve(review.id);
+    await service.startReview(review.id);
+    await service.approve(review.id);
 
     await expect(service.push(review.id)).resolves.toMatchObject({ status: 'PENDING_BRANCH_REMOVAL' });
     expect(publishBranch).toHaveBeenCalledWith(
@@ -251,7 +279,8 @@ describe('TaskService state rules', () => {
     expect(tasks.transition(review.id, 'TODO', 'CLAIMED')).not.toBeNull();
     tasks.setArtifacts(review.id, `agent/${review.id}-retry-publishing`, '/example/repository', 'main');
     expect(tasks.transition(review.id, 'CLAIMED', 'IN_REVIEW')).not.toBeNull();
-    service.approve(review.id);
+    await service.startReview(review.id);
+    await service.approve(review.id);
     publishBranch.mockRejectedValueOnce(new Error('origin rejected the push'));
 
     await expect(service.push(review.id)).rejects.toThrow('origin rejected the push');
@@ -267,7 +296,8 @@ describe('TaskService state rules', () => {
       base_branch: 'main'
     });
     expect(tasks.transition(task.id, 'TODO', 'IN_REVIEW')).not.toBeNull();
-    service.approve(task.id);
+    await service.startReview(task.id);
+    await service.approve(task.id);
 
     await expect(service.push(task.id)).resolves.toMatchObject({ status: 'DONE' });
     expect(publishFeatureTask).toHaveBeenCalledWith('/example', 'feature/search', 'main', null, null, task.id);
@@ -279,7 +309,8 @@ describe('TaskService state rules', () => {
     const feature = features.create({ project_id: project.id, name: 'Conflicted' }, 'feature/conflicted', 'main');
     const task = service.create({ project_id: project.id, feature_id: feature.id, title: 'Resolve overlap' });
     expect(tasks.transition(task.id, 'TODO', 'IN_REVIEW')).not.toBeNull();
-    service.approve(task.id);
+    await service.startReview(task.id);
+    await service.approve(task.id);
     publishFeatureTask.mockRejectedValueOnce(new CherryPickConflictError(
       'Cherry-pick conflict detected in src/app.ts.',
       { exitCode: 1, stdout: '', stderr: 'CONFLICT', timedOut: false, aborted: false },

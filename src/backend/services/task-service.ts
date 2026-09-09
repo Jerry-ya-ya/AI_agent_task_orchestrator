@@ -20,6 +20,7 @@ const LOCKED_STATUSES: readonly TaskStatus[] = [
   'CLAIMED',
   'IN_PROGRESS',
   'TESTING',
+  'REVIEWING',
   'PENDING_PUSH',
   'CHERRY_PICK_CONFLICT',
   'PENDING_BRANCH_REMOVAL'
@@ -113,10 +114,13 @@ export class TaskService {
     this.tasks.delete(id);
   }
 
-  public retry(id: number, input: RetryTaskInput): Task {
+  public async retry(id: number, input: RetryTaskInput): Promise<Task> {
     const existing = this.requireTask(id);
     if (RUNNING_STATUSES.includes(existing.status)) {
       throw new ConflictError('The active task must stop before it can be retried.');
+    }
+    if (existing.status === 'REVIEWING') {
+      await this.leaveReviewCheckout(existing);
     }
     const prompt = input.prompt?.trim() || null;
     const updated = this.tasks.retry(id, input.model_effort ?? existing.model_effort, prompt);
@@ -143,6 +147,9 @@ export class TaskService {
     if (RUNNING_STATUSES.includes(task.status)) {
       throw new ConflictError('The active task must stop before it can be rejected.');
     }
+    if (task.status === 'REVIEWING') {
+      await this.leaveReviewCheckout(task);
+    }
     const updated = this.tasks.reject(id);
     if (updated === null) {
       throw new ConflictError('Task state changed while it was being rejected.');
@@ -150,12 +157,44 @@ export class TaskService {
     return updated;
   }
 
-  public approve(id: number): Task {
-    this.requireTask(id);
-    const updated = this.tasks.transition(id, 'IN_REVIEW', 'PENDING_PUSH');
-    if (updated === null) {
-      throw new ConflictError('Only IN_REVIEW tasks can be approved.');
+  public async startReview(id: number): Promise<Task> {
+    const task = this.requireTask(id);
+    if (task.status !== 'IN_REVIEW') {
+      throw new ConflictError('Only IN_REVIEW tasks can enter active Review.');
     }
+    if (this.tasks.list({ projectId: task.project_id }).some((candidate) => candidate.status === 'REVIEWING')) {
+      throw new ConflictError('Another task in this project is already being reviewed.');
+    }
+    const project = this.projects.findById(task.project_id);
+    if (project === null) throw new NotFoundError(`Project ${task.project_id} was not found.`);
+    await this.git.beginTaskReview(task, project.repository_path);
+    const updated = this.tasks.transition(id, 'IN_REVIEW', 'REVIEWING');
+    if (updated === null) {
+      await this.git.endTaskReview(task, project.repository_path);
+      throw new ConflictError('Task state changed while starting Review.');
+    }
+    return updated;
+  }
+
+  public async exitReview(id: number): Promise<Task> {
+    const task = this.requireTask(id);
+    if (task.status !== 'REVIEWING') {
+      throw new ConflictError('Only REVIEWING tasks can exit active Review.');
+    }
+    await this.leaveReviewCheckout(task);
+    const updated = this.tasks.transition(id, 'REVIEWING', 'IN_REVIEW');
+    if (updated === null) throw new ConflictError('Task state changed while exiting Review.');
+    return updated;
+  }
+
+  public async approve(id: number): Promise<Task> {
+    const task = this.requireTask(id);
+    if (task.status !== 'REVIEWING') {
+      throw new ConflictError('Only the task currently being reviewed can be approved.');
+    }
+    await this.leaveReviewCheckout(task);
+    const updated = this.tasks.transition(id, 'REVIEWING', 'PENDING_PUSH');
+    if (updated === null) throw new ConflictError('Task state changed while approving Review.');
     return updated;
   }
 
@@ -274,6 +313,12 @@ export class TaskService {
     if (this.projects.findById(id) === null) {
       throw new ValidationError(`Project ${id} does not exist.`);
     }
+  }
+
+  private async leaveReviewCheckout(task: Task): Promise<void> {
+    const project = this.projects.findById(task.project_id);
+    if (project === null) throw new NotFoundError(`Project ${task.project_id} was not found.`);
+    await this.git.endTaskReview(task, project.repository_path);
   }
 
   public resolveCherryPickConflict(id: number, modelEffort: ModelEffort): Task {

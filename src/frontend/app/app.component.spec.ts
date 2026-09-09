@@ -209,6 +209,7 @@ describe('AppComponent initialization', () => {
       'IN_PROGRESS',
       'TESTING',
       'IN_REVIEW',
+      'REVIEWING',
       'PENDING_PUSH',
       'CHERRY_PICK_CONFLICT',
       'PENDING_BRANCH_REMOVAL',
@@ -219,7 +220,7 @@ describe('AppComponent initialization', () => {
   });
 
   it('sends approval requests instead of returning after marking the task pending', async () => {
-    const task = exampleTask({ status: 'IN_REVIEW' });
+    const task = exampleTask({ status: 'REVIEWING' });
     const worker: WorkerStatus = {
       running: true,
       busy: false,
