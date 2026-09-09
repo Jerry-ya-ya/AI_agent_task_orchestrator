@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ApiService } from './api.service';
 import { AppComponent } from './app.component';
-import type { AgentUsage, Project, Task, WorkerStatus } from './models';
+import type { AgentUsage, Feature, Project, Task, WorkerStatus } from './models';
 import { completedTaskHistory } from './task-view.utils';
 
 afterEach(() => {
@@ -42,6 +42,26 @@ describe('AppComponent initialization', () => {
     ];
 
     expect(component.historyTaskCount()).toBe(3);
+  });
+
+  it('opens task creation with the selected Feature and Project prefilled', () => {
+    const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
+    const component = new AppComponent(api, { markForCheck: vi.fn() } as unknown as ChangeDetectorRef);
+    const feature: Feature = {
+      id: 8, project_id: 3, name: 'Search', branch_name: 'feature/search', base_branch: 'main',
+      created_at: '', updated_at: '',
+    };
+    component.projects = [
+      { ...exampleProject(), id: 1 },
+      { ...exampleProject(), id: 3, name: 'Search project', repository_path: 'C:\\Projects\\search' },
+    ];
+    component.features = [feature];
+    vi.spyOn(component as unknown as { activateModal(): void }, 'activateModal').mockImplementation(() => undefined);
+
+    component.openCreateTask(feature.id);
+
+    expect(component.taskEditorMode).toBe('create');
+    expect(component.taskDraft).toMatchObject({ project_id: 3, feature_id: 8 });
   });
 
   it('minimizes the Electron window from the title-bar control', () => {

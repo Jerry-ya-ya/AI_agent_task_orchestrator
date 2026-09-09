@@ -14,7 +14,7 @@
           <span class="branch-order-actions"><button type="button" [disabled]="!canMoveBranch(map, lane, -1)" title="Move branch up" [attr.aria-label]="'Move ' + lane.name + ' up'" (click)="moveBranch(map, lane, -1)">↑</button><button type="button" [disabled]="!canMoveBranch(map, lane, 1)" title="Move branch down" [attr.aria-label]="'Move ' + lane.name + ' down'" (click)="moveBranch(map, lane, 1)">↓</button></span>
         </div>
       </div>
-      <cytoscape-branch-graph [map]="map" [lanes]="featureLanes(map)" (taskOpened)="taskOpened.emit($event)"></cytoscape-branch-graph>
+      <cytoscape-branch-graph [map]="map" [lanes]="featureLanes(map)" (taskOpened)="taskOpened.emit($event)" (taskCreationRequested)="createTask.emit($event)"></cytoscape-branch-graph>
     </div>
     <ng-template #noBranches><div class="history-empty"><p>No local branches or configured features found.</p></div></ng-template>
   </div>

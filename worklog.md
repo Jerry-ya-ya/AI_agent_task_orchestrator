@@ -85,3 +85,7 @@
 - feat: replace Feature branch maps with lazy-loaded interactive Cytoscape graphs.
 
 - fix: preserve Cytoscape branch graph view state across refreshes and add a reset-view control.
+
+## 2026/09/09
+
+- feat: add Feature branch endpoint controls for creating preselected tasks.

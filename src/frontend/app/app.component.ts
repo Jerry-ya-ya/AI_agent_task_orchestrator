@@ -223,7 +223,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.activateModal();
   }
 
-  openCreateTask(): void {
+  openCreateTask(featureId?: number): void {
     if (this.projects.length === 0) {
       this.openProjectEditor();
       return;
@@ -237,6 +237,13 @@ export class AppComponent implements OnInit, OnDestroy {
     this.clearError();
     this.editingTaskId = null;
     this.taskDraft = this.emptyTaskDraft();
+    if (featureId !== undefined) {
+      const feature = this.features.find((item) => item.id === featureId);
+      if (feature !== undefined) {
+        this.taskDraft.project_id = feature.project_id;
+        this.taskDraft.feature_id = feature.id;
+      }
+    }
     this.taskEditorMode = 'create';
     this.activateModal();
   }

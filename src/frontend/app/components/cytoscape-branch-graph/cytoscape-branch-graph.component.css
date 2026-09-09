@@ -12,6 +12,11 @@
     linear-gradient(90deg, rgba(67, 78, 91, 0.035) 1px, transparent 1px),
     #fff;
   background-size: 24px 24px;
+  cursor: grab;
+}
+
+.cytoscape-branch-graph:active {
+  cursor: grabbing;
 }
 
 .cytoscape-branch-graph__toolbar {

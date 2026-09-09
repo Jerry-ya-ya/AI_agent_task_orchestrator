@@ -17,6 +17,7 @@ export class FeatureMapComponent {
   @Input({ required: true }) loading = false;
   @Output() createFeature = new EventEmitter<number>();
   @Output() taskOpened = new EventEmitter<number>();
+  @Output() createTask = new EventEmitter<number>();
   @Output() branchOrderChanged = new EventEmitter<{ projectId: number; branchNames: string[] }>();
 
   branchColor(index: number): string {

@@ -48,6 +48,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   @Input({ required: true }) map!: ProjectBranchMap;
   @Input({ required: true }) lanes: readonly BranchLane[] = [];
   @Output() taskOpened = new EventEmitter<number>();
+  @Output() taskCreationRequested = new EventEmitter<number>();
   @ViewChild('graphHost', { static: true }) private graphHost!: ElementRef<HTMLDivElement>;
 
   graphHeight = 360;
@@ -173,6 +174,23 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
         ));
         previousId = taskId;
       });
+
+      if (lane.feature !== null) {
+        const addTaskId = `branch:${laneIndex}:add-task`;
+        elements.push(this.node(addTaskId, forkX + ((lane.tasks.length + 1) * COMMIT_GAP), y, {
+          label: '+',
+          subtitle: 'Add task',
+          featureId: lane.feature.id,
+          color,
+        }, `add-task${missingClass}`));
+        elements.push(this.edge(
+          `add-task-edge:${laneIndex}`,
+          previousId,
+          addTaskId,
+          color,
+          `branch-edge${missingClass}`,
+        ));
+      }
     });
 
     return {
@@ -218,6 +236,16 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     this.graph.on('tap', 'node.task', (event) => {
       const taskId = Number(event.target.data('taskId'));
       if (Number.isInteger(taskId)) this.taskOpened.emit(taskId);
+    });
+    this.graph.on('tap', 'node.add-task', (event) => {
+      const featureId = Number(event.target.data('featureId'));
+      if (Number.isInteger(featureId)) this.taskCreationRequested.emit(featureId);
+    });
+    this.graph.on('mouseover', 'node.task, node.add-task', () => {
+      this.graphHost.nativeElement.style.cursor = 'pointer';
+    });
+    this.graph.on('mouseout', 'node.task, node.add-task', () => {
+      this.graphHost.nativeElement.style.cursor = 'grab';
     });
   }
 
@@ -279,6 +307,11 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       { selector: 'node.current', style: { 'border-width': 5 } },
       { selector: 'node.fork', style: { width: 16, height: 16, 'font-size': 8, 'text-max-width': '135px' } },
       { selector: 'node.task', style: { width: 19, height: 19 } },
+      { selector: 'node.add-task', style: {
+        width: 30, height: 30, 'background-color': '#ffffff', 'border-width': 2,
+        'font-size': 22, 'font-weight': 500, 'text-valign': 'center', 'text-margin-y': 0,
+        'text-max-width': '80px',
+      } },
       { selector: 'node.status-done', style: { 'border-color': '#29966a', 'background-color': '#dff4e9' } },
       { selector: 'node.status-failed', style: { 'border-color': '#c84545', 'background-color': '#fae2e2' } },
       { selector: 'node.status-rebase_conflict', style: { 'border-color': '#d06b28', 'background-color': '#fff0e4' } },

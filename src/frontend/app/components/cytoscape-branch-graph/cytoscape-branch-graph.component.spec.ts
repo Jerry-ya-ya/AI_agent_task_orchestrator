@@ -26,6 +26,8 @@ describe('CytoscapeBranchGraphComponent', () => {
     const forkEdge = model.elements.find((element) => element.data.id === 'fork-edge:0');
     const checkpoint = model.elements.find((element) => element.data.id === 'branch:0:task:2');
     const waiting = model.elements.find((element) => element.data.id === 'branch:0:task:3');
+    const addTask = model.elements.find((element) => element.data.id === 'branch:0:add-task');
+    const addTaskEdge = model.elements.find((element) => element.data.id === 'add-task-edge:0');
 
     expect(featureCommit).toMatchObject({
       data: { color: '#3977d4' }, classes: 'primary feature-owned', grabbable: false, pannable: true,
@@ -36,6 +38,12 @@ describe('CytoscapeBranchGraphComponent', () => {
     });
     expect(checkpoint?.classes).toContain('checkpoint');
     expect(waiting?.classes).not.toContain('checkpoint');
+    expect(addTask).toMatchObject({
+      data: { label: '+', subtitle: 'Add task', featureId: 7, color: '#3977d4' },
+      position: { x: 1010, y: 220 },
+      classes: 'add-task',
+    });
+    expect(addTaskEdge).toMatchObject({ data: { source: 'branch:0:task:3', target: 'branch:0:add-task' } });
     expect(model.height).toBe(360);
   });
 
