@@ -76,6 +76,24 @@ describe('GitService', () => {
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe(firstTask.branch_name);
   });
 
+  it('requires main when creating every new Feature branch, regardless of stored legacy base data', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const service = new GitService(runner);
+    const existing = { ...exampleTask(), feature_id: 1, branch_name: 'feature/existing', base_branch: 'main' };
+    const prepared = await service.prepareBranch(existing, repository);
+    await service.completeBranch(prepared, existing.id);
+    await git(runner, repository, ['switch', existing.branch_name]);
+
+    const nested = {
+      ...exampleTask(), id: 102, feature_id: 2, branch_name: 'feature/nested', base_branch: existing.branch_name,
+    };
+    await expect(service.prepareBranch(nested, repository)).rejects.toThrow(
+      'Repository must be on main before creating feature/nested; it is on feature/existing.',
+    );
+    expect(await gitExitCode(runner, repository, ['show-ref', '--verify', '--quiet', 'refs/heads/feature/nested']))
+      .toBe(1);
+  });
+
   it('publishes an approved task branch to its base branch and origin', async () => {
     const { repository, runner } = await temporaryRepository();
     const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-remote-'));

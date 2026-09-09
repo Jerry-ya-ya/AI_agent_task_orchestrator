@@ -83,4 +83,19 @@ describe('FeatureService', () => {
     expect(generated).toMatch(/^feature\/account-settings-[a-f0-9]{8}$/u);
     expect(createAvailableFeatureBranch('Account settings!', ['FEATURE/account-settings'])).toBe(generated);
   });
+
+  it('requires Feature configuration to start from a local main checkout', async () => {
+    const projects = new ProjectRepository(database);
+    const features = new FeatureRepository(database);
+    const tasks = new TaskRepository(database, new TaskRunRepository(database));
+    const project = projects.create({ name: 'Nested', repository_path: '/nested', context: '' });
+    const inspectBranches = vi.fn(async () => ({
+      currentBranch: 'feature/task', localBranches: ['main', 'feature/task'],
+    }));
+    const service = new FeatureService(features, projects, tasks, { inspectBranches } as unknown as GitService);
+
+    await expect(service.create({ project_id: project.id, name: 'Superadmin logger' }))
+      .rejects.toThrow('Repository must be on main before configuring a Feature; it is on feature/task.');
+    expect(features.list(project.id)).toEqual([]);
+  });
 });

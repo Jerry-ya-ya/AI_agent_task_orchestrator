@@ -223,6 +223,27 @@ describe('OrchestratorDatabase schema', () => {
     database = undefined;
     await rm(temporaryRoot, { recursive: true, force: true });
   });
+
+  it('normalizes legacy nested Feature bases and their tasks to main', () => {
+    database = new OrchestratorDatabase(':memory:');
+    const projects = new ProjectRepository(database);
+    const features = new FeatureRepository(database);
+    const tasks = new TaskRepository(database, new TaskRunRepository(database));
+    const project = projects.create({ name: 'Legacy nested', repository_path: '/nested', context: '' });
+    const feature = features.create(
+      { project_id: project.id, name: 'Logger' },
+      'feature/logger',
+      'feature/task',
+    );
+    const task = tasks.create({
+      project_id: project.id, feature_id: feature.id, title: 'Add logger', description: '', priority: 'MEDIUM',
+    });
+
+    database.migrate();
+
+    expect(features.findById(feature.id)?.base_branch).toBe('main');
+    expect(tasks.findById(task.id)?.base_branch).toBe('main');
+  });
 });
 
 describe('TaskRepository.claimNext', () => {

@@ -153,6 +153,15 @@ export class OrchestratorDatabase {
       this.rebuildTasksForPublishing(hadPendingPush, needsPublishingMigration);
     }
 
+    // Feature delivery is intentionally flat: every Feature starts from main.
+    // Normalize records created before this invariant was introduced so failed
+    // tasks can be retried without being recreated.
+    this.connection.exec(`
+      UPDATE features SET base_branch = 'main' WHERE base_branch <> 'main';
+      UPDATE tasks SET base_branch = 'main'
+      WHERE feature_id IS NOT NULL AND (base_branch IS NULL OR base_branch <> 'main');
+    `);
+
     this.connection.exec(`
       UPDATE tasks
       SET commit_summary = (

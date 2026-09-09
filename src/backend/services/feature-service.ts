@@ -25,6 +25,11 @@ export class FeatureService {
     const name = input.name.trim();
     if (name.length === 0) throw new ValidationError('Feature name is required.');
     const snapshot = await this.git.inspectBranches(project.repository_path);
+    if (snapshot.currentBranch !== 'main') {
+      throw new ConflictError(
+        `Repository must be on main before configuring a Feature; it is on ${snapshot.currentBranch}.`,
+      );
+    }
     const configuredFeatures = this.features.list(project.id);
     if (configuredFeatures.some((feature) => feature.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
       throw new ConflictError(`Feature ${name} is already configured for this project.`);
@@ -33,7 +38,7 @@ export class FeatureService {
       name,
       [...snapshot.localBranches, ...configuredFeatures.map((feature) => feature.branch_name)],
     );
-    return this.features.create({ project_id: project.id, name }, branchName, snapshot.currentBranch);
+    return this.features.create({ project_id: project.id, name }, branchName, 'main');
   }
 
   public async reorderBranches(projectId: number, branchNames: readonly string[]): Promise<void> {

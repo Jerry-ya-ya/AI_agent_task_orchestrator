@@ -108,9 +108,12 @@ export class GitService {
 
     const originalBranch = await this.currentBranch(repositoryRoot, signal);
     const branchExists = await this.localBranchExists(repositoryRoot, branchName, signal);
-    if (!branchExists && task.base_branch !== null && originalBranch !== task.base_branch) {
+    const requiredBase = task.feature_id === null || task.feature_id === undefined
+      ? task.base_branch
+      : 'main';
+    if (!branchExists && requiredBase !== null && originalBranch !== requiredBase) {
       throw new ConflictError(
-        `Repository must be on feature base branch ${task.base_branch} before creating ${branchName}; it is on ${originalBranch}.`
+        `Repository must be on ${requiredBase} before creating ${branchName}; it is on ${originalBranch}.`
       );
     }
     const switched = await this.runGit(

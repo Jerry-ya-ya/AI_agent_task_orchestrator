@@ -29,7 +29,7 @@ describe('backend API', () => {
     temporaryRoot = await mkdtemp(path.join(tmpdir(), 'orchestrator-api-'));
     repositoryPath = path.join(temporaryRoot, 'repository');
     await mkdir(repositoryPath);
-    execFileSync('git', ['init', '--quiet', repositoryPath], {
+    execFileSync('git', ['init', '--quiet', '--initial-branch=main', repositoryPath], {
       windowsHide: true,
       stdio: 'pipe'
     });
