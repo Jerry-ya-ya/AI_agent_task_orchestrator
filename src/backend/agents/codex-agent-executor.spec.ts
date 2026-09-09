@@ -81,16 +81,16 @@ describe('CodexAgentExecutor', () => {
     );
   });
 
-  it('limits rebase-resolution agents to editing the orchestrator-managed conflict files', () => {
+  it('limits cherry-pick-resolution agents to editing the orchestrator-managed conflict files', () => {
     const prompt = buildCodexPrompt({
       ...exampleTask(),
       branch_name: 'feature/authentication',
-      agent_mode: 'rebase_resolution',
+      agent_mode: 'cherry_pick_resolution',
     });
 
-    expect(prompt).toContain('Rebase conflict resolution:');
+    expect(prompt).toContain('Cherry-pick conflict resolution:');
     expect(prompt).toContain('resolve every conflicted file while preserving the intent of both sides');
-    expect(prompt).toContain('Do not run git add, commit, rebase --continue, or rebase --abort');
+    expect(prompt).toContain('Do not run git add, commit, cherry-pick --continue, or cherry-pick --abort');
     expect(prompt).not.toContain('the orchestrator creates the checkpoint commit');
   });
 

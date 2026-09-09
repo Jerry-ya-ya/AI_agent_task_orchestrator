@@ -5,12 +5,12 @@ import { FormsModule } from '@angular/forms';
 import type { ModelEffort, Task } from '../../models';
 
 @Component({
-  selector: 'resolve-rebase-dialog',
+  selector: 'resolve-cherry-pick-dialog',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  templateUrl: './resolve-rebase-dialog.component.html',
+  templateUrl: './resolve-cherry-pick-dialog.component.html',
 })
-export class ResolveRebaseDialogComponent implements OnChanges {
+export class ResolveCherryPickDialogComponent implements OnChanges {
   @Input({ required: true }) task!: Task;
   @Input({ required: true }) modelEfforts: readonly ModelEffort[] = [];
   @Input({ required: true }) pending = false;

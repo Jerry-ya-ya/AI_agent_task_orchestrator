@@ -7,7 +7,7 @@ import { TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
 import { ConflictError, NotFoundError, ValidationError } from '../domain/errors.js';
 import type { Project, Task } from '../domain/types.js';
-import { RebaseConflictError, type GitService } from './git-service.js';
+import { CherryPickConflictError, type GitService } from './git-service.js';
 import { TaskService } from './task-service.js';
 
 describe('TaskService state rules', () => {
@@ -19,7 +19,7 @@ describe('TaskService state rules', () => {
   let service: TaskService;
   let project: Project;
   let publishBranch: ReturnType<typeof vi.fn>;
-  let publishFeatureBranch: ReturnType<typeof vi.fn>;
+  let publishFeatureTask: ReturnType<typeof vi.fn>;
   let removeTaskBranch: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -29,9 +29,9 @@ describe('TaskService state rules', () => {
     tasks = new TaskRepository(database, runs);
     features = new FeatureRepository(database);
     publishBranch = vi.fn(async () => ({ baseBranch: 'main' }));
-    publishFeatureBranch = vi.fn(async () => ({ baseBranch: 'main' }));
+    publishFeatureTask = vi.fn(async () => ({ baseBranch: 'main' }));
     removeTaskBranch = vi.fn(async () => true);
-    const git = { publishBranch, publishFeatureBranch, removeTaskBranch } as unknown as GitService;
+    const git = { publishBranch, publishFeatureTask, removeTaskBranch } as unknown as GitService;
     service = new TaskService(tasks, projects, runs, git, features);
     project = projects.create({
       name: 'Example',
@@ -270,26 +270,26 @@ describe('TaskService state rules', () => {
     service.approve(task.id);
 
     await expect(service.push(task.id)).resolves.toMatchObject({ status: 'DONE' });
-    expect(publishFeatureBranch).toHaveBeenCalledWith('/example', 'feature/search', 'main');
+    expect(publishFeatureTask).toHaveBeenCalledWith('/example', 'feature/search', 'main', null, null, task.id);
     expect(publishBranch).not.toHaveBeenCalled();
     await expect(service.removeBranch(task.id)).rejects.toThrow(ConflictError);
   });
 
-  it('records a Feature rebase conflict and queues Codex resolution with the selected strength', async () => {
+  it('records a Feature cherry-pick conflict and queues Codex resolution with the selected strength', async () => {
     const feature = features.create({ project_id: project.id, name: 'Conflicted' }, 'feature/conflicted', 'main');
     const task = service.create({ project_id: project.id, feature_id: feature.id, title: 'Resolve overlap' });
     expect(tasks.transition(task.id, 'TODO', 'IN_REVIEW')).not.toBeNull();
     service.approve(task.id);
-    publishFeatureBranch.mockRejectedValueOnce(new RebaseConflictError(
-      'Rebase conflict detected in src/app.ts.',
+    publishFeatureTask.mockRejectedValueOnce(new CherryPickConflictError(
+      'Cherry-pick conflict detected in src/app.ts.',
       { exitCode: 1, stdout: '', stderr: 'CONFLICT', timedOut: false, aborted: false },
       ['src/app.ts'],
     ));
 
-    await expect(service.push(task.id)).rejects.toBeInstanceOf(RebaseConflictError);
-    expect(tasks.findById(task.id)?.status).toBe('REBASE_CONFLICT');
-    expect(service.resolveRebaseConflict(task.id, 'xhigh')).toMatchObject({
-      status: 'TODO', model_effort: 'xhigh', agent_mode: 'rebase_resolution', branch_name: 'feature/conflicted',
+    await expect(service.push(task.id)).rejects.toBeInstanceOf(CherryPickConflictError);
+    expect(tasks.findById(task.id)?.status).toBe('CHERRY_PICK_CONFLICT');
+    expect(service.resolveCherryPickConflict(task.id, 'xhigh')).toMatchObject({
+      status: 'TODO', model_effort: 'xhigh', agent_mode: 'cherry_pick_resolution', branch_name: 'feature/conflicted',
     });
   });
 

@@ -129,8 +129,8 @@ export class ApiService {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/push`, {});
   }
 
-  resolveRebaseConflict(taskId: number, modelEffort: ModelEffort): Observable<Task> {
-    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/resolve-rebase`, {
+  resolveCherryPickConflict(taskId: number, modelEffort: ModelEffort): Observable<Task> {
+    return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/resolve-cherry-pick`, {
       model_effort: modelEffort,
     });
   }

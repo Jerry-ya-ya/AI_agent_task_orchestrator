@@ -183,9 +183,9 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     response.json(await dependencies.taskService.push(idSchema.parse(request.params.id)));
   });
 
-  app.post('/tasks/:id/resolve-rebase', (request, response) => {
+  app.post('/tasks/:id/resolve-cherry-pick', (request, response) => {
     const input = z.object({ model_effort: z.enum(MODEL_EFFORTS) }).strict().parse(request.body);
-    response.json(dependencies.taskService.resolveRebaseConflict(
+    response.json(dependencies.taskService.resolveCherryPickConflict(
       idSchema.parse(request.params.id),
       input.model_effort,
     ));

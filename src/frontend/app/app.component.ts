@@ -18,7 +18,7 @@ import { FeatureMapComponent } from './components/feature-map/feature-map.compon
 import { ProjectEditorDialogComponent } from './components/project-editor-dialog/project-editor-dialog.component';
 import { RetryReviewDialogComponent } from './components/retry-review-dialog/retry-review-dialog.component';
 import { RetryTaskDialogComponent, type RetryTaskRequest } from './components/retry-task-dialog/retry-task-dialog.component';
-import { ResolveRebaseDialogComponent } from './components/resolve-rebase-dialog/resolve-rebase-dialog.component';
+import { ResolveCherryPickDialogComponent } from './components/resolve-cherry-pick-dialog/resolve-cherry-pick-dialog.component';
 import { TaskBoardComponent } from './components/task-board/task-board.component';
 import { TaskDetailDialogComponent } from './components/task-detail-dialog/task-detail-dialog.component';
 import { TaskEditorDialogComponent } from './components/task-editor-dialog/task-editor-dialog.component';
@@ -49,7 +49,7 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
   { status: 'TESTING', label: 'Testing', hint: 'Running project checks' },
   { status: 'IN_REVIEW', label: 'In review', hint: 'Ready for your review' },
   { status: 'PENDING_PUSH', label: 'Pending push', hint: 'Approved; waiting to publish' },
-  { status: 'REBASE_CONFLICT', label: 'Rebase conflict', hint: 'Waiting for Codex resolution' },
+  { status: 'CHERRY_PICK_CONFLICT', label: 'Cherry-pick conflict', hint: 'Waiting for Codex resolution' },
   { status: 'PENDING_BRANCH_REMOVAL', label: 'Remove branch', hint: 'Legacy branch cleanup' },
   { status: 'DONE', label: 'Done', hint: 'Published checkpoint' },
   { status: 'REJECTED', label: 'Rejected', hint: 'Declined during review' },
@@ -71,7 +71,7 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
     TaskEditorDialogComponent,
     RetryTaskDialogComponent,
     RetryReviewDialogComponent,
-    ResolveRebaseDialogComponent,
+    ResolveCherryPickDialogComponent,
     TaskDetailDialogComponent,
   ],
   templateUrl: './app.component.html',
@@ -108,7 +108,7 @@ export class AppComponent implements OnInit, OnDestroy {
   selectedTaskDetail: TaskDetail | null = null;
   retryingTask: Task | null = null;
   retryReviewTaskId: number | null = null;
-  resolvingRebaseTask: Task | null = null;
+  resolvingCherryPickTask: Task | null = null;
   projectDraft: ProjectDraft = this.emptyProjectDraft();
   featureDraft: FeatureDraft = this.emptyFeatureDraft();
   taskDraft: TaskDraft = this.emptyTaskDraft();
@@ -285,7 +285,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.selectedTaskDetail = null;
     this.retryingTask = null;
     this.retryReviewTaskId = null;
-    this.resolvingRebaseTask = null;
+    this.resolvingCherryPickTask = null;
     this.detailLoading = false;
     this.saving = false;
     this.clearError();
@@ -357,22 +357,22 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  openResolveRebase(task: Task, event?: Event): void {
+  openResolveCherryPick(task: Task, event?: Event): void {
     event?.stopPropagation();
-    if (task.status !== 'REBASE_CONFLICT' || this.isTaskPending(task.id)) return;
+    if (task.status !== 'CHERRY_PICK_CONFLICT' || this.isTaskPending(task.id)) return;
     this.closeModal(false);
     this.clearError();
-    this.resolvingRebaseTask = task;
+    this.resolvingCherryPickTask = task;
     this.activateModal();
   }
 
-  async resolveRebaseConflict(modelEffort: Task['model_effort']): Promise<void> {
-    const task = this.resolvingRebaseTask;
+  async resolveCherryPickConflict(modelEffort: Task['model_effort']): Promise<void> {
+    const task = this.resolvingCherryPickTask;
     if (task === null || this.isTaskPending(task.id)) return;
     this.setTaskPending(task.id, true);
     this.clearError();
     try {
-      await firstValueFrom(this.api.resolveRebaseConflict(task.id, modelEffort));
+      await firstValueFrom(this.api.resolveCherryPickConflict(task.id, modelEffort));
       this.showNotice(`“${task.title}” queued for Codex conflict resolution.`);
       this.closeModal();
       await this.refreshBoard(false);
@@ -520,7 +520,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
     const baseBranch = task.feature_id ? 'main' : (task.base_branch || 'the current base branch');
     const confirmed = window.confirm(task.feature_id
-      ? `Rebase ${task.branch_name} onto ${baseBranch}, fast-forward ${baseBranch}, and push ${baseBranch} to origin?`
+      ? `Cherry-pick only “${task.commit_summary ?? task.title}” from ${task.branch_name} onto ${baseBranch}, then push ${baseBranch} to origin?`
       : `Merge “${task.title}” into ${baseBranch} and push it to origin?`);
     if (!confirmed) {
       return;
@@ -531,7 +531,7 @@ export class AppComponent implements OnInit, OnDestroy {
     try {
       await firstValueFrom(this.api.pushTask(task.id));
       this.showNotice(task.feature_id
-        ? `“${task.title}” rebased and published through ${baseBranch}.`
+        ? `“${task.title}” cherry-picked and published through ${baseBranch}.`
         : `“${task.title}” pushed; branch cleanup is awaiting approval.`);
       await this.refreshBoard(false);
     } catch (error: unknown) {
@@ -669,7 +669,7 @@ export class AppComponent implements OnInit, OnDestroy {
       task.status !== 'IN_PROGRESS' &&
       task.status !== 'TESTING' &&
       task.status !== 'PENDING_PUSH' &&
-      task.status !== 'REBASE_CONFLICT' &&
+      task.status !== 'CHERRY_PICK_CONFLICT' &&
       task.status !== 'PENDING_BRANCH_REMOVAL';
   }
 
@@ -854,7 +854,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private hasOpenModal(): boolean {
     return this.showProjectEditor || this.showFeatureEditor || this.taskEditorMode !== null ||
       this.selectedTaskId !== null || this.retryingTask !== null ||
-      this.retryReviewTaskId !== null || this.resolvingRebaseTask !== null;
+      this.retryReviewTaskId !== null || this.resolvingCherryPickTask !== null;
   }
 
   private keepFocusInModal(event: KeyboardEvent): void {

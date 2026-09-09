@@ -791,7 +791,7 @@ header-usage {
   background: #197c83;
 }
 
-[data-status='REBASE_CONFLICT'] .status-indicator {
+[data-status='CHERRY_PICK_CONFLICT'] .status-indicator {
   border-color: #d06b28;
   background: #d06b28;
 }
@@ -970,7 +970,7 @@ header-usage {
   color: #176d73;
 }
 
-.status-chip[data-status='REBASE_CONFLICT'] {
+.status-chip[data-status='CHERRY_PICK_CONFLICT'] {
   background: #fff0e4;
   color: #a84e17;
 }

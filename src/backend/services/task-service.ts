@@ -14,14 +14,14 @@ import { ProjectRepository } from '../database/project-repository.js';
 import { FeatureRepository } from '../database/feature-repository.js';
 import { type TaskFilters, TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
-import { GitService, RebaseConflictError } from './git-service.js';
+import { CherryPickConflictError, GitService } from './git-service.js';
 
 const LOCKED_STATUSES: readonly TaskStatus[] = [
   'CLAIMED',
   'IN_PROGRESS',
   'TESTING',
   'PENDING_PUSH',
-  'REBASE_CONFLICT',
+  'CHERRY_PICK_CONFLICT',
   'PENDING_BRANCH_REMOVAL'
 ];
 
@@ -174,16 +174,19 @@ export class TaskService {
 
     if (task.feature_id !== null && task.feature_id !== undefined) {
       try {
-        await this.git.publishFeatureBranch(
+        await this.git.publishFeatureTask(
           project.repository_path,
           task.branch_name,
-          'main'
+          'main',
+          task.publish_commit_sha,
+          task.commit_summary,
+          task.id,
         );
       } catch (error) {
-        if (error instanceof RebaseConflictError) {
-          const conflicted = this.tasks.transition(id, 'PENDING_PUSH', 'REBASE_CONFLICT');
+        if (error instanceof CherryPickConflictError) {
+          const conflicted = this.tasks.transition(id, 'PENDING_PUSH', 'CHERRY_PICK_CONFLICT');
           if (conflicted === null) {
-            throw new ConflictError('Task state changed while recording its rebase conflict.');
+            throw new ConflictError('Task state changed while recording its cherry-pick conflict.');
           }
         }
         throw error;
@@ -273,14 +276,14 @@ export class TaskService {
     }
   }
 
-  public resolveRebaseConflict(id: number, modelEffort: ModelEffort): Task {
+  public resolveCherryPickConflict(id: number, modelEffort: ModelEffort): Task {
     const task = this.requireTask(id);
     if (task.feature_id === null || task.feature_id === undefined || task.branch_name === null) {
-      throw new ConflictError('Only a Feature task with a managed branch can resolve a rebase conflict.');
+      throw new ConflictError('Only a Feature task with a managed branch can resolve a cherry-pick conflict.');
     }
-    const queued = this.tasks.queueRebaseResolution(id, modelEffort);
+    const queued = this.tasks.queueCherryPickResolution(id, modelEffort);
     if (queued === null) {
-      throw new ConflictError('Only REBASE_CONFLICT tasks can be queued for conflict resolution.');
+      throw new ConflictError('Only CHERRY_PICK_CONFLICT tasks can be queued for conflict resolution.');
     }
     return queued;
   }

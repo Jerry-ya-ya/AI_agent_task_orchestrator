@@ -15,6 +15,10 @@ export interface PreparedBranch {
   originalBranch: string;
 }
 
+export interface PreparedCherryPick extends PreparedBranch {
+  sourceCommitSha: string;
+}
+
 export interface PublishedBranch {
   baseBranch: string;
 }
@@ -46,13 +50,13 @@ export class GitCommandError extends AppError {
   }
 }
 
-export class RebaseConflictError extends GitCommandError {
+export class CherryPickConflictError extends GitCommandError {
   public constructor(
     message: string,
     result: ProcessResult,
     public readonly conflictedFiles: readonly string[],
   ) {
-    super(message, result, 'REBASE_CONFLICT');
+    super(message, result, 'CHERRY_PICK_CONFLICT');
   }
 }
 
@@ -192,55 +196,98 @@ export class GitService {
     return hasChanges;
   }
 
-  /** Starts a controlled Feature rebase, leaving conflict files available for the agent. */
-  public async beginFeatureRebase(
-    workspacePath: string,
-    featureBranch: string,
-    baseBranch: string,
+  /** Creates a disposable main-based branch for Codex-assisted cherry-pick resolution. */
+  public async prepareCherryPickResolution(
+    task: Task,
+    repositoryPath: string,
     signal?: AbortSignal,
-  ): Promise<boolean> {
-    const current = await this.currentBranch(workspacePath, signal);
-    if (current !== featureBranch || !/^feature\//u.test(featureBranch)) {
-      throw new ConflictError(`Rebase resolution requires the managed Feature branch ${featureBranch} to be checked out.`);
+  ): Promise<PreparedCherryPick> {
+    if (task.branch_name === null || !/^feature\//u.test(task.branch_name)) {
+      throw new ConflictError('Cherry-pick resolution requires a managed Feature branch.');
     }
-    const rebased = await this.runGit(workspacePath, ['rebase', baseBranch], signal, true);
-    if (rebased.exitCode === 0) return true;
-    if ((await this.rebaseConflictFiles(workspacePath, signal)).length > 0) return false;
-    throw new GitCommandError(
-      `Unable to start rebase of ${featureBranch} onto ${baseBranch}: ${formatFailure(rebased)}`,
-      rebased,
+    const repositoryRoot = await this.validateRepository(repositoryPath, signal);
+    await this.requireCleanCheckout(repositoryRoot, signal);
+    const originalBranch = await this.currentBranch(repositoryRoot, signal);
+    const baseBranch = task.base_branch ?? 'main';
+    if (originalBranch !== baseBranch) {
+      throw new ConflictError(
+        `Repository must be on ${baseBranch} before resolving a cherry-pick conflict; it is on ${originalBranch}.`,
+      );
+    }
+    const sourceCommitSha = await this.resolveTaskCommit(
+      repositoryRoot,
+      task.branch_name,
+      task.publish_commit_sha,
+      task.commit_summary,
+      signal,
     );
+    const branchName = `agent/${task.id}-cherry-pick-resolution`;
+    if (await this.localBranchExists(repositoryRoot, branchName, signal)) {
+      const removed = await this.runGit(repositoryRoot, ['branch', '--delete', '--force', branchName], signal, true);
+      if (removed.exitCode !== 0) {
+        throw new GitCommandError(`Unable to reset temporary branch ${branchName}: ${formatFailure(removed)}`, removed);
+      }
+    }
+    const created = await this.runGit(repositoryRoot, ['switch', '-c', branchName, baseBranch], signal, true);
+    if (created.exitCode !== 0) {
+      throw new GitCommandError(`Unable to create temporary branch ${branchName}: ${formatFailure(created)}`, created);
+    }
+    return { branchName, workspacePath: repositoryRoot, originalBranch, sourceCommitSha };
   }
 
-  /** Stages files resolved by the agent and advances one rebase step. */
-  public async continueFeatureRebase(workspacePath: string, signal?: AbortSignal): Promise<boolean> {
+  /** Starts a controlled single-commit cherry-pick, leaving conflicts available for the agent. */
+  public async beginFeatureCherryPick(
+    workspacePath: string,
+    sourceCommitSha: string,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    const picked = await this.runGit(workspacePath, ['cherry-pick', sourceCommitSha], signal, true);
+    if (picked.exitCode === 0) return true;
+    if ((await this.conflictFiles(workspacePath, signal)).length > 0) return false;
+    throw new GitCommandError(`Unable to start task cherry-pick: ${formatFailure(picked)}`, picked);
+  }
+
+  /** Stages files resolved by the agent and completes the selected commit cherry-pick. */
+  public async continueFeatureCherryPick(workspacePath: string, signal?: AbortSignal): Promise<boolean> {
     const markerCheck = await this.runGit(workspacePath, ['diff', '--check'], signal, true);
     if (markerCheck.exitCode !== 0) {
       throw new GitCommandError(
-        `Conflict markers remain in the agent's rebase resolution: ${formatFailure(markerCheck)}`,
+        `Conflict markers remain in the agent's cherry-pick resolution: ${formatFailure(markerCheck)}`,
         markerCheck,
       );
     }
     const staged = await this.runGit(workspacePath, ['add', '--all'], signal, true);
     if (staged.exitCode !== 0) {
-      throw new GitCommandError(`Unable to stage resolved rebase files: ${formatFailure(staged)}`, staged);
+      throw new GitCommandError(`Unable to stage resolved cherry-pick files: ${formatFailure(staged)}`, staged);
     }
     const continued = await this.runGit(
       workspacePath,
-      ['-c', 'core.editor=true', 'rebase', '--continue'],
+      ['-c', 'core.editor=true', 'cherry-pick', '--continue'],
       signal,
       true,
     );
     if (continued.exitCode === 0) return true;
-    if ((await this.rebaseConflictFiles(workspacePath, signal)).length > 0) return false;
-    throw new GitCommandError(`Unable to continue the Feature rebase: ${formatFailure(continued)}`, continued);
+    if ((await this.conflictFiles(workspacePath, signal)).length > 0) return false;
+    throw new GitCommandError(`Unable to continue the task cherry-pick: ${formatFailure(continued)}`, continued);
   }
 
-  public async abortFeatureRebase(workspacePath: string): Promise<void> {
-    const aborted = await this.runGit(workspacePath, ['rebase', '--abort'], undefined, true);
+  public async abortFeatureCherryPick(workspacePath: string): Promise<void> {
+    const aborted = await this.runGit(workspacePath, ['cherry-pick', '--abort'], undefined, true);
     if (aborted.exitCode !== 0) {
-      throw new GitCommandError(`Unable to abort the Feature rebase safely: ${formatFailure(aborted)}`, aborted);
+      throw new GitCommandError(`Unable to abort the task cherry-pick safely: ${formatFailure(aborted)}`, aborted);
     }
+  }
+
+  public async currentCommit(workspacePath: string, signal?: AbortSignal): Promise<string> {
+    return await this.commitAtRef(workspacePath, 'HEAD', signal);
+  }
+
+  public async commitAtRef(workspacePath: string, ref: string, signal?: AbortSignal): Promise<string> {
+    const result = await this.runGit(workspacePath, ['rev-parse', `${ref}^{commit}`], signal, true);
+    if (result.exitCode !== 0 || result.stdout.trim().length === 0) {
+      throw new GitCommandError(`Unable to read commit ${ref}: ${formatFailure(result)}`, result);
+    }
+    return result.stdout.trim();
   }
 
   /** Merges an approved task branch into its base branch and pushes that branch to origin. */
@@ -320,11 +367,14 @@ export class GitService {
     return { baseBranch };
   }
 
-  /** Rebases a shared feature branch onto its base, fast-forwards the base, then pushes the base. */
-  public async publishFeatureBranch(
+  /** Cherry-picks only the selected Feature task commit onto main, then pushes main. */
+  public async publishFeatureTask(
     repositoryPath: string,
     featureBranch: string,
-    baseBranch = 'main'
+    baseBranch: string,
+    publishCommitSha: string | null,
+    commitSummary: string | null,
+    taskId?: number,
   ): Promise<PublishedBranch> {
     const repositoryRoot = await this.validateRepository(repositoryPath);
     await this.requireCleanCheckout(repositoryRoot);
@@ -338,66 +388,118 @@ export class GitService {
       throw new ConflictError(`Feature branch is missing or unmanaged: ${featureBranch}`);
     }
 
-    const switchedToFeature = await this.runGit(
+    const sourceCommitSha = await this.resolveTaskCommit(
       repositoryRoot,
-      ['switch', featureBranch],
+      featureBranch,
+      publishCommitSha,
+      commitSummary,
+    );
+    const alreadyPublished = await this.runGit(
+      repositoryRoot,
+      ['merge-base', '--is-ancestor', sourceCommitSha, baseBranch],
       undefined,
       true,
     );
-    if (switchedToFeature.exitCode !== 0) {
-      throw new GitCommandError(`Unable to switch to feature branch ${featureBranch}: ${formatFailure(switchedToFeature)}`, switchedToFeature);
+    if (alreadyPublished.exitCode !== 0 && alreadyPublished.exitCode !== 1) {
+      throw new GitCommandError(`Unable to compare the task commit with ${baseBranch}: ${formatFailure(alreadyPublished)}`, alreadyPublished);
     }
 
-    const rebased = await this.runGit(repositoryRoot, ['rebase', baseBranch], undefined, true);
-    if (rebased.exitCode !== 0) {
-      const conflictedFiles = await this.rebaseConflictFiles(repositoryRoot);
-      const aborted = await this.runGit(repositoryRoot, ['rebase', '--abort'], undefined, true);
-      if (aborted.exitCode !== 0) {
-        throw new GitCommandError(`Rebase failed and could not be aborted safely: ${formatFailure(aborted)}`, aborted);
-      }
-      const switchedBack = await this.runGit(repositoryRoot, ['switch', baseBranch], undefined, true);
-      if (switchedBack.exitCode !== 0) {
-        throw new GitCommandError(`Rebase was aborted, but Git could not return to ${baseBranch}: ${formatFailure(switchedBack)}`, switchedBack);
-      }
-      if (conflictedFiles.length > 0) {
-        throw new RebaseConflictError(
-          `Rebase conflict detected in ${conflictedFiles.join(', ')} while rebasing ${featureBranch} onto ${baseBranch}.`,
-          rebased,
-          conflictedFiles,
-        );
-      }
-      throw new GitCommandError(
-        `Unable to rebase ${featureBranch} onto ${baseBranch}: ${formatFailure(rebased)}`,
-        rebased,
+    let patchAlreadyPublished = alreadyPublished.exitCode === 0;
+    if (!patchAlreadyPublished) {
+      const equivalent = await this.runGit(
+        repositoryRoot,
+        ['cherry', baseBranch, sourceCommitSha],
+        undefined,
+        true,
       );
+      if (equivalent.exitCode !== 0) {
+        throw new GitCommandError(`Unable to compare the task patch with ${baseBranch}: ${formatFailure(equivalent)}`, equivalent);
+      }
+      patchAlreadyPublished = equivalent.stdout.split(/\r?\n/u)
+        .some((line) => line.trim() === `- ${sourceCommitSha}`);
     }
 
-    const switchedToBase = await this.runGit(repositoryRoot, ['switch', baseBranch], undefined, true);
-    if (switchedToBase.exitCode !== 0) {
-      throw new GitCommandError(`Unable to return to ${baseBranch}: ${formatFailure(switchedToBase)}`, switchedToBase);
-    }
-
-    const fastForwarded = await this.runGit(
-      repositoryRoot,
-      ['merge', '--ff-only', featureBranch],
-      undefined,
-      true,
-    );
-    if (fastForwarded.exitCode !== 0) {
-      throw new GitCommandError(
-        `Unable to fast-forward ${baseBranch} to ${featureBranch}: ${formatFailure(fastForwarded)}`,
-        fastForwarded,
-      );
+    if (!patchAlreadyPublished) {
+      const picked = await this.runGit(repositoryRoot, ['cherry-pick', sourceCommitSha], undefined, true);
+      if (picked.exitCode !== 0) {
+        const conflictedFiles = await this.conflictFiles(repositoryRoot);
+        const aborted = await this.runGit(repositoryRoot, ['cherry-pick', '--abort'], undefined, true);
+        if (aborted.exitCode !== 0) {
+          throw new GitCommandError(`Cherry-pick failed and could not be aborted safely: ${formatFailure(aborted)}`, aborted);
+        }
+        if (conflictedFiles.length > 0) {
+          throw new CherryPickConflictError(
+            `Cherry-pick conflict detected in ${conflictedFiles.join(', ')} while publishing the selected task from ${featureBranch}.`,
+            picked,
+            conflictedFiles,
+          );
+        }
+        throw new GitCommandError(`Unable to cherry-pick the selected task commit: ${formatFailure(picked)}`, picked);
+      }
     }
 
     const pushed = await this.runGit(repositoryRoot, ['push', 'origin', baseBranch], undefined, true);
     if (pushed.exitCode !== 0) {
       throw new GitCommandError(
-        `${baseBranch} was updated locally, but could not be pushed to origin: ${formatFailure(pushed)}`,
+        `${baseBranch} contains the selected task commit locally, but could not be pushed to origin: ${formatFailure(pushed)}`,
         pushed,
       );
     }
+    if (taskId !== undefined) {
+      const resolutionBranch = `agent/${taskId}-cherry-pick-resolution`;
+      if (await this.localBranchExists(repositoryRoot, resolutionBranch)) {
+        const removed = await this.runGit(
+          repositoryRoot,
+          ['branch', '--delete', '--force', resolutionBranch],
+          undefined,
+          true,
+        );
+        if (removed.exitCode !== 0) {
+          throw new GitCommandError(
+            `${baseBranch} was pushed, but temporary branch ${resolutionBranch} could not be removed: ${formatFailure(removed)}`,
+            removed,
+          );
+        }
+      }
+    }
     return { baseBranch };
+  }
+
+  private async resolveTaskCommit(
+    repositoryRoot: string,
+    featureBranch: string,
+    publishCommitSha: string | null,
+    commitSummary: string | null,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    if (publishCommitSha !== null) {
+      const exists = await this.runGit(repositoryRoot, ['cat-file', '-e', `${publishCommitSha}^{commit}`], signal, true);
+      if (exists.exitCode !== 0) {
+        throw new ConflictError(`The prepared publish commit ${publishCommitSha} no longer exists.`);
+      }
+      return publishCommitSha;
+    }
+    const canonicalSummary = commitSummary?.trim() ?? '';
+    if (canonicalSummary.length === 0) {
+      throw new ConflictError('The task has no canonical commit summary, so its Feature commit cannot be selected safely.');
+    }
+    const log = await this.runGit(repositoryRoot, ['log', featureBranch, '--format=%H%x1f%s'], signal, true);
+    if (log.exitCode !== 0) {
+      throw new GitCommandError(`Unable to inspect Feature history: ${formatFailure(log)}`, log);
+    }
+    const matches = log.stdout.split(/\r?\n/u).filter(Boolean).flatMap((line) => {
+      const separator = line.indexOf('\x1f');
+      return separator > 0 && line.slice(separator + 1) === canonicalSummary
+        ? [line.slice(0, separator)]
+        : [];
+    });
+    if (matches.length === 0) {
+      throw new ConflictError(`No commit on ${featureBranch} exactly matches this task's canonical summary.`);
+    }
+    if (matches.length > 1) {
+      throw new ConflictError(`Multiple commits on ${featureBranch} match this task's canonical summary; publishing is ambiguous.`);
+    }
+    return matches[0] as string;
   }
 
   public async inspectBranches(repositoryPath: string): Promise<BranchSnapshot> {
@@ -569,7 +671,7 @@ export class GitService {
     throw new GitCommandError(`Unable to inspect branch ${branchName}: ${formatFailure(result)}`, result);
   }
 
-  private async rebaseConflictFiles(repositoryPath: string, signal?: AbortSignal): Promise<string[]> {
+  private async conflictFiles(repositoryPath: string, signal?: AbortSignal): Promise<string[]> {
     const conflicts = await this.runGit(
       repositoryPath,
       ['diff', '--name-only', '--diff-filter=U'],

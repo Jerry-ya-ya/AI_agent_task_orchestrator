@@ -39,18 +39,19 @@ const SCHEMA = `
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'TODO'
-      CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','REBASE_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
+      CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','CHERRY_PICK_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
     priority TEXT NOT NULL DEFAULT 'MEDIUM'
       CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
     model_effort TEXT NOT NULL DEFAULT 'medium'
       CHECK (model_effort IN ('low','medium','high','xhigh')),
     agent_mode TEXT NOT NULL DEFAULT 'implementation'
-      CHECK (agent_mode IN ('implementation','rebase_resolution')),
+      CHECK (agent_mode IN ('implementation','cherry_pick_resolution')),
     retry_prompt TEXT,
     branch_name TEXT,
     worktree_path TEXT,
     base_branch TEXT,
     commit_summary TEXT,
+    publish_commit_sha TEXT,
     source_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
     is_rejected INTEGER NOT NULL DEFAULT 0 CHECK (is_rejected IN (0, 1)),
     is_paused INTEGER NOT NULL DEFAULT 0 CHECK (is_paused IN (0, 1)),
@@ -121,6 +122,9 @@ export class OrchestratorDatabase {
     if (!taskColumns.some((column) => column['name'] === 'commit_summary')) {
       this.connection.exec('ALTER TABLE tasks ADD COLUMN commit_summary TEXT;');
     }
+    if (!taskColumns.some((column) => column['name'] === 'publish_commit_sha')) {
+      this.connection.exec('ALTER TABLE tasks ADD COLUMN publish_commit_sha TEXT;');
+    }
     if (!taskColumns.some((column) => column['name'] === 'model_effort')) {
       this.connection.exec(`
         ALTER TABLE tasks ADD COLUMN model_effort TEXT NOT NULL DEFAULT 'medium'
@@ -133,7 +137,7 @@ export class OrchestratorDatabase {
     if (!taskColumns.some((column) => column['name'] === 'agent_mode')) {
       this.connection.exec(`
         ALTER TABLE tasks ADD COLUMN agent_mode TEXT NOT NULL DEFAULT 'implementation'
-          CHECK (agent_mode IN ('implementation','rebase_resolution'));
+          CHECK (agent_mode IN ('implementation','rebase_resolution','cherry_pick_resolution'));
       `);
     }
     if (!taskColumns.some((column) => column['name'] === 'source_task_id')) {
@@ -149,7 +153,7 @@ export class OrchestratorDatabase {
     const hadPendingPush = taskDefinition?.sql?.includes('PENDING_PUSH') ?? false;
     const needsPublishingMigration = !taskDefinition?.sql?.includes('PENDING_BRANCH_REMOVAL')
       || !taskDefinition?.sql?.includes('REJECTED');
-    if (needsPublishingMigration || !taskDefinition?.sql?.includes('REBASE_CONFLICT')) {
+    if (needsPublishingMigration || !taskDefinition?.sql?.includes('CHERRY_PICK_CONFLICT')) {
       this.rebuildTasksForPublishing(hadPendingPush, needsPublishingMigration);
     }
 
@@ -200,18 +204,19 @@ export class OrchestratorDatabase {
           title TEXT NOT NULL,
           description TEXT NOT NULL DEFAULT '',
           status TEXT NOT NULL DEFAULT 'TODO'
-            CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','REBASE_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
+            CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','PENDING_PUSH','CHERRY_PICK_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
           priority TEXT NOT NULL DEFAULT 'MEDIUM'
             CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
           model_effort TEXT NOT NULL DEFAULT 'medium'
             CHECK (model_effort IN ('low','medium','high','xhigh')),
           agent_mode TEXT NOT NULL DEFAULT 'implementation'
-            CHECK (agent_mode IN ('implementation','rebase_resolution')),
+            CHECK (agent_mode IN ('implementation','cherry_pick_resolution')),
           retry_prompt TEXT,
           branch_name TEXT,
           worktree_path TEXT,
           base_branch TEXT,
           commit_summary TEXT,
+          publish_commit_sha TEXT,
           source_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
           is_rejected INTEGER NOT NULL DEFAULT 0 CHECK (is_rejected IN (0, 1)),
           is_paused INTEGER NOT NULL DEFAULT 0 CHECK (is_paused IN (0, 1)),
@@ -221,16 +226,19 @@ export class OrchestratorDatabase {
 
         INSERT INTO tasks (
           id, project_id, feature_id, title, description, status, priority, model_effort, agent_mode, retry_prompt,
-          branch_name, worktree_path, base_branch, commit_summary, source_task_id,
+          branch_name, worktree_path, base_branch, commit_summary, publish_commit_sha, source_task_id,
           is_rejected, is_paused, created_at, updated_at
         )
         SELECT
           id, project_id, feature_id, title, description,
           CASE
+            WHEN status = 'REBASE_CONFLICT' THEN 'CHERRY_PICK_CONFLICT'
             WHEN status = 'DONE' AND branch_name IS NOT NULL THEN '${migratedDoneStatus}'
             ELSE status
           END,
-          priority, model_effort, agent_mode, retry_prompt, branch_name, worktree_path, base_branch, commit_summary,
+          priority, model_effort,
+          CASE WHEN agent_mode = 'rebase_resolution' THEN 'cherry_pick_resolution' ELSE agent_mode END,
+          retry_prompt, branch_name, worktree_path, base_branch, commit_summary, publish_commit_sha,
           source_task_id, is_rejected, is_paused, created_at, updated_at
         FROM tasks_before_publishing;
 

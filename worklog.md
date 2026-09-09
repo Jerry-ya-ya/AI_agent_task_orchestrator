@@ -91,3 +91,7 @@
 - feat: add Feature branch endpoint controls for creating preselected tasks.
 
 - fix: require all Feature branches to start from main and normalize legacy nested bases.
+
+## 2026/09/10
+
+- Publish only approved Feature task commits to main with cherry-pick and review-gated Codex conflict resolution.

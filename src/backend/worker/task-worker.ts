@@ -9,7 +9,7 @@ import type {
 import { TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
 import type { AgentExecutor } from '../agents/agent-executor.js';
-import { GitService, requireCanonicalCommitSummary } from '../services/git-service.js';
+import { GitService, requireCanonicalCommitSummary, type PreparedCherryPick } from '../services/git-service.js';
 import { TestService } from '../services/test-service.js';
 
 export interface TaskWorkerOptions {
@@ -27,7 +27,7 @@ class PipelineFailure extends Error {
   }
 }
 
-const MAX_REBASE_CONFLICT_ROUNDS = 20;
+const MAX_CHERRY_PICK_CONFLICT_ROUNDS = 20;
 
 export class TaskWorker {
   private running = false;
@@ -165,8 +165,20 @@ export class TaskWorker {
     let summary = 'Task pipeline failed.';
 
     try {
-      this.runs.appendOutput(claimed.run_id, '[git] Checking out managed delivery branch...\n', '');
-      const prepared = await this.git.prepareBranch(claimed, claimed.project.repository_path, signal);
+      const isCherryPickResolution = claimed.agent_mode === 'cherry_pick_resolution';
+      this.runs.appendOutput(
+        claimed.run_id,
+        isCherryPickResolution
+          ? '[git] Preparing a temporary main-based cherry-pick resolution branch...\n'
+          : '[git] Checking out managed delivery branch...\n',
+        '',
+      );
+      const prepared = isCherryPickResolution
+        ? await this.git.prepareCherryPickResolution(claimed, claimed.project.repository_path, signal)
+        : await this.git.prepareBranch(claimed, claimed.project.repository_path, signal);
+      const sourceCommitSha = isCherryPickResolution
+        ? (prepared as PreparedCherryPick).sourceCommitSha
+        : null;
       this.runs.appendOutput(
         claimed.run_id,
         `[git] Branch: ${prepared.branchName}\n[git] Workspace: ${prepared.workspacePath}\n`,
@@ -176,14 +188,18 @@ export class TaskWorker {
       let agentResult: AgentExecutionResult | undefined;
       let testResult: TestExecutionResult | undefined;
       let canonicalSummary: string | undefined;
-      let rebaseInProgress = false;
+      let cherryPickInProgress = false;
+      let resolvedPublishCommitSha: string | undefined;
+      let verificationPassed = false;
       try {
-        const task = this.tasks.setArtifacts(
-          claimed.id,
-          prepared.branchName,
-          prepared.workspacePath,
-          prepared.originalBranch
-        );
+        const task = isCherryPickResolution
+          ? this.tasks.setWorkspace(claimed.id, prepared.workspacePath)
+          : this.tasks.setArtifacts(
+              claimed.id,
+              prepared.branchName,
+              prepared.workspacePath,
+              prepared.originalBranch,
+            );
         if (task === null || this.tasks.transition(task.id, 'CLAIMED', 'IN_PROGRESS') === null) {
           throw new PipelineFailure('Task state changed while preparing its branch.', 1);
         }
@@ -195,21 +211,20 @@ export class TaskWorker {
           status: 'IN_PROGRESS',
           project: claimed.project
         };
-        if (agentTask.agent_mode === 'rebase_resolution') {
-          const completed = await this.git.beginFeatureRebase(
+        if (isCherryPickResolution) {
+          const completed = await this.git.beginFeatureCherryPick(
             prepared.workspacePath,
-            prepared.branchName,
-            agentTask.base_branch ?? 'main',
+            sourceCommitSha as string,
             signal,
           );
-          rebaseInProgress = !completed;
+          cherryPickInProgress = !completed;
         }
 
         let conflictRound = 0;
-        do {
+        while (!isCherryPickResolution || cherryPickInProgress) {
           conflictRound += 1;
-          if (conflictRound > MAX_REBASE_CONFLICT_ROUNDS) {
-            throw new PipelineFailure('Rebase conflict resolution exceeded the safe round limit.', 1);
+          if (conflictRound > MAX_CHERRY_PICK_CONFLICT_ROUNDS) {
+            throw new PipelineFailure('Cherry-pick conflict resolution exceeded the safe round limit.', 1);
           }
           agentResult = await this.agent.execute(agentTask, prepared.workspacePath, signal);
           this.appendAgentResult(claimed.run_id, agentResult);
@@ -220,10 +235,16 @@ export class TaskWorker {
             );
           }
           canonicalSummary = requireCanonicalCommitSummary(agentResult.summary);
-          if (rebaseInProgress) {
-            rebaseInProgress = !await this.git.continueFeatureRebase(prepared.workspacePath, signal);
+          if (cherryPickInProgress) {
+            cherryPickInProgress = !await this.git.continueFeatureCherryPick(prepared.workspacePath, signal);
+          } else {
+            break;
           }
-        } while (rebaseInProgress);
+        }
+
+        if (isCherryPickResolution) {
+          resolvedPublishCommitSha = await this.git.currentCommit(prepared.workspacePath, signal);
+        }
 
         if (this.tasks.transition(claimed.id, 'IN_PROGRESS', 'TESTING') === null) {
           throw new PipelineFailure('Task state changed before testing.', 1);
@@ -236,17 +257,19 @@ export class TaskWorker {
             testResult.exitCode
           );
         }
+        verificationPassed = true;
       } finally {
-        if (rebaseInProgress) {
-          await this.git.abortFeatureRebase(prepared.workspacePath);
+        if (cherryPickInProgress) {
+          await this.git.abortFeatureCherryPick(prepared.workspacePath);
         }
         const checkpointed = await this.git.completeBranch(prepared, claimed.id, canonicalSummary);
-        if (canonicalSummary !== undefined) {
-          if (claimed.agent_mode === 'rebase_resolution') {
-            this.tasks.finishRebaseResolution(claimed.id);
-          } else {
-            this.tasks.setCommitSummary(claimed.id, canonicalSummary);
-          }
+        if (isCherryPickResolution && verificationPassed && resolvedPublishCommitSha !== undefined) {
+          this.tasks.finishCherryPickResolution(claimed.id, resolvedPublishCommitSha);
+        } else if (!isCherryPickResolution && canonicalSummary !== undefined) {
+          const publishCommitSha = claimed.feature_id === null || claimed.feature_id === undefined
+            ? null
+            : await this.git.commitAtRef(prepared.workspacePath, prepared.branchName);
+          this.tasks.setCommitSummary(claimed.id, canonicalSummary, publishCommitSha);
         }
         this.runs.appendOutput(
           claimed.run_id,

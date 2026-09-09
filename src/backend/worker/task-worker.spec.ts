@@ -104,32 +104,32 @@ describe('TaskWorker', () => {
     expect(worker.getStatus()).toMatchObject({ busy: false, activeTaskId: null });
   });
 
-  it('lets Codex resolve each controlled Feature rebase conflict round before testing', async () => {
-    const task = createTask('Resolve rebase conflicts');
-    expect(tasks.transition(task.id, 'TODO', 'REBASE_CONFLICT')).not.toBeNull();
-    expect(tasks.queueRebaseResolution(task.id, 'high')).toMatchObject({ agent_mode: 'rebase_resolution' });
+  it('lets Codex resolve a controlled Feature cherry-pick conflict before testing', async () => {
+    const task = createTask('Resolve cherry-pick conflicts');
+    expect(tasks.transition(task.id, 'TODO', 'CHERRY_PICK_CONFLICT')).not.toBeNull();
+    expect(tasks.queueCherryPickResolution(task.id, 'high')).toMatchObject({ agent_mode: 'cherry_pick_resolution' });
     const prepareBranch = vi.fn(async (): Promise<PreparedBranch> => ({
       branchName: 'feature/conflicted', workspacePath: project.repository_path, originalBranch: 'main',
     }));
-    const executeAgent = vi.fn(async () => successfulAgent('Resolve Feature rebase conflicts.'));
-    const { worker, beginFeatureRebase, continueFeatureRebase, abortFeatureRebase } = createWorker(
+    const executeAgent = vi.fn(async () => successfulAgent('Resolve Feature cherry-pick conflicts.'));
+    const { worker, beginFeatureCherryPick, continueFeatureCherryPick, abortFeatureCherryPick } = createWorker(
       prepareBranch,
       executeAgent,
       async () => successfulTests(),
     );
-    beginFeatureRebase.mockResolvedValueOnce(false);
-    continueFeatureRebase.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    beginFeatureCherryPick.mockResolvedValueOnce(false);
+    continueFeatureCherryPick.mockResolvedValueOnce(true);
 
     await expect(worker.processNext()).resolves.toBe(true);
 
-    expect(beginFeatureRebase).toHaveBeenCalledWith(
-      project.repository_path, 'feature/conflicted', 'main', expect.any(AbortSignal),
+    expect(beginFeatureCherryPick).toHaveBeenCalledWith(
+      project.repository_path, 'source-commit-sha', expect.any(AbortSignal),
     );
-    expect(executeAgent).toHaveBeenCalledTimes(2);
-    expect(continueFeatureRebase).toHaveBeenCalledTimes(2);
-    expect(abortFeatureRebase).not.toHaveBeenCalled();
+    expect(executeAgent).toHaveBeenCalledTimes(1);
+    expect(continueFeatureCherryPick).toHaveBeenCalledTimes(1);
+    expect(abortFeatureCherryPick).not.toHaveBeenCalled();
     expect(tasks.findById(task.id)).toMatchObject({
-      status: 'IN_REVIEW', agent_mode: 'implementation', commit_summary: null,
+      status: 'IN_REVIEW', agent_mode: 'implementation', publish_commit_sha: 'resolved-commit-sha',
     });
   });
 
@@ -376,16 +376,23 @@ describe('TaskWorker', () => {
   ): {
     worker: TaskWorker;
     completeBranch: ReturnType<typeof vi.fn>;
-    beginFeatureRebase: ReturnType<typeof vi.fn>;
-    continueFeatureRebase: ReturnType<typeof vi.fn>;
-    abortFeatureRebase: ReturnType<typeof vi.fn>;
+    beginFeatureCherryPick: ReturnType<typeof vi.fn>;
+    continueFeatureCherryPick: ReturnType<typeof vi.fn>;
+    abortFeatureCherryPick: ReturnType<typeof vi.fn>;
   } {
     const completeBranch = vi.fn(async () => true);
-    const beginFeatureRebase = vi.fn(async () => true);
-    const continueFeatureRebase = vi.fn(async () => true);
-    const abortFeatureRebase = vi.fn(async () => undefined);
+    const prepareCherryPickResolution = vi.fn(async () => ({
+      branchName: 'agent/1-cherry-pick-resolution', workspacePath: project.repository_path,
+      originalBranch: 'main', sourceCommitSha: 'source-commit-sha',
+    }));
+    const beginFeatureCherryPick = vi.fn(async () => true);
+    const continueFeatureCherryPick = vi.fn(async () => true);
+    const abortFeatureCherryPick = vi.fn(async () => undefined);
+    const currentCommit = vi.fn(async () => 'resolved-commit-sha');
+    const commitAtRef = vi.fn(async () => 'task-commit-sha');
     const git = {
-      prepareBranch, completeBranch, beginFeatureRebase, continueFeatureRebase, abortFeatureRebase,
+      prepareBranch, prepareCherryPickResolution, completeBranch, beginFeatureCherryPick,
+      continueFeatureCherryPick, abortFeatureCherryPick, currentCommit, commitAtRef,
     } as unknown as GitService;
     const agent: AgentExecutor = {
       checkAvailability: async () => ({ available: true, message: 'Codex CLI is available.' }),
@@ -395,9 +402,9 @@ describe('TaskWorker', () => {
     return {
       worker: new TaskWorker(tasks, runs, git, agent, testService, { pollIntervalMs: 1 }),
       completeBranch,
-      beginFeatureRebase,
-      continueFeatureRebase,
-      abortFeatureRebase,
+      beginFeatureCherryPick,
+      continueFeatureCherryPick,
+      abortFeatureCherryPick,
     };
   }
 });

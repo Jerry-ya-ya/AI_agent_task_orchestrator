@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { Task } from '../domain/types.js';
 import { ProcessRunner } from '../infra/process-runner.js';
-import { GitService, RebaseConflictError, slugifyTaskTitle } from './git-service.js';
+import { CherryPickConflictError, GitService, slugifyTaskTitle } from './git-service.js';
 
 const temporaryPaths: string[] = [];
 
@@ -125,7 +125,7 @@ describe('GitService', () => {
     await expect(service.removeTaskBranch(repository, prepared.branchName, 'main')).resolves.toBe(false);
   });
 
-  it('rebases a shared feature branch onto main, fast-forwards main, and pushes main', async () => {
+  it('cherry-picks only the selected task commit from a shared Feature branch and pushes main', async () => {
     const { repository, runner } = await temporaryRepository();
     const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-feature-remote-'));
     temporaryPaths.push(remote);
@@ -155,11 +155,13 @@ describe('GitService', () => {
     expect((await readFile(path.join(repository, 'feature.txt'), 'utf8')).trim()).toBe('first task');
     await writeFile(path.join(repository, 'second.txt'), 'second task\n');
     await service.completeBranch(secondRun, 102, 'feat: finish authentication.');
-    await expect(service.publishFeatureBranch(repository, 'feature/authentication', 'main'))
+    await expect(service.publishFeatureTask(
+      repository, 'feature/authentication', 'main', null, 'feat: finish authentication.',
+    ))
       .resolves.toEqual({ baseBranch: 'main' });
 
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
-    expect((await git(runner, repository, ['show', 'main:feature.txt'])).trim()).toBe('first task');
+    expect(await gitExitCode(runner, repository, ['cat-file', '-e', 'main:feature.txt'])).toBe(128);
     expect((await git(runner, repository, ['show', 'main:second.txt'])).trim()).toBe('second task');
     expect((await git(runner, repository, [
       '--git-dir', remote, 'show', 'main:second.txt'
@@ -167,11 +169,11 @@ describe('GitService', () => {
     expect(await gitExitCode(runner, repository, [
       '--git-dir', remote, 'show-ref', '--verify', '--quiet', 'refs/heads/feature/authentication'
     ])).toBe(1);
-    expect((await git(runner, repository, ['rev-parse', 'main'])).trim())
-      .toBe((await git(runner, repository, ['rev-parse', 'feature/authentication'])).trim());
+    expect((await git(runner, repository, ['show', 'main:main-only.txt'])).trim()).toBe('new main work');
 
-    await expect(service.publishFeatureBranch(repository, 'feature/authentication', 'main'))
-      .resolves.toEqual({ baseBranch: 'main' });
+    await expect(service.publishFeatureTask(
+      repository, 'feature/authentication', 'main', null, 'feat: finish authentication.',
+    )).resolves.toEqual({ baseBranch: 'main' });
   }, 20_000);
 
   it('refuses to remove an unmerged task branch', async () => {
@@ -195,7 +197,7 @@ describe('GitService', () => {
     ])).toBe(1);
   });
 
-  it('aborts a conflicting feature rebase and leaves main unpushed', async () => {
+  it('aborts a conflicting task cherry-pick on main and resolves it on a temporary branch', async () => {
     const { repository, runner } = await temporaryRepository();
     const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-conflict-remote-'));
     temporaryPaths.push(remote);
@@ -215,21 +217,37 @@ describe('GitService', () => {
       'commit', '-m', 'feat: change README on main'
     ]);
 
-    await expect(service.publishFeatureBranch(repository, 'feature/conflict', 'main'))
-      .rejects.toBeInstanceOf(RebaseConflictError);
+    await expect(service.publishFeatureTask(
+      repository, 'feature/conflict', 'main', null, 'feat: change README on feature.',
+    )).rejects.toBeInstanceOf(CherryPickConflictError);
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
     expect((await readFile(path.join(repository, 'README.md'), 'utf8')).trim()).toBe('main version');
-    expect(await gitExitCode(runner, repository, ['rev-parse', '--verify', 'REBASE_HEAD'])).toBe(128);
+    expect(await gitExitCode(runner, repository, ['rev-parse', '--verify', 'CHERRY_PICK_HEAD'])).toBe(128);
     expect(await gitExitCode(runner, repository, [
       '--git-dir', remote, 'show-ref', '--verify', '--quiet', 'refs/heads/main'
     ])).toBe(1);
 
-    await git(runner, repository, ['switch', 'feature/conflict']);
-    await expect(service.beginFeatureRebase(repository, 'feature/conflict', 'main')).resolves.toBe(false);
+    const resolutionTask: Task = {
+      ...task,
+      commit_summary: 'feat: change README on feature.',
+      agent_mode: 'cherry_pick_resolution',
+    };
+    const resolution = await service.prepareCherryPickResolution(resolutionTask, repository);
+    expect(resolution.branchName).toBe(`agent/${task.id}-cherry-pick-resolution`);
+    await expect(service.beginFeatureCherryPick(repository, resolution.sourceCommitSha)).resolves.toBe(false);
     await writeFile(path.join(repository, 'README.md'), 'resolved version\n');
-    await expect(service.continueFeatureRebase(repository)).resolves.toBe(true);
-    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('feature/conflict');
+    await expect(service.continueFeatureCherryPick(repository)).resolves.toBe(true);
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe(resolution.branchName);
     expect((await readFile(path.join(repository, 'README.md'), 'utf8')).trim()).toBe('resolved version');
+    const resolvedSha = await service.currentCommit(repository);
+    await service.completeBranch(resolution, task.id);
+    await expect(service.publishFeatureTask(
+      repository, 'feature/conflict', 'main', resolvedSha, resolutionTask.commit_summary, task.id,
+    )).resolves.toEqual({ baseBranch: 'main' });
+    expect((await readFile(path.join(repository, 'README.md'), 'utf8')).trim()).toBe('resolved version');
+    expect(await gitExitCode(runner, repository, [
+      'show-ref', '--verify', '--quiet', `refs/heads/${resolution.branchName}`,
+    ])).toBe(1);
   }, 20_000);
 
   it('turns unsafe or non-ASCII-only titles into safe deterministic slugs', () => {
@@ -275,10 +293,16 @@ function exampleTask(): Task {
     description: '',
     status: 'CLAIMED',
     priority: 'HIGH',
+    model_effort: 'medium',
+    agent_mode: 'implementation',
+    retry_prompt: null,
     branch_name: null,
     worktree_path: null,
     base_branch: null,
     commit_summary: null,
+    publish_commit_sha: null,
+    source_task_id: null,
+    is_rejected: false,
     is_paused: false,
     created_at: '2026-08-29T00:00:00.000Z',
     updated_at: '2026-08-29T00:00:00.000Z'

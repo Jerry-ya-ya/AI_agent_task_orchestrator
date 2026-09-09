@@ -5,7 +5,7 @@ export const TASK_STATUSES = [
   'TESTING',
   'IN_REVIEW',
   'PENDING_PUSH',
-  'REBASE_CONFLICT',
+  'CHERRY_PICK_CONFLICT',
   'PENDING_BRANCH_REMOVAL',
   'DONE',
   'REJECTED',
@@ -19,7 +19,7 @@ export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 export const MODEL_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const;
 export type ModelEffort = (typeof MODEL_EFFORTS)[number];
-export type AgentMode = 'implementation' | 'rebase_resolution';
+export type AgentMode = 'implementation' | 'cherry_pick_resolution';
 
 export interface Project {
   id: number;
@@ -55,6 +55,7 @@ export interface Task {
   worktree_path: string | null;
   base_branch: string | null;
   commit_summary: string | null;
+  publish_commit_sha: string | null;
   source_task_id: number | null;
   is_rejected: boolean;
   is_paused: boolean;

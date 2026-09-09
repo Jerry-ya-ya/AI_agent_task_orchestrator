@@ -162,18 +162,18 @@ export function buildCodexPrompt(task: AgentTask): string {
         'Continue from the existing implementation in this same task branch; do not start a separate branch.',
         ''
       ];
-  const rebaseResolutionContext = task.agent_mode === 'rebase_resolution'
+  const cherryPickResolutionContext = task.agent_mode === 'cherry_pick_resolution'
     ? [
-        'Rebase conflict resolution:',
-        `The orchestrator is rebasing the current Feature branch onto ${task.base_branch ?? 'main'}.`,
+        'Cherry-pick conflict resolution:',
+        `The orchestrator is cherry-picking this task's selected commit onto a temporary branch based on ${task.base_branch ?? 'main'}.`,
         'Inspect the current Git conflict state and resolve every conflicted file while preserving the intent of both sides.',
-        'Do not run git add, commit, rebase --continue, or rebase --abort; the orchestrator controls each rebase step after you edit the files.',
+        'Do not run git add, commit, cherry-pick --continue, or cherry-pick --abort; the orchestrator controls the active cherry-pick after you edit the files.',
         'Do not redo the original task or make unrelated product changes.',
         ''
       ]
     : [];
-  const gitConstraint = task.agent_mode === 'rebase_resolution'
-    ? '- Do not run Git state-changing commands; only edit the conflicted working-tree files for the orchestrator to continue the active rebase.'
+  const gitConstraint = task.agent_mode === 'cherry_pick_resolution'
+    ? '- Do not run Git state-changing commands; only edit the conflicted working-tree files for the orchestrator to continue the active cherry-pick.'
     : '- Do not commit, push, merge, rebase, or fetch from remotes; the orchestrator creates the checkpoint commit.';
 
   return [
@@ -189,7 +189,7 @@ export function buildCodexPrompt(task: AgentTask): string {
     '',
     ...revisionContext,
     ...retryContext,
-    ...rebaseResolutionContext,
+    ...cherryPickResolutionContext,
     'Execution constraints:',
     '- Work only inside the current repository workspace and checked-out task branch.',
     '- Do not create, check out, switch, delete, or rewrite Git branches or worktrees.',

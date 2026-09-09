@@ -150,18 +150,18 @@ export class TaskRepository {
     const result = this.database.connection.prepare(`
       UPDATE tasks
       SET status = 'TODO', model_effort = ?, retry_prompt = ?, commit_summary = NULL,
-          is_rejected = 0, is_paused = 0, updated_at = ?
+          publish_commit_sha = NULL, is_rejected = 0, is_paused = 0, updated_at = ?
       WHERE id = ?
     `).run(modelEffort, prompt, this.clock(), id);
     return result.changes > 0 ? this.findById(id) : null;
   }
 
-  public queueRebaseResolution(id: number, modelEffort: Task['model_effort']): Task | null {
+  public queueCherryPickResolution(id: number, modelEffort: Task['model_effort']): Task | null {
     const result = this.database.connection.prepare(`
       UPDATE tasks
-      SET status = 'TODO', model_effort = ?, agent_mode = 'rebase_resolution',
+      SET status = 'TODO', model_effort = ?, agent_mode = 'cherry_pick_resolution',
           retry_prompt = NULL, is_paused = 0, updated_at = ?
-      WHERE id = ? AND status = 'REBASE_CONFLICT'
+      WHERE id = ? AND status = 'CHERRY_PICK_CONFLICT'
     `).run(modelEffort, this.clock(), id);
     return result.changes > 0 ? this.findById(id) : null;
   }
@@ -243,7 +243,7 @@ export class TaskRepository {
                 SELECT 1 FROM tasks earlier
                 WHERE earlier.feature_id = tasks.feature_id
                   AND earlier.id < tasks.id
-                  AND earlier.status IN ('TODO', 'CLAIMED', 'IN_PROGRESS', 'TESTING', 'REBASE_CONFLICT', 'FAILED')
+                  AND earlier.status IN ('TODO', 'CLAIMED', 'IN_PROGRESS', 'TESTING', 'CHERRY_PICK_CONFLICT', 'FAILED')
               )
             )
           ORDER BY
@@ -295,11 +295,20 @@ export class TaskRepository {
     return this.findById(id);
   }
 
-  public setCommitSummary(id: number, commitSummary: string): Task | null {
+  public setWorkspace(id: number, worktreePath: string): Task | null {
     const result = this.database.connection.prepare(`
-      UPDATE tasks SET commit_summary = ?, agent_mode = 'implementation', updated_at = ?
+      UPDATE tasks SET worktree_path = ?, updated_at = ?
+      WHERE id = ? AND status = 'CLAIMED'
+    `).run(worktreePath, this.clock(), id);
+    return result.changes > 0 ? this.findById(id) : null;
+  }
+
+  public setCommitSummary(id: number, commitSummary: string, publishCommitSha: string | null = null): Task | null {
+    const result = this.database.connection.prepare(`
+      UPDATE tasks
+      SET commit_summary = ?, publish_commit_sha = ?, agent_mode = 'implementation', updated_at = ?
       WHERE id = ? AND status = 'TESTING'
-    `).run(commitSummary, this.clock(), id);
+    `).run(commitSummary, publishCommitSha, this.clock(), id);
     return result.changes > 0 ? this.findById(id) : null;
   }
 
@@ -325,11 +334,12 @@ export class TaskRepository {
     return result.changes > 0 ? this.findById(id) : null;
   }
 
-  public finishRebaseResolution(id: number): Task | null {
+  public finishCherryPickResolution(id: number, publishCommitSha: string): Task | null {
     const result = this.database.connection.prepare(`
-      UPDATE tasks SET agent_mode = 'implementation', updated_at = ?
-      WHERE id = ? AND status = 'TESTING' AND agent_mode = 'rebase_resolution'
-    `).run(this.clock(), id);
+      UPDATE tasks
+      SET agent_mode = 'implementation', publish_commit_sha = ?, updated_at = ?
+      WHERE id = ? AND status = 'TESTING' AND agent_mode = 'cherry_pick_resolution'
+    `).run(publishCommitSha, this.clock(), id);
     return result.changes > 0 ? this.findById(id) : null;
   }
 
