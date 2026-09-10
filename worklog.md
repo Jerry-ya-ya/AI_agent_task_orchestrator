@@ -101,3 +101,7 @@
 - Create linked Retry tasks with new IDs while preserving superseded task history and Feature branch lineage.
 
 - Capture and display per-run file summaries and read-only code diffs in task details.
+
+## 2026/09/11
+
+- Present each task run as an expandable per-file commit diff with line-level changes.

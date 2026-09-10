@@ -209,13 +209,13 @@ export class GitService {
     const [fileResult, codeResult] = await Promise.all([
       this.runGit(
         prepared.workspacePath,
-        ['diff', '--stat', '--summary', '--no-renames', range],
+        ['-c', 'core.quotePath=false', 'diff', '--numstat', '--no-renames', range],
         undefined,
         false,
       ),
       this.runGit(
         prepared.workspacePath,
-        ['diff', '--no-color', '--no-ext-diff', '--no-renames', range],
+        ['-c', 'core.quotePath=false', 'diff', '--no-color', '--no-ext-diff', '--no-renames', range],
         undefined,
         false,
       ),

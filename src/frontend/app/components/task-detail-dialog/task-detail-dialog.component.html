@@ -24,7 +24,27 @@
         </dl></section>
         <section class="detail-section runs-section" aria-labelledby="runs-title"><div class="section-title-row"><h3 id="runs-title">Execution runs</h3><span *ngIf="detail">{{ detail.runs.length }} total</span></div>
           <div class="runs-empty" *ngIf="detail && detail.runs.length === 0"><span aria-hidden="true">›_</span><p>No runs yet. The worker will create one after claiming this task.</p></div>
-          <div class="runs" *ngIf="detail as taskDetail"><details class="run" *ngFor="let run of taskDetail.runs; let index = index; trackBy: trackRun" [open]="index === 0"><summary><span class="run-chevron" aria-hidden="true">›</span><span class="run-name">{{ runLabel(run, index, taskDetail.runs.length) }}</span><span class="run-time">{{ run.started_at | date: 'medium' }}</span><span class="exit-code" [class.exit-code--success]="run.exit_code === 0" [class.exit-code--failed]="run.exit_code !== null && run.exit_code !== 0">{{ run.exit_code === null ? 'Running' : 'Exit ' + run.exit_code }}</span></summary><div class="run-content"><div class="result-summary"><span>Result</span><p>{{ run.result_summary || 'No result summary.' }}</p></div><details class="diff-block"><summary><span>Files changed</span><small>{{ hasOutput(run.file_diff) ? 'Captured snapshot' : 'No changes' }}</small></summary><pre>{{ hasOutput(run.file_diff) ? run.file_diff : 'No file changes captured for this run.' }}</pre></details><details class="diff-block diff-block--code"><summary><span>Code diff</span><small>{{ hasOutput(run.code_diff) ? 'Read-only patch' : 'No changes' }}</small></summary><pre>{{ hasOutput(run.code_diff) ? run.code_diff : 'No code diff captured for this run.' }}</pre></details><div class="log-block"><div class="log-title"><span>stdout</span><small>{{ hasOutput(run.stdout) ? 'Captured output' : 'Empty' }}</small></div><pre>{{ hasOutput(run.stdout) ? run.stdout : 'No stdout captured.' }}</pre></div><div class="log-block log-block--stderr"><div class="log-title"><span>stderr</span><small>{{ hasOutput(run.stderr) ? 'Captured output' : 'Empty' }}</small></div><pre>{{ hasOutput(run.stderr) ? run.stderr : 'No stderr captured.' }}</pre></div></div></details></div>
+          <div class="runs" *ngIf="detail as taskDetail">
+            <details class="run" *ngFor="let run of taskDetail.runs; let index = index; trackBy: trackRun" [open]="index === 0">
+              <summary class="run__summary"><span class="run-chevron" aria-hidden="true">›</span><span class="run-name">{{ runLabel(run, index, taskDetail.runs.length) }}</span><span class="run-time">{{ run.started_at | date: 'medium' }}</span><span class="exit-code" [class.exit-code--success]="run.exit_code === 0" [class.exit-code--failed]="run.exit_code !== null && run.exit_code !== 0">{{ run.exit_code === null ? 'Running' : 'Exit ' + run.exit_code }}</span></summary>
+              <div class="run-content">
+                <div class="result-summary"><span>Commit result</span><p>{{ run.result_summary || 'No result summary.' }}</p></div>
+                <section class="commit-diff" aria-label="Read-only commit diff">
+                  <div class="commit-diff__heading"><div><strong>Changed files</strong><span>Read-only snapshot for this run</span></div><span class="commit-diff__count">{{ diffFiles(run).length }} files</span></div>
+                  <div class="diff-files" *ngIf="diffFiles(run).length > 0; else noRunDiff">
+                    <details class="diff-file" *ngFor="let file of diffFiles(run); let fileIndex = index; trackBy: trackDiffFile" [open]="fileIndex === 0">
+                      <summary><span class="diff-file__chevron" aria-hidden="true">›</span><span class="diff-file__status" [attr.data-status]="file.status">{{ file.status }}</span><code>{{ file.path }}</code><span class="diff-file__stats"><b>+{{ file.additions }}</b><i>−{{ file.deletions }}</i></span></summary>
+                      <pre class="diff-code" aria-label="Code changes for {{ file.path }}"><ng-container *ngIf="file.lines.length > 0; else omittedPatch"><span *ngFor="let line of file.lines" [class]="'diff-line diff-line--' + line.kind">{{ line.text }}
+</span></ng-container><ng-template #omittedPatch><span class="diff-line diff-line--meta">Patch content is not available in the capped snapshot.</span></ng-template></pre>
+                    </details>
+                  </div>
+                  <ng-template #noRunDiff><div class="diff-empty">{{ run.finished_at === null ? 'Diff will appear after this run finishes.' : 'No file changes were captured for this run.' }}</div></ng-template>
+                </section>
+                <div class="log-block"><div class="log-title"><span>stdout</span><small>{{ hasOutput(run.stdout) ? 'Captured output' : 'Empty' }}</small></div><pre>{{ hasOutput(run.stdout) ? run.stdout : 'No stdout captured.' }}</pre></div>
+                <div class="log-block log-block--stderr"><div class="log-title"><span>stderr</span><small>{{ hasOutput(run.stderr) ? 'Captured output' : 'Empty' }}</small></div><pre>{{ hasOutput(run.stderr) ? run.stderr : 'No stderr captured.' }}</pre></div>
+              </div>
+            </details>
+          </div>
         </section>
       </div>
     </ng-container>
