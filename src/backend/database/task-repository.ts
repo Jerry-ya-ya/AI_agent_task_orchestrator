@@ -27,6 +27,8 @@ interface TaskListRow extends StoredTask {
   run_stdout: string | null;
   run_stderr: string | null;
   run_result_summary: string | null;
+  run_file_diff: string | null;
+  run_code_diff: string | null;
 }
 
 export interface TaskFilters {
@@ -64,7 +66,9 @@ export class TaskRepository {
         r.exit_code AS run_exit_code,
         r.stdout AS run_stdout,
         r.stderr AS run_stderr,
-        r.result_summary AS run_result_summary
+        r.result_summary AS run_result_summary,
+        r.file_diff AS run_file_diff,
+        r.code_diff AS run_code_diff
       FROM tasks t
       JOIN projects p ON p.id = t.project_id
       LEFT JOIN task_runs r ON r.id = (
@@ -146,14 +150,39 @@ export class TaskRepository {
     });
   }
 
-  public retry(id: number, modelEffort: Task['model_effort'], prompt: string | null): Task | null {
-    const result = this.database.connection.prepare(`
-      UPDATE tasks
-      SET status = 'TODO', model_effort = ?, retry_prompt = ?, commit_summary = NULL,
-          publish_commit_sha = NULL, is_rejected = 0, is_paused = 0, updated_at = ?
-      WHERE id = ?
-    `).run(modelEffort, prompt, this.clock(), id);
-    return result.changes > 0 ? this.findById(id) : null;
+  public createRetry(source: Task, modelEffort: Task['model_effort'], prompt: string | null): Task | null {
+    return this.database.transaction(() => {
+      const now = this.clock();
+      const superseded = this.database.connection.prepare(`
+        UPDATE tasks
+        SET status = 'REJECTED', is_rejected = 1, is_paused = 0, updated_at = ?
+        WHERE id = ? AND status = ?
+      `).run(now, source.id, source.status);
+      if (superseded.changes === 0) return null;
+
+      const result = this.database.connection.prepare(`
+        INSERT INTO tasks (
+          project_id, feature_id, title, description, status, priority, model_effort, agent_mode,
+          retry_prompt, branch_name, worktree_path, base_branch, commit_summary, publish_commit_sha,
+          source_task_id, is_rejected, is_paused, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, 'implementation', ?, ?, ?, ?, NULL, NULL, ?, 0, 0, ?, ?)
+      `).run(
+        source.project_id,
+        source.feature_id ?? null,
+        source.title,
+        source.description,
+        source.priority,
+        modelEffort,
+        prompt,
+        source.branch_name,
+        source.worktree_path,
+        source.base_branch,
+        source.id,
+        now,
+        now,
+      );
+      return this.findById(Number(result.lastInsertRowid));
+    });
   }
 
   public queueCherryPickResolution(id: number, modelEffort: Task['model_effort']): Task | null {
@@ -400,6 +429,8 @@ export class TaskRepository {
       run_stdout,
       run_stderr,
       run_result_summary,
+      run_file_diff,
+      run_code_diff,
       ...task
     } = row;
 
@@ -411,7 +442,9 @@ export class TaskRepository {
       exit_code: run_exit_code,
       stdout: run_stdout ?? '',
       stderr: run_stderr ?? '',
-      result_summary: run_result_summary ?? ''
+      result_summary: run_result_summary ?? '',
+      file_diff: run_file_diff ?? '',
+      code_diff: run_code_diff ?? ''
     };
 
     return {

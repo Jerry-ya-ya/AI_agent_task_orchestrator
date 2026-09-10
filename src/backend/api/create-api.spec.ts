@@ -198,26 +198,31 @@ describe('backend API', () => {
       .get('/agent/usage')
       .expect(200)
       .expect((response) => expect(response.body.primary.remainingPercent).toBe(75));
-    await request(app)
+    const firstRetryResponse = await request(app)
       .post(`/tasks/${taskId}/retry`)
       .send({ model_effort: 'high' })
-      .expect(200)
+      .expect(201)
       .expect((response) => expect(response.body).toMatchObject({
         status: 'TODO',
         model_effort: 'high',
-        retry_prompt: null
+        retry_prompt: null,
+        source_task_id: taskId,
       }));
-    await request(app)
-      .post(`/tasks/${taskId}/retry`)
+    const retryResponse = await request(app)
+      .post(`/tasks/${Number(firstRetryResponse.body.id)}/retry`)
       .send({ prompt: '  Try again with the updated requirements.  ', model_effort: 'high' })
-      .expect(200)
+      .expect(201)
       .expect((response) => expect(response.body).toMatchObject({
         status: 'TODO',
         model_effort: 'high',
-        retry_prompt: 'Try again with the updated requirements.'
+        retry_prompt: 'Try again with the updated requirements.',
+        source_task_id: Number(firstRetryResponse.body.id),
       }));
+    const activeTaskId = Number(retryResponse.body.id);
+    expect(activeTaskId).not.toBe(taskId);
+    expect(tasks.findById(taskId)).toMatchObject({ status: 'REJECTED', is_rejected: true });
 
-    const reviewSourceBranch = `agent/${taskId}-review-source`;
+    const reviewSourceBranch = `agent/${activeTaskId}-review-source`;
     await writeFile(path.join(repositoryPath, 'README.md'), 'main\n');
     execFileSync('git', ['add', 'README.md'], { cwd: repositoryPath, windowsHide: true });
     execFileSync('git', [
@@ -232,40 +237,40 @@ describe('backend API', () => {
       'commit', '-m', 'feat: add review fixture',
     ], { cwd: repositoryPath, windowsHide: true });
     execFileSync('git', ['switch', 'main'], { cwd: repositoryPath, windowsHide: true });
-    expect(tasks.transition(taskId, 'TODO', 'CLAIMED')).not.toBeNull();
-    tasks.setArtifacts(taskId, reviewSourceBranch, repositoryPath, 'main');
-    expect(tasks.transition(taskId, 'CLAIMED', 'IN_REVIEW')).not.toBeNull();
+    expect(tasks.transition(activeTaskId, 'TODO', 'CLAIMED')).not.toBeNull();
+    tasks.setArtifacts(activeTaskId, reviewSourceBranch, repositoryPath, 'main');
+    expect(tasks.transition(activeTaskId, 'CLAIMED', 'IN_REVIEW')).not.toBeNull();
     await request(app)
-      .post(`/tasks/${taskId}/start-review`)
+      .post(`/tasks/${activeTaskId}/start-review`)
       .expect(200)
       .expect((response) => {
         expect(response.body.status).toBe('REVIEWING');
       });
     expect(execFileSync('git', ['branch', '--show-current'], { cwd: repositoryPath, encoding: 'utf8' }).trim())
-      .toBe(`agent/${taskId}-review`);
+      .toBe(`agent/${activeTaskId}-review`);
     await request(app)
-      .post(`/tasks/${taskId}/exit-review`)
+      .post(`/tasks/${activeTaskId}/exit-review`)
       .expect(200)
       .expect((response) => expect(response.body.status).toBe('IN_REVIEW'));
     expect(execFileSync('git', ['branch', '--show-current'], { cwd: repositoryPath, encoding: 'utf8' }).trim())
       .toBe('main');
-    await request(app).post(`/tasks/${taskId}/start-review`).expect(200);
+    await request(app).post(`/tasks/${activeTaskId}/start-review`).expect(200);
     await request(app)
-      .post(`/tasks/${taskId}/approve`)
+      .post(`/tasks/${activeTaskId}/approve`)
       .expect(200)
       .expect((response) => {
         expect(response.body.status).toBe('PENDING_PUSH');
       });
 
-    await request(app).post(`/tasks/${taskId}/push`).expect(409);
-    expect(tasks.transition(taskId, 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL')).not.toBeNull();
+    await request(app).post(`/tasks/${activeTaskId}/push`).expect(409);
+    expect(tasks.transition(activeTaskId, 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL')).not.toBeNull();
     await request(app)
-      .post(`/tasks/${taskId}/remove-branch`)
+      .post(`/tasks/${activeTaskId}/remove-branch`)
       .expect(200)
       .expect((response) => expect(response.body.status).toBe('DONE'));
 
-    await request(app).delete(`/tasks/${taskId}`).expect(204);
-    await request(app).get(`/tasks/${taskId}`).expect(404);
+    await request(app).delete(`/tasks/${activeTaskId}`).expect(204);
+    await request(app).get(`/tasks/${activeTaskId}`).expect(404);
   });
 
   it('rejects unknown command-shaped input instead of accepting executable commands', async () => {

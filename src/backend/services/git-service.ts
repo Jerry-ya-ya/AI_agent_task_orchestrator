@@ -13,6 +13,7 @@ export interface PreparedBranch {
   branchName: string;
   workspacePath: string;
   originalBranch: string;
+  startingCommitSha: string;
 }
 
 export interface PreparedCherryPick extends PreparedBranch {
@@ -21,6 +22,11 @@ export interface PreparedCherryPick extends PreparedBranch {
 
 export interface PublishedBranch {
   baseBranch: string;
+}
+
+export interface RunDiff {
+  fileDiff: string;
+  codeDiff: string;
 }
 
 export interface BranchSnapshot {
@@ -134,7 +140,8 @@ export class GitService {
       throw new ConflictError(`Git did not check out the expected task branch ${branchName}.`);
     }
 
-    return { branchName, workspacePath: repositoryRoot, originalBranch };
+    const startingCommitSha = await this.currentCommit(repositoryRoot, signal);
+    return { branchName, workspacePath: repositoryRoot, originalBranch, startingCommitSha };
   }
 
   /** Checkpoints task changes locally and restores the branch active before the task. */
@@ -196,6 +203,29 @@ export class GitService {
     return hasChanges;
   }
 
+  /** Captures an immutable, read-only snapshot of files and code changed by one task run. */
+  public async captureRunDiff(prepared: PreparedBranch): Promise<RunDiff> {
+    const range = `${prepared.startingCommitSha}..${prepared.branchName}`;
+    const [fileResult, codeResult] = await Promise.all([
+      this.runGit(
+        prepared.workspacePath,
+        ['diff', '--stat', '--summary', '--no-renames', range],
+        undefined,
+        false,
+      ),
+      this.runGit(
+        prepared.workspacePath,
+        ['diff', '--no-color', '--no-ext-diff', '--no-renames', range],
+        undefined,
+        false,
+      ),
+    ]);
+    return {
+      fileDiff: fileResult.stdout,
+      codeDiff: codeResult.stdout,
+    };
+  }
+
   /** Creates a disposable main-based branch for Codex-assisted cherry-pick resolution. */
   public async prepareCherryPickResolution(
     task: Task,
@@ -232,7 +262,8 @@ export class GitService {
     if (created.exitCode !== 0) {
       throw new GitCommandError(`Unable to create temporary branch ${branchName}: ${formatFailure(created)}`, created);
     }
-    return { branchName, workspacePath: repositoryRoot, originalBranch, sourceCommitSha };
+    const startingCommitSha = await this.currentCommit(repositoryRoot, signal);
+    return { branchName, workspacePath: repositoryRoot, originalBranch, startingCommitSha, sourceCommitSha };
   }
 
   /** Starts a controlled single-commit cherry-pick, leaving conflicts available for the agent. */

@@ -21,11 +21,12 @@ describe('GitService', () => {
     const task = exampleTask();
 
     const prepared = await service.prepareBranch(task, repository);
-    expect(prepared).toEqual({
+    expect(prepared).toMatchObject({
       branchName: 'agent/101-login-api-rm-rf',
       workspacePath: await realRepositoryPath(runner, repository),
       originalBranch: 'main'
     });
+    expect(prepared.startingCommitSha).toMatch(/^[a-f0-9]{40}$/u);
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe(prepared.branchName);
 
     await writeFile(path.join(repository, 'feature.txt'), 'agent result\n');
@@ -35,6 +36,9 @@ describe('GitService', () => {
     expect((await git(runner, repository, ['show', `${prepared.branchName}:feature.txt`])).trim()).toBe('agent result');
     expect((await git(runner, repository, ['log', '-1', '--format=%s', prepared.branchName])).trim())
       .toBe('feat: implement the login API.');
+    const firstDiff = await service.captureRunDiff(prepared);
+    expect(firstDiff.fileDiff).toContain('feature.txt');
+    expect(firstDiff.codeDiff).toContain('+agent result');
 
     const reused = await service.prepareBranch(
       { ...task, branch_name: prepared.branchName, worktree_path: prepared.workspacePath },
@@ -42,7 +46,13 @@ describe('GitService', () => {
     );
     expect(reused.branchName).toBe(prepared.branchName);
     expect((await readFile(path.join(repository, 'feature.txt'), 'utf8')).trim()).toBe('agent result');
-    await expect(service.completeBranch(reused, task.id)).resolves.toBe(false);
+    await writeFile(path.join(repository, 'retry.txt'), 'retry result\n');
+    await expect(service.completeBranch(reused, task.id, 'fix: complete the retry.')).resolves.toBe(true);
+    const retryDiff = await service.captureRunDiff(reused);
+    expect(retryDiff.fileDiff).toContain('retry.txt');
+    expect(retryDiff.fileDiff).not.toContain('feature.txt');
+    expect(retryDiff.codeDiff).toContain('+retry result');
+    expect(retryDiff.codeDiff).not.toContain('+agent result');
     expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
   });
 

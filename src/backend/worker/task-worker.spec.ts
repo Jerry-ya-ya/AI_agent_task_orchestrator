@@ -45,7 +45,8 @@ describe('TaskWorker', () => {
     const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
       branchName: `agent/${claimed.id}-implement-search`,
       workspacePath: project.repository_path,
-      originalBranch: 'main'
+      originalBranch: 'main',
+      startingCommitSha: 'starting-commit-sha'
     }));
     const executeAgent = vi.fn(async (agentTask: Task): Promise<AgentExecutionResult> => {
       expect(agentTask.status).toBe('IN_PROGRESS');
@@ -101,6 +102,8 @@ describe('TaskWorker', () => {
     expect(taskRuns[0]?.stdout).toContain('[git] Checkpointed');
     expect(taskRuns[0]?.stdout).toContain('[agent]\nAgent stdout');
     expect(taskRuns[0]?.stdout).toContain('[test] pnpm test\nTest stdout');
+    expect(taskRuns[0]?.file_diff).toContain('1 file changed');
+    expect(taskRuns[0]?.code_diff).toContain('diff --git a/search.ts b/search.ts');
     expect(worker.getStatus()).toMatchObject({ busy: false, activeTaskId: null });
   });
 
@@ -110,6 +113,7 @@ describe('TaskWorker', () => {
     expect(tasks.queueCherryPickResolution(task.id, 'high')).toMatchObject({ agent_mode: 'cherry_pick_resolution' });
     const prepareBranch = vi.fn(async (): Promise<PreparedBranch> => ({
       branchName: 'feature/conflicted', workspacePath: project.repository_path, originalBranch: 'main',
+      startingCommitSha: 'starting-commit-sha',
     }));
     const executeAgent = vi.fn(async () => successfulAgent('Resolve Feature cherry-pick conflicts.'));
     const { worker, beginFeatureCherryPick, continueFeatureCherryPick, abortFeatureCherryPick } = createWorker(
@@ -143,7 +147,8 @@ describe('TaskWorker', () => {
     const prepareBranch = vi.fn(async (task: Task): Promise<PreparedBranch> => ({
       branchName: `agent/${task.id}-task`,
       workspacePath: project.repository_path,
-      originalBranch: 'main'
+      originalBranch: 'main',
+      startingCommitSha: 'starting-commit-sha'
     }));
     const executeAgent = vi.fn(async (): Promise<AgentExecutionResult> => {
       const result = agentResults.shift();
@@ -178,7 +183,8 @@ describe('TaskWorker', () => {
     const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
       branchName: `agent/${claimed.id}-break-a-test`,
       workspacePath: project.repository_path,
-      originalBranch: 'main'
+      originalBranch: 'main',
+      startingCommitSha: 'starting-commit-sha'
     }));
     const executeAgent = vi.fn(async (): Promise<AgentExecutionResult> => successfulAgent());
     const executeTests = vi.fn(async (): Promise<TestExecutionResult> => ({
@@ -210,7 +216,8 @@ describe('TaskWorker', () => {
     const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
       branchName: `agent/${claimed.id}-documentation-only-change`,
       workspacePath: project.repository_path,
-      originalBranch: 'main'
+      originalBranch: 'main',
+      startingCommitSha: 'starting-commit-sha'
     }));
     const executeAgent = vi.fn(async (): Promise<AgentExecutionResult> =>
       successfulAgent('Updated the documentation.'));
@@ -270,10 +277,15 @@ describe('TaskWorker', () => {
     const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
       branchName: `agent/${claimed.id}-wait-for-resume`,
       workspacePath: project.repository_path,
-      originalBranch: 'main'
+      originalBranch: 'main',
+      startingCommitSha: 'starting-commit-sha'
     }));
     const execute = vi.fn(async (): Promise<AgentExecutionResult> => successfulAgent());
-    const git = { prepareBranch, completeBranch: vi.fn(async () => true) } as unknown as GitService;
+    const git = {
+      prepareBranch,
+      completeBranch: vi.fn(async () => true),
+      captureRunDiff: vi.fn(async () => ({ fileDiff: '', codeDiff: '' })),
+    } as unknown as GitService;
     const agent: AgentExecutor = { checkAvailability, execute };
     const tests = { execute: vi.fn(async () => successfulTests()) } as unknown as TestService;
     const worker = new TaskWorker(tasks, runs, git, agent, tests);
@@ -293,7 +305,8 @@ describe('TaskWorker', () => {
     const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
       branchName: `agent/${claimed.id}-cancel-active-task`,
       workspacePath: project.repository_path,
-      originalBranch: 'main'
+      originalBranch: 'main',
+      startingCommitSha: 'starting-commit-sha'
     }));
     const executeAgent = vi.fn(async (
       _task: Task,
@@ -328,7 +341,8 @@ describe('TaskWorker', () => {
     const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
       branchName: `feature/${claimed.id}-continue-after-restart`,
       workspacePath: project.repository_path,
-      originalBranch: 'main'
+      originalBranch: 'main',
+      startingCommitSha: 'starting-commit-sha'
     }));
     const executeAgent = vi.fn(async (
       _task: Task,
@@ -381,9 +395,13 @@ describe('TaskWorker', () => {
     abortFeatureCherryPick: ReturnType<typeof vi.fn>;
   } {
     const completeBranch = vi.fn(async () => true);
+    const captureRunDiff = vi.fn(async () => ({
+      fileDiff: ' 1 file changed, 1 insertion(+)',
+      codeDiff: 'diff --git a/search.ts b/search.ts',
+    }));
     const prepareCherryPickResolution = vi.fn(async () => ({
       branchName: 'agent/1-cherry-pick-resolution', workspacePath: project.repository_path,
-      originalBranch: 'main', sourceCommitSha: 'source-commit-sha',
+      originalBranch: 'main', startingCommitSha: 'starting-commit-sha', sourceCommitSha: 'source-commit-sha',
     }));
     const beginFeatureCherryPick = vi.fn(async () => true);
     const continueFeatureCherryPick = vi.fn(async () => true);
@@ -392,7 +410,7 @@ describe('TaskWorker', () => {
     const commitAtRef = vi.fn(async () => 'task-commit-sha');
     const git = {
       prepareBranch, prepareCherryPickResolution, completeBranch, beginFeatureCherryPick,
-      continueFeatureCherryPick, abortFeatureCherryPick, currentCommit, commitAtRef,
+      continueFeatureCherryPick, abortFeatureCherryPick, currentCommit, commitAtRef, captureRunDiff,
     } as unknown as GitService;
     const agent: AgentExecutor = {
       checkAvailability: async () => ({ available: true, message: 'Codex CLI is available.' }),

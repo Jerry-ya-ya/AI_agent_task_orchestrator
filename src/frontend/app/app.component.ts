@@ -590,12 +590,12 @@ export class AppComponent implements OnInit, OnDestroy {
     this.setTaskPending(task.id, true);
     this.clearError();
     try {
-      await firstValueFrom(this.api.retryTask(
+      const retry = await firstValueFrom(this.api.retryTask(
         task.id,
         request.prompt,
         request.modelEffort
       ));
-      this.showNotice(`“${task.title}” queued for retry.`);
+      this.showNotice(`Retry task #${retry.id} created from #${task.id} and queued in Todo.`);
       this.closeModal();
       await this.refreshBoard(false);
     } catch (error: unknown) {

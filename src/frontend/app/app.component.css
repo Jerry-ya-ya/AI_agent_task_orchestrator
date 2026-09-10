@@ -2307,6 +2307,52 @@ header-usage {
   margin-top: 11px;
 }
 
+.diff-block {
+  overflow: hidden;
+  margin-bottom: 11px;
+  border: 1px solid #d8e0e8;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.diff-block summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #eaf0f6;
+  color: #34495e;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.diff-block summary small {
+  color: #718096;
+  font: inherit;
+  font-weight: 500;
+}
+
+.diff-block pre {
+  max-height: 420px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  background: #f8fafc;
+  color: #273444;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.diff-block--code pre {
+  background: #101820;
+  color: #d6e2ee;
+}
+
 .log-title {
   display: flex;
   align-items: center;

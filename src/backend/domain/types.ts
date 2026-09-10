@@ -73,6 +73,8 @@ export interface TaskRun {
   stdout: string;
   stderr: string;
   result_summary: string;
+  file_diff: string;
+  code_diff: string;
 }
 
 export interface TaskListItem extends Task {

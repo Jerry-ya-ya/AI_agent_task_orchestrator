@@ -111,7 +111,7 @@ describe('TaskService state rules', () => {
     expect(tasks.findById(task.id)?.project_id).toBe(project.id);
   });
 
-  it('retries tasks from every inactive state and preserves their branch and workspace', async () => {
+  it('creates a new linked task for retries while preserving the Feature branch and history', async () => {
     const failed = createTask('Retry me');
     expect(tasks.transition(failed.id, 'TODO', 'CLAIMED')).not.toBeNull();
     tasks.setArtifacts(failed.id, 'agent/1-retry-me', '/example/repository', 'main');
@@ -126,14 +126,19 @@ describe('TaskService state rules', () => {
       model_effort: 'high',
       retry_prompt: 'Fix the failing implementation and rerun verification.',
       branch_name: 'agent/1-retry-me',
-      worktree_path: '/example/repository'
+      worktree_path: '/example/repository',
+      source_task_id: failed.id,
     });
-    expect(await service.retry(failed.id, { prompt: '   ' })).toMatchObject({
+    expect(retried.id).not.toBe(failed.id);
+    expect(tasks.findById(failed.id)).toMatchObject({ status: 'REJECTED', is_rejected: true });
+
+    expect(await service.retry(retried.id, { prompt: '   ' })).toMatchObject({
       status: 'TODO',
       model_effort: 'high',
       retry_prompt: null,
       branch_name: 'agent/1-retry-me',
-      worktree_path: '/example/repository'
+      worktree_path: '/example/repository',
+      source_task_id: retried.id,
     });
     const queued = service.create({
       project_id: project.id,
@@ -151,9 +156,13 @@ describe('TaskService state rules', () => {
     for (const status of ['IN_REVIEW', 'PENDING_PUSH', 'PENDING_BRANCH_REMOVAL', 'DONE', 'REJECTED'] as const) {
       const task = createTask(`Retry ${status}`);
       expect(tasks.transition(task.id, 'TODO', status)).not.toBeNull();
-      expect(await service.retry(task.id, { prompt: `Retry from ${status}.` })).toMatchObject({
-        status: 'TODO', retry_prompt: `Retry from ${status}.`, is_rejected: false
+      const retry = await service.retry(task.id, { prompt: `Retry from ${status}.` });
+      expect(retry).toMatchObject({
+        status: 'TODO', retry_prompt: `Retry from ${status}.`, is_rejected: false,
+        source_task_id: task.id,
       });
+      expect(retry.id).not.toBe(task.id);
+      expect(tasks.findById(task.id)).toMatchObject({ status: 'REJECTED', is_rejected: true });
     }
   });
 

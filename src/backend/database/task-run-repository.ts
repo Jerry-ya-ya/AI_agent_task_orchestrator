@@ -44,6 +44,16 @@ export class TaskRunRepository {
       .run(stdout, stderr, runId);
   }
 
+  public setDiff(runId: number, fileDiff: string, codeDiff: string): void {
+    this.database.connection
+      .prepare(`
+        UPDATE task_runs
+        SET file_diff = ?, code_diff = ?
+        WHERE id = ? AND finished_at IS NULL
+      `)
+      .run(fileDiff, codeDiff, runId);
+  }
+
   public finish(runId: number, exitCode: number, resultSummary: string): void {
     this.database.connection
       .prepare(`

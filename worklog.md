@@ -97,3 +97,7 @@
 - Publish only approved Feature task commits to main with cherry-pick and review-gated Codex conflict resolution.
 
 - Add user-selected Review branches with explicit exit, approval, and project-level Worker blocking.
+
+- Create linked Retry tasks with new IDs while preserving superseded task history and Feature branch lineage.
+
+- Capture and display per-run file summaries and read-only code diffs in task details.

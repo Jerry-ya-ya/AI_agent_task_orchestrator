@@ -123,9 +123,9 @@ export class TaskService {
       await this.leaveReviewCheckout(existing);
     }
     const prompt = input.prompt?.trim() || null;
-    const updated = this.tasks.retry(id, input.model_effort ?? existing.model_effort, prompt);
+    const updated = this.tasks.createRetry(existing, input.model_effort ?? existing.model_effort, prompt);
     if (updated === null) {
-      throw new ConflictError('Task state changed while it was being retried.');
+      throw new ConflictError('Task state changed while its retry task was being created.');
     }
     return updated;
   }

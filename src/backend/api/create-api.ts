@@ -159,7 +159,7 @@ export function createApi(dependencies: ApiDependencies): express.Express {
       .parse(request.body ?? {});
     const taskId = idSchema.parse(request.params.id);
     await dependencies.cancelTask?.(taskId);
-    response.json(await dependencies.taskService.retry(taskId, input));
+    response.status(201).json(await dependencies.taskService.retry(taskId, input));
   });
 
   app.post('/tasks/:id/retry-review', (request, response) => {

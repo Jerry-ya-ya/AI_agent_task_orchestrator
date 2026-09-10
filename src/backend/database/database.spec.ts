@@ -177,6 +177,11 @@ describe('OrchestratorDatabase schema', () => {
     expect(columns.some((column) => column['name'] === 'commit_summary')).toBe(true);
     expect(columns.some((column) => column['name'] === 'model_effort')).toBe(true);
     expect(columns.some((column) => column['name'] === 'retry_prompt')).toBe(true);
+    const runColumns = database.connection.prepare('PRAGMA table_info(task_runs)').all();
+    expect(runColumns.some((column) => column['name'] === 'file_diff')).toBe(true);
+    expect(runColumns.some((column) => column['name'] === 'code_diff')).toBe(true);
+    expect(database.connection.prepare('SELECT file_diff, code_diff FROM task_runs WHERE id = 4').get())
+      .toMatchObject({ file_diff: '', code_diff: '' });
     expect(database.connection.prepare('SELECT status, commit_summary, model_effort FROM tasks WHERE id = 7').get())
       .toMatchObject({
         status: 'PENDING_PUSH',

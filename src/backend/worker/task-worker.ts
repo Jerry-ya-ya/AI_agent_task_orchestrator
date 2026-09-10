@@ -263,6 +263,17 @@ export class TaskWorker {
           await this.git.abortFeatureCherryPick(prepared.workspacePath);
         }
         const checkpointed = await this.git.completeBranch(prepared, claimed.id, canonicalSummary);
+        try {
+          const runDiff = await this.git.captureRunDiff(prepared);
+          this.runs.setDiff(claimed.run_id, runDiff.fileDiff, runDiff.codeDiff);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.runs.appendOutput(
+            claimed.run_id,
+            '',
+            `[git] Task changes were saved, but the read-only diff snapshot could not be captured: ${message}\n`,
+          );
+        }
         if (isCherryPickResolution && verificationPassed && resolvedPublishCommitSha !== undefined) {
           this.tasks.finishCherryPickResolution(claimed.id, resolvedPublishCommitSha);
         } else if (!isCherryPickResolution && canonicalSummary !== undefined) {

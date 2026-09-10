@@ -67,7 +67,9 @@ const SCHEMA = `
     exit_code INTEGER,
     stdout TEXT NOT NULL DEFAULT '',
     stderr TEXT NOT NULL DEFAULT '',
-    result_summary TEXT NOT NULL DEFAULT ''
+    result_summary TEXT NOT NULL DEFAULT '',
+    file_diff TEXT NOT NULL DEFAULT '',
+    code_diff TEXT NOT NULL DEFAULT ''
   );
 
   CREATE INDEX IF NOT EXISTS idx_tasks_claim
@@ -156,6 +158,14 @@ export class OrchestratorDatabase {
     if (needsPublishingMigration || !taskDefinition?.sql?.includes('CHERRY_PICK_CONFLICT')
       || !taskDefinition?.sql?.includes('REVIEWING')) {
       this.rebuildTasksForPublishing(hadPendingPush, needsPublishingMigration);
+    }
+
+    const taskRunColumns = this.connection.prepare('PRAGMA table_info(task_runs)').all();
+    if (!taskRunColumns.some((column) => column['name'] === 'file_diff')) {
+      this.connection.exec("ALTER TABLE task_runs ADD COLUMN file_diff TEXT NOT NULL DEFAULT '';");
+    }
+    if (!taskRunColumns.some((column) => column['name'] === 'code_diff')) {
+      this.connection.exec("ALTER TABLE task_runs ADD COLUMN code_diff TEXT NOT NULL DEFAULT '';");
     }
 
     // Feature delivery is intentionally flat: every Feature starts from main.
@@ -251,7 +261,9 @@ export class OrchestratorDatabase {
           exit_code INTEGER,
           stdout TEXT NOT NULL DEFAULT '',
           stderr TEXT NOT NULL DEFAULT '',
-          result_summary TEXT NOT NULL DEFAULT ''
+          result_summary TEXT NOT NULL DEFAULT '',
+          file_diff TEXT NOT NULL DEFAULT '',
+          code_diff TEXT NOT NULL DEFAULT ''
         );
 
         INSERT INTO task_runs (

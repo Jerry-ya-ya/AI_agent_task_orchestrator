@@ -10,6 +10,7 @@
           <span class="task-card__topline"><span class="priority" [attr.data-priority]="task.priority"><span class="priority-dot" aria-hidden="true"></span>{{ task.priority | titlecase }}</span><span class="task-number">#{{ task.id }}</span></span>
           <strong>{{ task.title }}</strong>
           <span class="project-name" [title]="projectName(task.project_id)">{{ projectName(task.project_id) }}</span>
+          <span class="status-chip" *ngIf="task.source_task_id !== null">Retry of #{{ task.source_task_id }}</span>
           <span class="status-chip" data-status="REJECTED" *ngIf="task.is_rejected">Rejected</span>
           <span class="latest-result"><span class="sr-only">Latest run result: </span>{{ latestResult(task) }}</span>
           <span class="status-chip" [attr.data-status]="task.status" [class.status-chip--paused]="task.is_paused">{{ task.is_paused ? 'Paused' : statusLabel(task.status) }}</span>
