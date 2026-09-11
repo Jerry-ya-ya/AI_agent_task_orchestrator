@@ -3,6 +3,9 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import type { Project, StatusColumn, Task, TaskStatus } from '../../models';
 import { latestTaskResult, projectName, statusLabel, tasksForStatus, trackTask } from '../../task-view.utils';
 
+const TERMINAL_TASK_LIMIT = 5;
+const LIMITED_STATUSES: readonly TaskStatus[] = ['DONE', 'REJECTED', 'FAILED'];
+
 @Component({ selector: 'task-board', standalone: true, imports: [CommonModule], templateUrl: './task-board.component.html' })
 export class TaskBoardComponent {
   @Input({ required: true }) columns: readonly StatusColumn[] = [];
@@ -24,7 +27,19 @@ export class TaskBoardComponent {
   @Output() retryRequested = new EventEmitter<Task>();
 
   readonly trackTask = trackTask;
-  tasksFor(status: TaskStatus): Task[] { return tasksForStatus(this.tasks, status); }
+  tasksFor(status: TaskStatus): Task[] {
+    const matching = tasksForStatus(this.tasks, status);
+    if (!LIMITED_STATUSES.includes(status)) return matching;
+    return matching
+      .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id - left.id)
+      .slice(0, TERMINAL_TASK_LIMIT);
+  }
+  totalTasksFor(status: TaskStatus): number {
+    return this.tasks.filter((task) => task.status === status).length;
+  }
+  hiddenTaskCount(status: TaskStatus): number {
+    return Math.max(0, this.totalTasksFor(status) - this.tasksFor(status).length);
+  }
   projectName(projectId: number): string { return projectName(this.projects, projectId); }
   latestResult(task: Task): string {
     const blocker = this.blockingPredecessor(task);

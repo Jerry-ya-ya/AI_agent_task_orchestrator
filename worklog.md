@@ -111,3 +111,9 @@
 - Make the desktop header draggable everywhere except interactive buttons.
 
 - Fit the Feature branch graph to the window and add a project selector.
+
+## 2026/09/12
+
+- Limit Done, Rejected, and Failed columns to five recent tasks and fit scrollable Taskboard columns to the window.
+
+- Preserve full task card heights while scrolling each Taskboard status column independently.

@@ -1,7 +1,7 @@
 <section class="kanban" aria-label="Task status board" [attr.aria-busy]="loading">
   <article class="kanban-column" *ngFor="let column of columns" [attr.data-status]="column.status" [attr.aria-labelledby]="'column-' + column.status">
     <header class="column-header">
-      <div><span class="status-indicator" aria-hidden="true"></span><h3 [id]="'column-' + column.status">{{ column.label }}</h3><span class="column-count">{{ tasksFor(column.status).length }}</span></div>
+      <div><span class="status-indicator" aria-hidden="true"></span><h3 [id]="'column-' + column.status">{{ column.label }}</h3><span class="column-count" [title]="hiddenTaskCount(column.status) > 0 ? 'Showing the newest ' + tasksFor(column.status).length + ' of ' + totalTasksFor(column.status) : totalTasksFor(column.status) + ' tasks'">{{ hiddenTaskCount(column.status) > 0 ? tasksFor(column.status).length + '/' + totalTasksFor(column.status) : totalTasksFor(column.status) }}</span></div>
       <p>{{ column.hint }}</p>
     </header>
     <div class="task-list">
@@ -28,5 +28,6 @@
       </article>
       <div class="column-empty" *ngIf="tasksFor(column.status).length === 0"><span aria-hidden="true">—</span><p>No tasks</p></div>
     </div>
+    <footer class="column-history-note" *ngIf="hiddenTaskCount(column.status) as hiddenCount">{{ hiddenCount }} older {{ hiddenCount === 1 ? 'task is' : 'tasks are' }} available in History</footer>
   </article>
 </section>

@@ -504,6 +504,20 @@ header-usage {
   padding: 28px clamp(18px, 3vw, 42px) 40px;
 }
 
+.page-content--taskboard {
+  display: flex;
+  height: calc(100vh - var(--topbar-height));
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.page-content--taskboard > task-board {
+  display: block;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .board-heading {
   display: flex;
   align-items: flex-end;
@@ -739,13 +753,22 @@ header-usage {
   scroll-snap-type: x proximity;
 }
 
+.page-content--taskboard .kanban {
+  height: 100%;
+  min-height: 0;
+  overflow-y: hidden;
+}
+
 .kanban-column {
+  display: flex;
+  min-height: 0;
   min-width: 210px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #ebeef1;
   scroll-snap-align: start;
+  flex-direction: column;
 }
 
 .column-header {
@@ -840,13 +863,28 @@ header-usage {
 
 .task-list {
   display: flex;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
   flex-direction: column;
   gap: 9px;
-  min-height: 432px;
+  flex: 1 1 auto;
   padding: 10px;
 }
 
+.column-history-note {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border-top: 1px solid #d8dde2;
+  background: rgba(255, 255, 255, 0.45);
+  color: #717b87;
+  font-size: 9px;
+  text-align: center;
+}
+
 .task-card {
+  flex: 0 0 auto;
   overflow: hidden;
   border: 1px solid #d9dee4;
   border-radius: 9px;
@@ -1123,6 +1161,7 @@ header-usage {
 
 .column-empty {
   display: flex;
+  flex: 0 0 auto;
   min-height: 90px;
   align-items: center;
   justify-content: center;
