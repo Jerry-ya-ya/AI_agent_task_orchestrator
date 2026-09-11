@@ -12,6 +12,25 @@ describe('FeatureMapComponent', () => {
     expect(component.trackProject(0, map)).toBe(12);
   });
 
+  it('shows one selected project and preserves that selection across refreshed maps', () => {
+    const component = new FeatureMapComponent();
+    const first = projectMap(1, 'First');
+    const second = projectMap(2, 'Second');
+    component.maps = [first, second];
+
+    expect(component.selectedMap()).toBe(first);
+    component.selectProject('2');
+    expect(component.selectedMap()).toBe(second);
+
+    const refreshedSecond = projectMap(2, 'Second refreshed');
+    component.maps = [projectMap(1, 'First refreshed'), refreshedSecond];
+    expect(component.selectedProjectId).toBe(2);
+    expect(component.selectedMap()).toBe(refreshedSecond);
+
+    component.maps = [projectMap(1, 'First only')];
+    expect(component.selectedProjectId).toBe(1);
+  });
+
   it('places the youngest feature directly below main', () => {
     const component = new FeatureMapComponent();
     const older = lane(1, '2026-09-01T00:00:00.000Z');
@@ -48,5 +67,12 @@ function lane(id: number, createdAt: string): BranchLane {
     name: `feature/${id}`, exists: true, is_current: false, is_primary: false,
     ahead: 1, behind: 0, fork_commit: null, tasks: [],
     feature: { id, project_id: 1, name: `Feature ${id}`, branch_name: `feature/${id}`, base_branch: 'main', created_at: createdAt, updated_at: createdAt },
+  };
+}
+
+function projectMap(id: number, name: string): ProjectBranchMap {
+  return {
+    project: { id, name, repository_path: `C:/repo/${id}`, context: null, created_at: '', updated_at: '' },
+    current_branch: 'main', primary_branch: 'main', primary_commits: [], branches: [],
   };
 }

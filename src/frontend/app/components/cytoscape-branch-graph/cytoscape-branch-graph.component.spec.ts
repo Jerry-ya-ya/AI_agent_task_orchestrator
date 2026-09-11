@@ -44,7 +44,6 @@ describe('CytoscapeBranchGraphComponent', () => {
       classes: 'add-task',
     });
     expect(addTaskEdge).toMatchObject({ data: { source: 'branch:0:task:3', target: 'branch:0:add-task' } });
-    expect(model.height).toBe(360);
   });
 
   it('renders a missing branch as a monochrome Cytoscape lane', () => {

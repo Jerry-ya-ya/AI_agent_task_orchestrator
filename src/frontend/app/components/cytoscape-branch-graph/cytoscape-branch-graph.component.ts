@@ -27,7 +27,6 @@ const ZOOM_SENSITIVITIES = [1, 2, 3] as const;
 
 interface BranchGraphModel {
   elements: cytoscape.ElementDefinition[];
-  height: number;
 }
 
 interface GraphViewport {
@@ -51,7 +50,6 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   @Output() taskCreationRequested = new EventEmitter<number>();
   @ViewChild('graphHost', { static: true }) private graphHost!: ElementRef<HTMLDivElement>;
 
-  graphHeight = 360;
   graphReady = false;
   zoomSensitivity = 1;
   private graph: cytoscape.Core | null = null;
@@ -195,7 +193,6 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
 
     return {
       elements,
-      height: Math.max(360, FIRST_BRANCH_Y + (Math.max(1, this.lanes.length) * BRANCH_GAP) - 40),
     };
   }
 
@@ -214,7 +211,6 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     this.graph?.destroy();
     this.graphReady = false;
     const model = this.graphModel();
-    this.graphHeight = model.height;
     const viewport = CytoscapeBranchGraphComponent.viewportByProject.get(this.map.project.id)
       ?? this.initialViewport();
     this.graph = createCytoscape({

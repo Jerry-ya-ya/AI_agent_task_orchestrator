@@ -12,8 +12,17 @@ import { CytoscapeBranchGraphComponent } from '../cytoscape-branch-graph/cytosca
 export class FeatureMapComponent {
   private readonly branchColors = ['#3977d4', '#9b59b6', '#df7b24', '#199b83', '#d34f74', '#6876d8', '#4f8f31', '#b65f42'];
   private readonly laneCache = new WeakMap<ProjectBranchMap, BranchLane[]>();
+  private projectMaps: readonly ProjectBranchMap[] = [];
+  selectedProjectId: number | null = null;
 
-  @Input({ required: true }) maps: readonly ProjectBranchMap[] = [];
+  @Input({ required: true })
+  set maps(value: readonly ProjectBranchMap[]) {
+    this.projectMaps = value;
+    if (!value.some((map) => map.project.id === this.selectedProjectId)) {
+      this.selectedProjectId = value[0]?.project.id ?? null;
+    }
+  }
+  get maps(): readonly ProjectBranchMap[] { return this.projectMaps; }
   @Input({ required: true }) loading = false;
   @Output() createFeature = new EventEmitter<number>();
   @Output() taskOpened = new EventEmitter<number>();
@@ -26,6 +35,17 @@ export class FeatureMapComponent {
 
   trackProject(_index: number, map: ProjectBranchMap): number {
     return map.project.id;
+  }
+
+  selectedMap(): ProjectBranchMap | null {
+    return this.maps.find((map) => map.project.id === this.selectedProjectId) ?? null;
+  }
+
+  selectProject(value: string): void {
+    const projectId = Number(value);
+    if (Number.isInteger(projectId) && this.maps.some((map) => map.project.id === projectId)) {
+      this.selectedProjectId = projectId;
+    }
   }
 
   featureLanes(map: ProjectBranchMap): BranchLane[] {

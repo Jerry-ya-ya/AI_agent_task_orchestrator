@@ -109,3 +109,5 @@
 - Keep Taskboard errors visible until users dismiss them with an accessible close control.
 
 - Make the desktop header draggable everywhere except interactive buttons.
+
+- Fit the Feature branch graph to the window and add a project selector.

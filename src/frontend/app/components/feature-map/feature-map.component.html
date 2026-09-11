@@ -1,9 +1,10 @@
 <section class="feature-map" aria-labelledby="feature-map-title">
   <header class="feature-map__heading">
     <div><p class="eyebrow">Repository delivery map</p><h2 id="feature-map-title">Features and branches</h2><p>Follow each colored line from its main-branch fork point through its task history. Rebasing keeps the Feature color on matching main commits.</p></div>
+    <label class="feature-project-picker" *ngIf="maps.length > 0"><span>Project</span><select [value]="selectedProjectId" (change)="selectProject($any($event.target).value)" aria-label="Select project branch map"><option *ngFor="let map of maps; trackBy: trackProject" [value]="map.project.id">{{ map.project.name }}</option></select></label>
   </header>
   <div class="feature-map__loading" *ngIf="loading">Inspecting local repositories…</div>
-  <div class="feature-project" *ngFor="let map of maps; trackBy: trackProject">
+  <div class="feature-project" *ngIf="selectedMap() as map">
     <header class="feature-project__header"><div><h3>{{ map.project.name }}</h3><code>{{ map.project.repository_path }}</code></div><div class="feature-project__actions"><span>Current: {{ map.current_branch || 'unavailable' }}</span><button class="button button--primary" type="button" (click)="createFeature.emit(map.project.id)">＋ New feature</button></div></header>
     <div class="branch-network" *ngIf="featureLanes(map).length > 0; else noBranches">
       <div class="branch-order-strip" aria-label="Feature branch display order">
