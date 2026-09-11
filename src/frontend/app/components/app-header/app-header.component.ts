@@ -9,7 +9,7 @@ import { HeaderUsageComponent } from '../header-usage/header-usage.component';
   imports: [CommonModule, HeaderUsageComponent],
   templateUrl: './app-header.component.html',
   styles: `
-    .window-control {
+    button {
       -webkit-app-region: no-drag;
       pointer-events: auto;
     }

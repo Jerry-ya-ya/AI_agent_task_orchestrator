@@ -149,6 +149,30 @@ describe('AppComponent initialization', () => {
     });
   });
 
+  it('keeps taskboard errors visible across polling until the user dismisses them', async () => {
+    const worker: WorkerStatus = {
+      running: true, busy: false, activeTaskId: null, agentAvailable: true, message: 'Worker idle.'
+    };
+    const api = {
+      baseUrl: 'http://127.0.0.1:4317',
+      getProjects: vi.fn(() => of([])),
+      getFeatures: vi.fn(() => of([])),
+      getTasks: vi.fn(() => of([])),
+      getHealth: vi.fn(() => of({ ok: true, worker })),
+    } as unknown as ApiService;
+    const markForCheck = vi.fn();
+    const component = new AppComponent(api, { markForCheck } as unknown as ChangeDetectorRef);
+    const internals = component as unknown as { refreshBoard(silent: boolean): Promise<void> };
+    component.apiError = 'Publishing failed because main has conflicts.';
+
+    await internals.refreshBoard(true);
+
+    expect(component.apiError).toBe('Publishing failed because main has conflicts.');
+    component.dismissError();
+    expect(component.apiError).toBe('');
+    expect(markForCheck).toHaveBeenCalled();
+  });
+
   it('restores and updates the Worker pause preference from local storage', async () => {
     const values = new Map<string, string>([['agentboard.workerPaused', 'true']]);
     const storage = {

@@ -200,6 +200,11 @@ export class AppComponent implements OnInit, OnDestroy {
     ).length;
   }
 
+  dismissError(): void {
+    this.clearError();
+    this.changeDetector.markForCheck();
+  }
+
   @HostListener('document:keydown', ['$event'])
   handleDocumentKeydown(event: KeyboardEvent): void {
     if (!this.hasOpenModal()) {
@@ -716,10 +721,6 @@ export class AppComponent implements OnInit, OnDestroy {
       this.tasks = tasks;
       this.connected = true;
       this.lastUpdated = new Date();
-      if (!this.hasOpenModal()) {
-        this.clearError();
-      }
-
       if (this.selectedTaskId !== null) {
         await this.loadTaskDetail(this.selectedTaskId, true);
       }

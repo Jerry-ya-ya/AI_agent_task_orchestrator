@@ -15,17 +15,17 @@
           <div class="project-summary"><span>{{ projects.length }} {{ projects.length === 1 ? 'project' : 'projects' }}</span><span *ngIf="lastUpdated">Updated {{ lastUpdated | date: 'HH:mm:ss' }}</span></div>
         </section>
         <p id="create-task-hint" class="sr-only" *ngIf="projects.length === 0">Creating a task will first prompt you to create a project.</p>
-        <div class="alert alert--error" role="alert" *ngIf="apiError"><span aria-hidden="true">!</span><p>{{ apiError }}</p><button type="button" aria-label="Dismiss error" (click)="apiError = ''">×</button></div>
+        <div class="alert alert--error" role="alert" *ngIf="apiError"><span aria-hidden="true">!</span><p>{{ apiError }}</p><button type="button" aria-label="Dismiss error" title="Dismiss error" (click)="dismissError()">×</button></div>
         <div class="alert alert--warning" role="status" *ngIf="workerWarning() as warning"><span aria-hidden="true">!</span><p><strong>Worker paused.</strong> {{ warning }}</p></div>
         <div class="empty-workspace" *ngIf="!loading && projects.length === 0 && tasks.length === 0"><div class="empty-workspace__icon" aria-hidden="true">⌁</div><h2>Connect your first repository</h2><p>Create a project with the path to a local Git repository, then queue work for Codex.</p><button class="button button--primary" type="button" (click)="openProjectEditor()">Create a project</button></div>
         <task-board [columns]="columns" [tasks]="tasks" [projects]="projects" [pendingTaskIds]="pendingTaskIds" [loading]="loading" (taskOpened)="openTaskDetail($event)" (pauseToggled)="toggleTaskPause($event)" (branchRemovalRequested)="removeTaskBranch($event)" (pushRequested)="pushTask($event)" (cherryPickResolutionRequested)="openResolveCherryPick($event)" (reviewStarted)="startTaskReview($event)" (reviewExited)="exitTaskReview($event)" (reviewRetryRequested)="openRetryReview($event)" (rejectRequested)="rejectTask($event)" (approveRequested)="approveTask($event)" (retryRequested)="openRetryTask($event)" />
       </ng-container>
       <ng-container *ngSwitchCase="'features'">
-        <div class="alert alert--error" role="alert" *ngIf="apiError"><span aria-hidden="true">!</span><p>{{ apiError }}</p><button type="button" aria-label="Dismiss error" (click)="apiError = ''">×</button></div>
+        <div class="alert alert--error" role="alert" *ngIf="apiError"><span aria-hidden="true">!</span><p>{{ apiError }}</p><button type="button" aria-label="Dismiss error" title="Dismiss error" (click)="dismissError()">×</button></div>
         <feature-map [maps]="branchMaps" [loading]="branchMapRefreshInFlight" (createFeature)="openFeatureEditor($event)" (createTask)="openCreateTask($event)" (taskOpened)="openTaskDetailById($event)" (branchOrderChanged)="saveBranchOrder($event)" />
       </ng-container>
       <ng-container *ngSwitchCase="'history'">
-        <div class="alert alert--error" role="alert" *ngIf="apiError"><span aria-hidden="true">!</span><p>{{ apiError }}</p><button type="button" aria-label="Dismiss error" (click)="apiError = ''">×</button></div>
+        <div class="alert alert--error" role="alert" *ngIf="apiError"><span aria-hidden="true">!</span><p>{{ apiError }}</p><button type="button" aria-label="Dismiss error" title="Dismiss error" (click)="dismissError()">×</button></div>
         <task-history [tasks]="tasks" [projects]="projects" [columns]="columns" (taskOpened)="openTaskDetail($event)" />
       </ng-container>
     </main>

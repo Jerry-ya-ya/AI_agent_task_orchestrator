@@ -105,3 +105,7 @@
 ## 2026/09/11
 
 - Present each task run as an expandable per-file commit diff with line-level changes.
+
+- Keep Taskboard errors visible until users dismiss them with an accessible close control.
+
+- Make the desktop header draggable everywhere except interactive buttons.

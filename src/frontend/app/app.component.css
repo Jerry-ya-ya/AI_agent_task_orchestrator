@@ -155,11 +155,12 @@
   background: #11151a;
   color: #fff;
   box-shadow: 0 4px 22px rgba(17, 21, 26, 0.14);
-  -webkit-app-region: no-drag;
+  -webkit-app-region: drag;
+  user-select: none;
 }
 
-.brand-block {
-  -webkit-app-region: drag;
+.topbar button {
+  -webkit-app-region: no-drag;
 }
 
 .brand-block,
@@ -691,11 +692,24 @@ header-usage {
 }
 
 .alert button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
   border: 0;
+  border-radius: 6px;
   background: transparent;
   color: inherit;
+  cursor: pointer;
   font-size: 20px;
   line-height: 1;
+}
+
+.alert button:hover,
+.alert button:focus-visible {
+  background: rgba(142, 41, 41, 0.1);
+  outline: none;
 }
 
 .alert--warning {
