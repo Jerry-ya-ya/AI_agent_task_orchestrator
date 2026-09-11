@@ -8,7 +8,7 @@
       (expandedChange)="setNavigationExpanded($event)"
       (pageSelected)="selectPage($event)"
     />
-    <main class="page-content" [class.page-content--taskboard]="activePage === 'taskboard'" [class.page-content--history]="activePage === 'history'" [ngSwitch]="activePage">
+    <main class="page-content" [class.page-content--taskboard]="activePage === 'taskboard'" [class.page-content--features]="activePage === 'features'" [class.page-content--history]="activePage === 'history'" [ngSwitch]="activePage">
       <ng-container *ngSwitchCase="'taskboard'">
         <section class="board-heading" aria-labelledby="board-title">
           <div><div class="board-title-row"><h2 id="board-title">Taskboard</h2><span class="task-total">{{ tasks.length }} {{ tasks.length === 1 ? 'task' : 'tasks' }}</span></div><p>The worker moves one task at a time. Completed work waits in Review until you approve it.</p></div>

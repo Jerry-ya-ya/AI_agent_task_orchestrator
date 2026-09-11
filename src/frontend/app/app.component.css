@@ -1,18 +1,25 @@
 :host {
   display: block;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .app-shell {
   --topbar-height: 76px;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .app-workspace {
   display: grid;
+  height: calc(100vh - var(--topbar-height));
   grid-template-columns: 64px minmax(0, 1fr);
-  min-height: calc(100vh - var(--topbar-height));
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
   margin-top: var(--topbar-height);
+  overflow: hidden;
   transition: grid-template-columns 180ms ease;
 }
 
@@ -21,13 +28,14 @@
 }
 
 .app-navigation {
-  position: sticky;
-  top: var(--topbar-height);
+  position: relative;
+  top: 0;
   z-index: 8;
   display: flex;
   width: 64px;
-  height: calc(100vh - var(--topbar-height));
-  align-self: start;
+  height: 100%;
+  min-height: 0;
+  align-self: stretch;
   padding: 12px 8px;
   overflow: hidden;
   border-right: 1px solid #252b32;
@@ -500,16 +508,26 @@ header-usage {
 }
 
 .page-content {
+  height: 100%;
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
   padding: 28px clamp(18px, 3vw, 42px) 40px;
 }
 
 .page-content--taskboard {
   display: flex;
-  height: calc(100vh - var(--topbar-height));
-  min-height: 0;
-  overflow: hidden;
   flex-direction: column;
+}
+
+.page-content--features {
+  overflow: hidden;
+}
+
+.page-content--history {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 
 .page-content--taskboard > task-board {
@@ -1630,8 +1648,8 @@ header-usage {
 
 .feature-map {
   display: flex;
-  height: calc(100vh - var(--topbar-height) - 68px);
-  min-height: 500px;
+  height: 100%;
+  min-height: 0;
   max-width: 1760px;
   margin: 0 auto;
   flex-direction: column;
@@ -2657,8 +2675,8 @@ header-usage {
   }
 
   .app-navigation {
-    top: var(--topbar-height);
-    height: calc(100vh - var(--topbar-height));
+    top: 0;
+    height: 100%;
   }
 
   .connection-state {

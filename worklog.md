@@ -117,3 +117,5 @@
 - Limit Done, Rejected, and Failed columns to five recent tasks and fit scrollable Taskboard columns to the window.
 
 - Preserve full task card heights while scrolling each Taskboard status column independently.
+
+- Separate the sidebar from a viewport-locked content pane with page-specific internal scrolling.
