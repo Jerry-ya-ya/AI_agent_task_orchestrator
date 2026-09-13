@@ -3,6 +3,8 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import type { BranchLane, ProjectBranchMap } from '../../models';
 import { CytoscapeBranchGraphComponent } from '../cytoscape-branch-graph/cytoscape-branch-graph.component';
 
+const SELECTED_PROJECT_STORAGE_KEY = 'agentboard.featureMap.selectedProjectId';
+
 @Component({
   selector: 'feature-map',
   standalone: true,
@@ -13,13 +15,18 @@ export class FeatureMapComponent {
   private readonly branchColors = ['#3977d4', '#9b59b6', '#df7b24', '#199b83', '#d34f74', '#6876d8', '#4f8f31', '#b65f42'];
   private readonly laneCache = new WeakMap<ProjectBranchMap, BranchLane[]>();
   private projectMaps: readonly ProjectBranchMap[] = [];
+  private selectionRestored = false;
   selectedProjectId: number | null = null;
 
   @Input({ required: true })
   set maps(value: readonly ProjectBranchMap[]) {
     this.projectMaps = value;
-    if (!value.some((map) => map.project.id === this.selectedProjectId)) {
-      this.selectedProjectId = value[0]?.project.id ?? null;
+    if (!this.selectionRestored) {
+      this.selectedProjectId = this.readSelectedProjectId();
+      this.selectionRestored = true;
+    }
+    if (value.length > 0 && !value.some((map) => map.project.id === this.selectedProjectId)) {
+      this.setSelectedProjectId(value[0]!.project.id);
     }
   }
   get maps(): readonly ProjectBranchMap[] { return this.projectMaps; }
@@ -44,7 +51,7 @@ export class FeatureMapComponent {
   selectProject(value: string): void {
     const projectId = Number(value);
     if (Number.isInteger(projectId) && this.maps.some((map) => map.project.id === projectId)) {
-      this.selectedProjectId = projectId;
+      this.setSelectedProjectId(projectId);
     }
   }
 
@@ -96,5 +103,23 @@ export class FeatureMapComponent {
     }
     if (rightOrder === null || rightOrder === undefined) return 1;
     return leftOrder - rightOrder || this.defaultBranchComparison(left, right);
+  }
+
+  private readSelectedProjectId(): number | null {
+    try {
+      const projectId = Number(globalThis.localStorage?.getItem(SELECTED_PROJECT_STORAGE_KEY));
+      return Number.isInteger(projectId) && projectId > 0 ? projectId : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private setSelectedProjectId(projectId: number): void {
+    this.selectedProjectId = projectId;
+    try {
+      globalThis.localStorage?.setItem(SELECTED_PROJECT_STORAGE_KEY, String(projectId));
+    } catch {
+      // The board remains usable when storage is disabled or unavailable.
+    }
   }
 }

@@ -1,10 +1,12 @@
 import '@angular/compiler';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { BranchLane, ProjectBranchMap } from '../../models';
 import { CytoscapeBranchGraphComponent } from './cytoscape-branch-graph.component';
 
 describe('CytoscapeBranchGraphComponent', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it('uses normal zoom speed by default and accepts supported zoom multipliers', () => {
     const component = new CytoscapeBranchGraphComponent();
 
@@ -13,6 +15,22 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(component.zoomSensitivity).toBe(3);
     component.setZoomSensitivity('4');
     expect(component.zoomSensitivity).toBe(3);
+  });
+
+  it('restores and persists the zoom multiplier separately for each project', () => {
+    const storage = memoryStorage({ 'agentboard.featureMap.zoomSensitivity.1': '3' });
+    vi.stubGlobal('localStorage', storage);
+    const component = new CytoscapeBranchGraphComponent();
+    const feature = lane();
+
+    component.map = map(feature);
+    expect(component.zoomSensitivity).toBe(3);
+
+    component.setZoomSensitivity('2');
+    expect(storage.getItem('agentboard.featureMap.zoomSensitivity.1')).toBe('2');
+
+    component.map = { ...map(feature), project: { ...map(feature).project, id: 2 } };
+    expect(component.zoomSensitivity).toBe(1);
   });
 
   it('builds Cytoscape nodes and edges for main, fork, and task history', () => {
@@ -104,5 +122,17 @@ function task(
   return {
     id, title: `Task ${id}`, status, commit_summary: commitSummary,
     created_at: '2026-09-05T00:00:00.000Z', updated_at: '2026-09-05T00:00:00.000Z',
+  };
+}
+
+function memoryStorage(initial: Record<string, string> = {}): Storage {
+  const values = new Map(Object.entries(initial));
+  return {
+    get length() { return values.size; },
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => [...values.keys()][index] ?? null,
+    removeItem: (key) => { values.delete(key); },
+    setItem: (key, value) => { values.set(key, value); },
   };
 }

@@ -24,6 +24,7 @@ const BRANCH_GAP = 152;
 const INITIAL_ZOOM = 0.88;
 const INITIAL_PAN: cytoscape.Position = { x: 24, y: 30 };
 const ZOOM_SENSITIVITIES = [1, 2, 3] as const;
+const ZOOM_SENSITIVITY_STORAGE_PREFIX = 'agentboard.featureMap.zoomSensitivity.';
 
 interface BranchGraphModel {
   elements: cytoscape.ElementDefinition[];
@@ -44,7 +45,16 @@ interface GraphViewport {
 export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, OnDestroy {
   private static readonly viewportByProject = new Map<number, GraphViewport>();
 
-  @Input({ required: true }) map!: ProjectBranchMap;
+  private projectMap: ProjectBranchMap | null = null;
+
+  @Input({ required: true })
+  set map(value: ProjectBranchMap) {
+    this.projectMap = value;
+    this.zoomSensitivity = this.readZoomSensitivity(value.project.id);
+  }
+  get map(): ProjectBranchMap {
+    return this.projectMap!;
+  }
   @Input({ required: true }) lanes: readonly BranchLane[] = [];
   @Output() taskOpened = new EventEmitter<number>();
   @Output() taskCreationRequested = new EventEmitter<number>();
@@ -94,6 +104,16 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     const sensitivity = Number(value);
     if (!ZOOM_SENSITIVITIES.some((option) => option === sensitivity)) return;
     this.zoomSensitivity = sensitivity;
+    if (this.projectMap !== null) {
+      try {
+        globalThis.localStorage?.setItem(
+          `${ZOOM_SENSITIVITY_STORAGE_PREFIX}${this.projectMap.project.id}`,
+          String(sensitivity),
+        );
+      } catch {
+        // Keep the graph controls functional when storage is unavailable.
+      }
+    }
     if (this.viewReady) this.requestRender();
   }
 
@@ -381,5 +401,14 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
 
   private firstLine(value: string): string {
     return value.split(/\r?\n/u).find((line) => line.trim().length > 0)?.trim().toLocaleLowerCase() ?? '';
+  }
+
+  private readZoomSensitivity(projectId: number): number {
+    try {
+      const sensitivity = Number(globalThis.localStorage?.getItem(`${ZOOM_SENSITIVITY_STORAGE_PREFIX}${projectId}`));
+      return ZOOM_SENSITIVITIES.some((option) => option === sensitivity) ? sensitivity : 1;
+    } catch {
+      return 1;
+    }
   }
 }

@@ -119,3 +119,7 @@
 - Preserve full task card heights while scrolling each Taskboard status column independently.
 
 - Separate the sidebar from a viewport-locked content pane with page-specific internal scrolling.
+
+## 2026/09/13
+
+- Persist the selected Feature project and per-project zoom multiplier across page and app reloads.

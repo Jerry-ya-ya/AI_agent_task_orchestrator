@@ -1,10 +1,12 @@
 import '@angular/compiler';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { BranchLane } from '../../models';
+import type { BranchLane, ProjectBranchMap } from '../../models';
 import { FeatureMapComponent } from './feature-map.component';
 
 describe('FeatureMapComponent', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it('tracks refreshed project maps by project id', () => {
     const component = new FeatureMapComponent();
     const map = { project: { id: 12 } } as Parameters<FeatureMapComponent['trackProject']>[1];
@@ -29,6 +31,31 @@ describe('FeatureMapComponent', () => {
 
     component.maps = [projectMap(1, 'First only')];
     expect(component.selectedProjectId).toBe(1);
+  });
+
+  it('restores and persists the selected project', () => {
+    const storage = memoryStorage({ 'agentboard.featureMap.selectedProjectId': '2' });
+    vi.stubGlobal('localStorage', storage);
+    const component = new FeatureMapComponent();
+    const first = projectMap(1, 'First');
+    const second = projectMap(2, 'Second');
+
+    component.maps = [first, second];
+    expect(component.selectedMap()).toBe(second);
+
+    component.selectProject('1');
+    expect(storage.getItem('agentboard.featureMap.selectedProjectId')).toBe('1');
+  });
+
+  it('replaces a stored project that no longer exists', () => {
+    const storage = memoryStorage({ 'agentboard.featureMap.selectedProjectId': '99' });
+    vi.stubGlobal('localStorage', storage);
+    const component = new FeatureMapComponent();
+
+    component.maps = [projectMap(3, 'Available')];
+
+    expect(component.selectedProjectId).toBe(3);
+    expect(storage.getItem('agentboard.featureMap.selectedProjectId')).toBe('3');
   });
 
   it('places the youngest feature directly below main', () => {
@@ -74,5 +101,17 @@ function projectMap(id: number, name: string): ProjectBranchMap {
   return {
     project: { id, name, repository_path: `C:/repo/${id}`, context: null, created_at: '', updated_at: '' },
     current_branch: 'main', primary_branch: 'main', primary_commits: [], branches: [],
+  };
+}
+
+function memoryStorage(initial: Record<string, string> = {}): Storage {
+  const values = new Map(Object.entries(initial));
+  return {
+    get length() { return values.size; },
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => [...values.keys()][index] ?? null,
+    removeItem: (key) => { values.delete(key); },
+    setItem: (key, value) => { values.set(key, value); },
   };
 }
