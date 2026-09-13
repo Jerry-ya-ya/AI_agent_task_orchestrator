@@ -77,6 +77,34 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(laneElements.length).toBeGreaterThan(0);
     expect(laneElements.every((element) => String(element.classes).includes('missing'))).toBe(true);
   });
+
+  it('keeps branch labels at the left viewport edge while preserving their vertical lane position', () => {
+    const component = new CytoscapeBranchGraphComponent();
+    const labelPositions = new Map<string, { x: number; y: number }>([
+      ['first', { x: 86, y: 220 }],
+      ['second', { x: 86, y: 372 }],
+    ]);
+    const labels = [...labelPositions.entries()].map(([id, position]) => ({
+      position: (axis: 'x', value: number) => {
+        if (axis === 'x') position.x = value;
+      },
+      id,
+    }));
+    (component as unknown as { graph: unknown }).graph = {
+      zoom: () => 2,
+      pan: () => ({ x: -300, y: -100 }),
+      nodes: (selector: string) => {
+        expect(selector).toBe('node.branch-label');
+        return { forEach: (callback: (label: (typeof labels)[number]) => void) => labels.forEach(callback) };
+      },
+    };
+
+    (component as unknown as { syncBranchLabels: () => void }).syncBranchLabels();
+
+    expect(labelPositions.get('first')).toEqual({ x: 193, y: 220 });
+    expect(labelPositions.get('second')).toEqual({ x: 193, y: 372 });
+    expect((193 * 2) - 300).toBe(86);
+  });
 });
 
 function map(feature: BranchLane): ProjectBranchMap {

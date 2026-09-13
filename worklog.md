@@ -123,3 +123,5 @@
 ## 2026/09/13
 
 - Persist the selected Feature project and per-project zoom multiplier across page and app reloads.
+
+- Keep visible Feature branch labels pinned to the graph's left edge while vertically tracking their lanes.

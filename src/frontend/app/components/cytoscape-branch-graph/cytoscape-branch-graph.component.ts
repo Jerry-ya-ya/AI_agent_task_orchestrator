@@ -21,6 +21,7 @@ const FIRST_NODE_X = 250;
 const COMMIT_GAP = 190;
 const FIRST_BRANCH_Y = 220;
 const BRANCH_GAP = 152;
+const STICKY_BRANCH_LABEL_X = 86;
 const INITIAL_ZOOM = 0.88;
 const INITIAL_PAN: cytoscape.Position = { x: 24, y: 30 };
 const ZOOM_SENSITIVITIES = [1, 2, 3] as const;
@@ -248,7 +249,11 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     });
     this.renderedProjectId = this.map.project.id;
     this.graphReady = true;
-    this.graph.on('pan zoom', () => this.saveViewport());
+    this.syncBranchLabels();
+    this.graph.on('pan zoom', () => {
+      this.saveViewport();
+      this.syncBranchLabels();
+    });
     this.graph.on('tap', 'node.task', (event) => {
       const taskId = Number(event.target.data('taskId'));
       if (Number.isInteger(taskId)) this.taskOpened.emit(taskId);
@@ -271,6 +276,16 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     CytoscapeBranchGraphComponent.viewportByProject.set(this.renderedProjectId, {
       zoom: this.graph.zoom(),
       pan: { x: pan.x, y: pan.y },
+    });
+  }
+
+  private syncBranchLabels(): void {
+    if (this.graph === null) return;
+    const zoom = this.graph.zoom();
+    const pan = this.graph.pan();
+    const modelX = (STICKY_BRANCH_LABEL_X - pan.x) / zoom;
+    this.graph.nodes('node.branch-label').forEach((label) => {
+      label.position('x', modelX);
     });
   }
 
