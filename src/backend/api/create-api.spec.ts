@@ -155,10 +155,21 @@ describe('backend API', () => {
     }).trim();
     expect(featureCommit).toBe(mainCommit);
 
+    await request(app).get('/branches').expect(200).expect((response) => {
+      const projectMap = response.body.find((item: { project: { id: number } }) => item.project.id === project.body.id);
+      const lane = projectMap.branches.find((item: { name: string }) => item.name === feature.body.branch_name);
+      expect(projectMap.primary_commits.at(-1).sha).toBe(mainCommit);
+      expect(lane).toMatchObject({
+        ahead: 0,
+        behind: 0,
+        fork_commit: { sha: mainCommit },
+      });
+    });
+
     await request(app).post(`/projects/${project.body.id}/features/reset-to-main`).send({}).expect(200, {
       reset_count: 1,
     });
-  });
+  }, 20_000);
 
   it('pauses and resumes Worker task claiming through explicit endpoints', async () => {
     await request(app).post('/worker/pause').send({}).expect(200)

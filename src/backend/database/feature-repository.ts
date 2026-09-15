@@ -57,4 +57,19 @@ export class FeatureRepository {
       branchNames.forEach((name, position) => insert.run(projectId, name, position));
     });
   }
+
+  public markPointerReset(featureIds: readonly number[]): void {
+    if (featureIds.length === 0) return;
+    const update = this.database.connection.prepare(`
+      UPDATE features
+      SET pointer_reset_task_id = (
+        SELECT MAX(tasks.id)
+        FROM tasks
+        WHERE tasks.feature_id = features.id AND tasks.publish_commit_sha IS NOT NULL
+      ), updated_at = ?
+      WHERE id = ?
+    `);
+    const now = this.clock();
+    this.database.transaction(() => featureIds.forEach((featureId) => update.run(now, featureId)));
+  }
 }

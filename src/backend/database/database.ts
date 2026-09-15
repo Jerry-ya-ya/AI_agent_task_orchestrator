@@ -18,6 +18,7 @@ const SCHEMA = `
     name TEXT NOT NULL,
     branch_name TEXT NOT NULL,
     base_branch TEXT NOT NULL,
+    pointer_reset_task_id INTEGER,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE(project_id, name),
@@ -108,6 +109,10 @@ export class OrchestratorDatabase {
   public migrate(): void {
     this.assertOpen();
     this.connection.exec(SCHEMA);
+    const featureColumns = this.connection.prepare('PRAGMA table_info(features)').all();
+    if (!featureColumns.some((column) => column['name'] === 'pointer_reset_task_id')) {
+      this.connection.exec('ALTER TABLE features ADD COLUMN pointer_reset_task_id INTEGER;');
+    }
     const taskColumns = this.connection.prepare('PRAGMA table_info(tasks)').all();
     if (!taskColumns.some((column) => column['name'] === 'feature_id')) {
       this.connection.exec('ALTER TABLE tasks ADD COLUMN feature_id INTEGER REFERENCES features(id) ON DELETE SET NULL;');

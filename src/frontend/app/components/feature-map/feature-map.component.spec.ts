@@ -93,7 +93,7 @@ function lane(id: number, createdAt: string): BranchLane {
   return {
     name: `feature/${id}`, exists: true, is_current: false, is_primary: false,
     ahead: 1, behind: 0, fork_commit: null, tasks: [],
-    feature: { id, project_id: 1, name: `Feature ${id}`, branch_name: `feature/${id}`, base_branch: 'main', created_at: createdAt, updated_at: createdAt },
+    feature: { id, project_id: 1, name: `Feature ${id}`, branch_name: `feature/${id}`, base_branch: 'main', pointer_reset_task_id: null, created_at: createdAt, updated_at: createdAt },
   };
 }
 

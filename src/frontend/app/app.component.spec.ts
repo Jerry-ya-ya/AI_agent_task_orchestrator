@@ -48,7 +48,7 @@ describe('AppComponent initialization', () => {
     const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
     const component = new AppComponent(api, { markForCheck: vi.fn() } as unknown as ChangeDetectorRef);
     const feature: Feature = {
-      id: 8, project_id: 3, name: 'Search', branch_name: 'feature/search', base_branch: 'main',
+      id: 8, project_id: 3, name: 'Search', branch_name: 'feature/search', base_branch: 'main', pointer_reset_task_id: null,
       created_at: '', updated_at: '',
     };
     component.projects = [
@@ -66,7 +66,7 @@ describe('AppComponent initialization', () => {
 
   it('requires confirmation before resetting a Feature branch to main', async () => {
     const feature: Feature = {
-      id: 8, project_id: 3, name: 'Search', branch_name: 'feature/search', base_branch: 'main',
+      id: 8, project_id: 3, name: 'Search', branch_name: 'feature/search', base_branch: 'main', pointer_reset_task_id: null,
       created_at: '', updated_at: '',
     };
     const resetFeatureBranchToMain = vi.fn(() => of(feature));
@@ -92,7 +92,7 @@ describe('AppComponent initialization', () => {
   it('blocks pointer resets during Review and resets all eligible Project branches after confirmation', async () => {
     const project = { ...exampleProject(), id: 3, name: 'Search project' };
     const feature: Feature = {
-      id: 8, project_id: project.id, name: 'Search', branch_name: 'feature/search', base_branch: 'main',
+      id: 8, project_id: project.id, name: 'Search', branch_name: 'feature/search', base_branch: 'main', pointer_reset_task_id: null,
       created_at: '', updated_at: '',
     };
     const resetFeatureBranchToMain = vi.fn(() => of(feature));

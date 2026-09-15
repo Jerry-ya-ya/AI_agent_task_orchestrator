@@ -37,6 +37,7 @@ export interface Feature {
   name: string;
   branch_name: string;
   base_branch: string;
+  pointer_reset_task_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -131,6 +132,7 @@ export interface BranchTaskHistory {
   title: string;
   status: TaskStatus;
   commit_summary: string | null;
+  is_before_pointer_reset: boolean;
   created_at: string;
   updated_at: string;
 }

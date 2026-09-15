@@ -131,3 +131,5 @@
 - Add fan-out Feature branch actions for task creation and safely resetting local branch pointers to main.
 
 - Protect single and bulk Feature pointer resets from review-state tasks and add an atomic red reset-all control.
+
+- Render main commits chronologically and preserve pointer reset checkpoints in rightmost HEAD-anchored branch histories.

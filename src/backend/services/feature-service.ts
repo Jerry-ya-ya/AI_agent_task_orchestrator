@@ -67,7 +67,8 @@ export class FeatureService {
     if (project === null) throw new NotFoundError(`Project ${feature.project_id} was not found.`);
     this.assertBranchesCanReset([feature]);
     await this.git.resetFeatureBranchToMain(project.repository_path, feature.branch_name);
-    return feature;
+    this.features.markPointerReset([feature.id]);
+    return this.features.findById(feature.id) as Feature;
   }
 
   public async resetProjectBranchesToMain(projectId: number): Promise<{ reset_count: number }> {
@@ -82,6 +83,7 @@ export class FeatureService {
       project.repository_path,
       resettableFeatures.map((feature) => feature.branch_name),
     );
+    this.features.markPointerReset(resettableFeatures.map((feature) => feature.id));
     return { reset_count: resettableFeatures.length };
   }
 
@@ -105,6 +107,20 @@ export class FeatureService {
         // A missing repository is represented by monochrome lanes instead of failing the whole map.
       }
       const projectFeatures = allFeatures.filter((feature) => feature.project_id === project.id);
+      const latestMainCommit = primaryCommits.at(-1)?.sha;
+      const inferredResetFeatureIds: number[] = [];
+      projectFeatures.forEach((feature) => {
+        if (feature.pointer_reset_task_id !== null) return;
+        const relation = branchRelations[feature.branch_name];
+        if (relation?.ahead !== 0 || relation.behind !== 0 || relation.forkCommit.sha !== latestMainCommit) return;
+        const latestCommittedTaskId = allTasks
+          .filter((task) => task.feature_id === feature.id && task.publish_commit_sha !== null)
+          .reduce((latestId, task) => Math.max(latestId, task.id), 0);
+        if (latestCommittedTaskId === 0) return;
+        feature.pointer_reset_task_id = latestCommittedTaskId;
+        inferredResetFeatureIds.push(feature.id);
+      });
+      this.features.markPointerReset(inferredResetFeatureIds);
       const displayOrder = this.features.branchOrder(project.id);
       const names = new Set([...localBranches, ...projectFeatures.map((feature) => feature.branch_name)]);
       const branches: BranchLane[] = [...names].sort((a, b) => a.localeCompare(b)).map((name) => {
@@ -129,6 +145,9 @@ export class FeatureService {
               title: task.title,
               status: task.status,
               commit_summary: task.commit_summary,
+              is_before_pointer_reset: feature.pointer_reset_task_id !== null
+                && task.id <= feature.pointer_reset_task_id
+                && task.publish_commit_sha !== null,
               created_at: task.created_at,
               updated_at: task.updated_at,
             })),

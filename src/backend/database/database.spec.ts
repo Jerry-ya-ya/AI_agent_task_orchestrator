@@ -113,6 +113,27 @@ describe('OrchestratorDatabase schema', () => {
     expect(runs.listForTask(task.id)).toEqual([]);
   });
 
+  it('records the latest committed task as a Feature pointer-reset boundary', () => {
+    database = new OrchestratorDatabase(':memory:');
+    const projects = new ProjectRepository(database);
+    const features = new FeatureRepository(database);
+    const tasks = new TaskRepository(database, new TaskRunRepository(database));
+    const project = projects.create({ name: 'Example', repository_path: '/example', context: '' });
+    const feature = features.create({ project_id: project.id, name: 'Search' }, 'feature/search', 'main');
+    const committed = tasks.create({
+      project_id: project.id, feature_id: feature.id, title: 'Committed', description: '', priority: 'MEDIUM',
+    });
+    tasks.create({
+      project_id: project.id, feature_id: feature.id, title: 'Still queued', description: '', priority: 'MEDIUM',
+    });
+    database.connection.prepare('UPDATE tasks SET publish_commit_sha = ? WHERE id = ?')
+      .run('abc123', committed.id);
+
+    features.markPointerReset([feature.id]);
+
+    expect(features.findById(feature.id)?.pointer_reset_task_id).toBe(committed.id);
+  });
+
   it('recovers an abruptly interrupted task as runnable TODO', () => {
     database = new OrchestratorDatabase(':memory:');
     const projects = new ProjectRepository(database);

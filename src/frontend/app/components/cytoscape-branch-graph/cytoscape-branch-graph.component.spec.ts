@@ -33,7 +33,7 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(component.zoomSensitivity).toBe(1);
   });
 
-  it('builds Cytoscape nodes and edges for main, fork, and task history', () => {
+  it('builds task history to the left of a pointer-anchored branch head', () => {
     const component = new CytoscapeBranchGraphComponent();
     const feature = lane();
     component.map = map(feature);
@@ -44,24 +44,24 @@ describe('CytoscapeBranchGraphComponent', () => {
     const forkEdge = model.elements.find((element) => element.data.id === 'fork-edge:0');
     const checkpoint = model.elements.find((element) => element.data.id === 'branch:0:task:2');
     const waiting = model.elements.find((element) => element.data.id === 'branch:0:task:3');
-    const actionMenu = model.elements.find((element) => element.data.id === 'branch:0:actions');
+    const actionMenu = model.elements.find((element) => element.data.id === 'branch:0:pointer');
     const addTask = model.elements.find((element) => element.data.id === 'branch:0:action:add-task');
     const resetBranch = model.elements.find((element) => element.data.id === 'branch:0:action:reset-main');
-    const actionMenuEdge = model.elements.find((element) => element.data.id === 'branch-actions-edge:0');
+    const pointerEdge = model.elements.find((element) => element.data.id === 'pointer-edge:0');
 
     expect(featureCommit).toMatchObject({
       data: { color: '#3977d4' }, classes: 'primary feature-owned', grabbable: false, pannable: true,
     });
     expect(forkEdge).toMatchObject({
-      data: { source: 'primary:base', target: 'branch:0:fork', color: '#3977d4' },
+      data: { source: 'primary:base', target: 'branch:0:pointer', color: '#3977d4' },
       classes: 'fork-edge',
     });
     expect(checkpoint?.classes).toContain('checkpoint');
     expect(waiting?.classes).not.toContain('checkpoint');
     expect(actionMenu).toMatchObject({
-      data: { label: '+', subtitle: 'Branch actions', featureId: 7, color: '#3977d4' },
+      data: { label: 'HEAD +', featureId: 7, color: '#3977d4' },
       position: { x: 1010, y: 220 },
-      classes: 'branch-actions',
+      classes: 'branch-pointer branch-actions',
     });
     expect(addTask).toMatchObject({
       data: { label: '+ Task', subtitle: 'Create task', featureId: 7, color: '#3977d4' },
@@ -73,7 +73,9 @@ describe('CytoscapeBranchGraphComponent', () => {
       position: { x: 1132, y: 262 },
     });
     expect(String(resetBranch?.classes)).toContain('branch-action-collapsed');
-    expect(actionMenuEdge).toMatchObject({ data: { source: 'branch:0:task:3', target: 'branch:0:actions' } });
+    expect(pointerEdge).toMatchObject({ data: { source: 'branch:0:task:3', target: 'branch:0:pointer' } });
+    expect(model.elements.find((element) => element.data.id === 'branch:0:task:1')?.position).toEqual({ x: 440, y: 220 });
+    expect(model.elements.find((element) => element.data.id === 'branch:0:task:3')?.position).toEqual({ x: 820, y: 220 });
 
     (component as unknown as { toggleBranchActions(featureId: number): void }).toggleBranchActions(7);
     const expandedModel = component.graphModel();
@@ -113,6 +115,29 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(String(resetAction?.classes)).toContain('branch-action-disabled');
   });
 
+  it('anchors reset branches to a rightmost pointer and keeps all task history before it', () => {
+    const component = new CytoscapeBranchGraphComponent();
+    const resetLane = {
+      ...lane(),
+      fork_commit: commit('feature', 'feat: index documents'),
+      feature: { ...lane().feature!, pointer_reset_task_id: 9 },
+      tasks: [task(9, 'DONE', null, true), task(10, 'TODO')],
+    };
+    component.map = map(resetLane);
+    component.lanes = [resetLane];
+
+    const elements = component.graphModel().elements;
+    expect(elements.find((element) => element.data.id === 'primary:base')?.position).toEqual({ x: 250, y: 72 });
+    expect(elements.find((element) => element.data.id === 'primary:feature')?.position).toEqual({ x: 440, y: 72 });
+    expect(elements.find((element) => element.data.id === 'fork-edge:0')).toMatchObject({
+      data: { source: 'primary:feature', target: 'branch:0:pointer' },
+    });
+    expect(elements.find((element) => element.data.id === 'branch:0:pointer')?.position).toEqual({ x: 820, y: 220 });
+    expect(elements.find((element) => element.data.id === 'branch:0:task:9')?.position).toEqual({ x: 440, y: 220 });
+    expect(elements.find((element) => element.data.id === 'branch:0:task:10')?.position).toEqual({ x: 630, y: 220 });
+    expect(String(elements.find((element) => element.data.id === 'branch:0:task:9')?.classes)).toContain('historical');
+  });
+
   it('keeps branch labels at the left viewport edge while preserving their vertical lane position', () => {
     const component = new CytoscapeBranchGraphComponent();
     const labelPositions = new Map<string, { x: number; y: number }>([
@@ -147,7 +172,7 @@ function map(feature: BranchLane): ProjectBranchMap {
     project: { id: 1, name: 'Project', repository_path: 'C:/repo', context: null, created_at: '', updated_at: '' },
     current_branch: 'main',
     primary_branch: 'main',
-    primary_commits: [commit('feature', 'feat: index documents'), commit('base', 'Base commit')],
+    primary_commits: [commit('base', 'Base commit'), commit('feature', 'feat: index documents')],
     branches: [feature],
   };
 }
@@ -162,7 +187,7 @@ function lane(): BranchLane {
     behind: 0,
     fork_commit: commit('base', 'Base commit'),
     feature: {
-      id: 7, project_id: 1, name: 'Search', branch_name: 'feature/search', base_branch: 'main',
+      id: 7, project_id: 1, name: 'Search', branch_name: 'feature/search', base_branch: 'main', pointer_reset_task_id: null,
       created_at: '2026-09-05T00:00:00.000Z', updated_at: '2026-09-05T00:00:00.000Z',
     },
     tasks: [
@@ -181,9 +206,11 @@ function task(
   id: number,
   status: BranchLane['tasks'][number]['status'],
   commitSummary: string | null = null,
+  isBeforePointerReset = false,
 ): BranchLane['tasks'][number] {
   return {
     id, title: `Task ${id}`, status, commit_summary: commitSummary,
+    is_before_pointer_reset: isBeforePointerReset,
     created_at: '2026-09-05T00:00:00.000Z', updated_at: '2026-09-05T00:00:00.000Z',
   };
 }

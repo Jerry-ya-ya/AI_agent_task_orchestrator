@@ -135,7 +135,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
 
   graphModel(): BranchGraphModel {
     const elements: cytoscape.ElementDefinition[] = [];
-    const primaryCommits = [...this.map.primary_commits].reverse();
+    const primaryCommits = this.map.primary_commits;
     const primaryNodeIds = primaryCommits.length === 0
       ? [this.primaryNodeId('start')]
       : primaryCommits.map((commit) => this.primaryNodeId(commit.sha));
@@ -174,76 +174,83 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       const forkX = FIRST_NODE_X + (forkIndex * COMMIT_GAP);
       const sourceId = primaryNodeIds[Math.min(forkIndex, primaryNodeIds.length - 1)]!;
       const labelId = `branch:${laneIndex}:label`;
-      const forkId = `branch:${laneIndex}:fork`;
+      const pointerId = `branch:${laneIndex}:pointer`;
+      const pointerX = Math.max(forkX, FIRST_NODE_X + ((lane.tasks.length + 1) * COMMIT_GAP));
 
       elements.push(this.node(labelId, 86, y, {
         label: lane.feature?.name ?? lane.name,
         subtitle: `${lane.name}\n${lane.exists ? (lane.is_current ? 'current' : 'local') : 'not created'}`,
         color,
       }, `branch-label${missingClass}${currentClass}`));
-      elements.push(this.node(forkId, forkX, y, {
-        label: 'fork',
+      elements.push(this.node(pointerId, pointerX, y, {
+        label: lane.feature === null ? 'HEAD' : 'HEAD +',
         subtitle: this.forkLabel(lane),
+        ...(lane.feature === null ? {} : { featureId: lane.feature.id }),
         color,
-      }, `fork${missingClass}${this.highlightStart(lane) ? ' checkpoint' : ''}`));
-      elements.push(this.edge(`fork-edge:${laneIndex}`, sourceId, forkId, color, `fork-edge${missingClass}`));
-      elements.push(this.edge(`label-edge:${laneIndex}`, labelId, forkId, color, `branch-edge${missingClass}`));
+      }, `branch-pointer${lane.feature === null ? '' : ' branch-actions'}${missingClass}`));
+      elements.push(this.edge(`fork-edge:${laneIndex}`, sourceId, pointerId, color, `fork-edge${missingClass}`));
 
-      let previousId = forkId;
+      let previousId: string | null = null;
       lane.tasks.forEach((task, taskIndex) => {
         const taskId = `branch:${laneIndex}:task:${task.id}`;
-        const checkpointClass = this.isCheckpoint(lane, task.id) ? ' checkpoint' : '';
-        elements.push(this.node(taskId, forkX + ((taskIndex + 1) * COMMIT_GAP), y, {
+        const checkpointClass = this.isCheckpoint(lane.tasks, task.id) ? ' checkpoint' : '';
+        const historicalClass = task.is_before_pointer_reset ? ' historical' : '';
+        elements.push(this.node(taskId, pointerX - ((lane.tasks.length - taskIndex) * COMMIT_GAP), y, {
           label: `#${task.id} ${task.title}`,
-          subtitle: this.statusLabel(task.status),
+          subtitle: task.is_before_pointer_reset
+            ? `${this.statusLabel(task.status)} · before pointer reset`
+            : this.statusLabel(task.status),
           taskId: task.id,
           color,
-        }, `task status-${task.status.toLowerCase()}${missingClass}${checkpointClass}`));
+        }, `task status-${task.status.toLowerCase()}${historicalClass}${missingClass}${checkpointClass}`));
+        if (previousId !== null) {
+          elements.push(this.edge(
+            `task-edge:${laneIndex}:${task.id}`,
+            previousId,
+            taskId,
+            color,
+            `branch-edge${task.is_before_pointer_reset ? ' historical' : ''}${missingClass}`,
+          ));
+        }
+        previousId = taskId;
+      });
+      elements.push(this.edge(
+        `label-edge:${laneIndex}`,
+        labelId,
+        lane.tasks.length > 0 ? `branch:${laneIndex}:task:${lane.tasks[0]!.id}` : pointerId,
+        color,
+        `branch-edge${missingClass}`,
+      ));
+      if (previousId !== null) {
         elements.push(this.edge(
-          `task-edge:${laneIndex}:${task.id}`,
+          `pointer-edge:${laneIndex}`,
           previousId,
-          taskId,
+          pointerId,
           color,
           `branch-edge${missingClass}`,
         ));
-        previousId = taskId;
-      });
+      }
 
       if (lane.feature !== null) {
         const featureId = lane.feature.id;
-        const actionX = forkX + ((lane.tasks.length + 1) * COMMIT_GAP);
-        const actionMenuId = `branch:${laneIndex}:actions`;
         const collapsedClass = this.expandedFeatureId === featureId ? '' : ' branch-action-collapsed';
-        elements.push(this.node(actionMenuId, actionX, y, {
-          label: '+',
-          subtitle: 'Branch actions',
-          featureId,
-          color,
-        }, `branch-actions${missingClass}`));
-        elements.push(this.edge(
-          `branch-actions-edge:${laneIndex}`,
-          previousId,
-          actionMenuId,
-          color,
-          `branch-edge${missingClass}`,
-        ));
 
         const addTaskId = `branch:${laneIndex}:action:add-task`;
-        elements.push(this.node(addTaskId, actionX + BRANCH_ACTION_GAP, y - BRANCH_ACTION_FAN_Y, {
+        elements.push(this.node(addTaskId, pointerX + BRANCH_ACTION_GAP, y - BRANCH_ACTION_FAN_Y, {
           label: '+ Task',
           subtitle: 'Create task',
           featureId,
           color,
         }, `branch-action-option branch-action-add branch-action-menu-item${collapsedClass}${missingClass}`));
         elements.push(this.edge(
-          `branch-action-edge:${laneIndex}:add-task`, actionMenuId, addTaskId, color,
+          `branch-action-edge:${laneIndex}:add-task`, pointerId, addTaskId, color,
           `branch-action-fan branch-action-menu-item${collapsedClass}${missingClass}`, { featureId },
         ));
 
         if (lane.exists) {
           const resetBlocked = this.laneHasProtectedPointerTasks(lane);
           const resetBranchId = `branch:${laneIndex}:action:reset-main`;
-          elements.push(this.node(resetBranchId, actionX + BRANCH_ACTION_GAP, y + BRANCH_ACTION_FAN_Y, {
+          elements.push(this.node(resetBranchId, pointerX + BRANCH_ACTION_GAP, y + BRANCH_ACTION_FAN_Y, {
             label: resetBlocked ? 'Review locked' : '↺ main',
             subtitle: resetBlocked ? 'Finish Review or pending push first' : 'Reset branch pointer',
             featureId,
@@ -251,7 +258,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
             color,
           }, `branch-action-option branch-action-reset branch-action-menu-item${resetBlocked ? ' branch-action-disabled' : ''}${collapsedClass}`));
           elements.push(this.edge(
-            `branch-action-edge:${laneIndex}:reset-main`, actionMenuId, resetBranchId, color,
+            `branch-action-edge:${laneIndex}:reset-main`, pointerId, resetBranchId, color,
             `branch-action-fan branch-action-menu-item${collapsedClass}`, { featureId },
           ));
         }
@@ -387,7 +394,8 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
           ? null
           : [lane.feature.id, lane.feature.name, lane.feature.branch_name, lane.feature.base_branch],
         tasks: lane.tasks.map((task) => [
-          task.id, task.title, task.status, task.commit_summary, task.created_at, task.updated_at,
+          task.id, task.title, task.status, task.commit_summary, task.is_before_pointer_reset,
+          task.created_at, task.updated_at,
         ]),
       })),
     });
@@ -409,12 +417,14 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
         'border-width': 2, 'text-valign': 'center', 'text-margin-y': 0, 'text-max-width': '126px',
       } },
       { selector: 'node.current', style: { 'border-width': 5 } },
-      { selector: 'node.fork', style: { width: 16, height: 16, 'font-size': 8, 'text-max-width': '135px' } },
       { selector: 'node.task', style: { width: 19, height: 19 } },
+      { selector: 'node.branch-pointer', style: {
+        shape: 'round-rectangle', width: 56, height: 28, 'background-color': '#ffffff',
+        'border-width': 3, 'font-size': 9, 'font-weight': 700, 'text-valign': 'center',
+        'text-margin-y': 0, 'text-max-width': '52px',
+      } },
       { selector: 'node.branch-actions', style: {
-        width: 30, height: 30, 'background-color': '#ffffff', 'border-width': 2,
-        'font-size': 22, 'font-weight': 500, 'text-valign': 'center', 'text-margin-y': 0,
-        'text-max-width': '90px',
+        'border-width': 3,
       } },
       { selector: 'node.branch-action-option', style: {
         shape: 'round-rectangle', width: 88, height: 30, 'background-color': '#ffffff',
@@ -433,6 +443,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       { selector: 'node.status-reviewing', style: { 'border-color': '#6f48b8', 'background-color': '#ece4fb' } },
       { selector: 'node.status-rejected', style: { 'border-color': '#8c6b6b', 'background-color': '#eee5e5' } },
       { selector: 'node.status-todo', style: { 'border-color': '#9ba5b0' } },
+      { selector: 'node.historical', style: { opacity: 0.66, 'background-color': '#eef1f4' } },
       { selector: 'node.checkpoint', style: { 'border-color': '#f0a52e', 'border-width': 5 } },
       { selector: 'node.missing', style: {
         'background-color': '#f2f3f4', 'border-color': '#9ba1a8', color: '#777f87', opacity: 0.52,
@@ -444,6 +455,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
         'curve-style': 'taxi', 'taxi-direction': 'downward', 'taxi-turn': '50%',
       } },
       { selector: 'edge.branch-action-fan', style: { width: 2, 'curve-style': 'bezier' } },
+      { selector: 'edge.historical', style: { opacity: 0.5, 'line-style': 'dashed' } },
       { selector: '.branch-action-collapsed', style: { display: 'none' } },
       { selector: 'edge.missing', style: { 'line-color': '#9ba1a8', opacity: 0.38 } },
       { selector: 'node:selected', style: { 'overlay-color': '#3977d4', 'overlay-opacity': 0.12, 'overlay-padding': 8 } },
@@ -494,13 +506,9 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       : []);
   }
 
-  private isCheckpoint(lane: BranchLane, taskId: number): boolean {
-    const nextIndex = lane.tasks.findIndex((task) => task.status === 'TODO');
-    return nextIndex > 0 && lane.tasks[nextIndex - 1]?.id === taskId;
-  }
-
-  private highlightStart(lane: BranchLane): boolean {
-    return lane.tasks[0]?.status === 'TODO';
+  private isCheckpoint(tasks: readonly BranchLane['tasks'][number][], taskId: number): boolean {
+    const nextIndex = tasks.findIndex((task) => task.status === 'TODO');
+    return nextIndex > 0 && tasks[nextIndex - 1]?.id === taskId;
   }
 
   private statusLabel(status: TaskStatus): string {

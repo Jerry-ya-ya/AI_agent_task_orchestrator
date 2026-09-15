@@ -105,6 +105,11 @@ describe('FeatureService', () => {
     const tasks = new TaskRepository(database, new TaskRunRepository(database));
     const project = projects.create({ name: 'Example', repository_path: '/example', context: '' });
     const feature = features.create({ project_id: project.id, name: 'Search' }, 'feature/search', 'main');
+    const historicalTask = tasks.create({
+      project_id: project.id, feature_id: feature.id, title: 'Historical commit', description: '', priority: 'MEDIUM',
+    });
+    database.connection.prepare('UPDATE tasks SET publish_commit_sha = ? WHERE id = ?')
+      .run('abc123', historicalTask.id);
     const resetFeatureBranchToMain = vi.fn(async () => undefined);
     const resetFeatureBranchesToMain = vi.fn(async () => undefined);
     const inspectBranches = vi.fn(async () => ({
@@ -117,7 +122,10 @@ describe('FeatureService', () => {
       { resetFeatureBranchToMain, resetFeatureBranchesToMain, inspectBranches } as unknown as GitService,
     );
 
-    await expect(service.resetBranchToMain(feature.id)).resolves.toEqual(feature);
+    await expect(service.resetBranchToMain(feature.id)).resolves.toMatchObject({
+      id: feature.id,
+      pointer_reset_task_id: historicalTask.id,
+    });
     expect(resetFeatureBranchToMain).toHaveBeenCalledWith('/example', 'feature/search');
     await expect(service.resetProjectBranchesToMain(project.id)).resolves.toEqual({ reset_count: 1 });
     expect(resetFeatureBranchesToMain).toHaveBeenCalledWith('/example', ['feature/search']);
@@ -133,5 +141,39 @@ describe('FeatureService', () => {
     expect(resetFeatureBranchToMain).not.toHaveBeenCalled();
     expect(resetFeatureBranchesToMain).not.toHaveBeenCalled();
     await expect(service.resetBranchToMain(999)).rejects.toThrow('Feature 999 was not found.');
+  });
+
+  it('infers the reset boundary for branches already pointing at the latest main commit', async () => {
+    const projects = new ProjectRepository(database);
+    const features = new FeatureRepository(database);
+    const tasks = new TaskRepository(database, new TaskRunRepository(database));
+    const project = projects.create({ name: 'Legacy reset', repository_path: '/legacy-reset', context: '' });
+    const feature = features.create({ project_id: project.id, name: 'Search' }, 'feature/search', 'main');
+    const historicalTask = tasks.create({
+      project_id: project.id, feature_id: feature.id, title: 'Old commit', description: '', priority: 'MEDIUM',
+    });
+    database.connection.prepare('UPDATE tasks SET publish_commit_sha = ? WHERE id = ?')
+      .run('old-feature-sha', historicalTask.id);
+    const mainCommit = {
+      sha: 'main-tip', shortSha: 'main-tip', summary: 'Latest main', committedAt: '2026-09-15T00:00:00.000Z',
+    };
+    const inspectBranches = vi.fn(async () => ({
+      currentBranch: 'main',
+      localBranches: ['main', feature.branch_name],
+      primaryBranch: 'main',
+      primaryCommits: [mainCommit],
+      branchRelations: {
+        [feature.branch_name]: { forkCommit: mainCommit, ahead: 0, behind: 0 },
+      },
+    }));
+    const service = new FeatureService(
+      features, projects, tasks, { inspectBranches } as unknown as GitService,
+    );
+
+    const [projectMap] = await service.branchMap();
+
+    expect(projectMap?.branches.find((branch) => branch.name === feature.branch_name)?.tasks[0])
+      .toMatchObject({ id: historicalTask.id, is_before_pointer_reset: true });
+    expect(features.findById(feature.id)?.pointer_reset_task_id).toBe(historicalTask.id);
   });
 });
