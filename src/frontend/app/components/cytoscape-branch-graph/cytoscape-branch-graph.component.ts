@@ -28,6 +28,7 @@ const INITIAL_ZOOM = 0.88;
 const INITIAL_PAN: cytoscape.Position = { x: 24, y: 30 };
 const ZOOM_SENSITIVITIES = [1, 2, 3] as const;
 const ZOOM_SENSITIVITY_STORAGE_PREFIX = 'agentboard.featureMap.zoomSensitivity.';
+const POINTER_RESET_BLOCKING_STATUSES: ReadonlySet<TaskStatus> = new Set(['IN_REVIEW', 'REVIEWING', 'PENDING_PUSH']);
 
 interface BranchGraphModel {
   elements: cytoscape.ElementDefinition[];
@@ -63,6 +64,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   @Output() taskOpened = new EventEmitter<number>();
   @Output() taskCreationRequested = new EventEmitter<number>();
   @Output() branchResetRequested = new EventEmitter<number>();
+  @Output() allBranchesResetRequested = new EventEmitter<number>();
   @ViewChild('graphHost', { static: true }) private graphHost!: ElementRef<HTMLDivElement>;
 
   graphReady = false;
@@ -104,6 +106,14 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     this.graph.stop();
     this.graph.zoom(viewport.zoom);
     this.graph.pan(viewport.pan);
+  }
+
+  hasResettableBranches(): boolean {
+    return this.lanes.some((lane) => lane.exists && lane.feature !== null);
+  }
+
+  hasProtectedPointerTasks(): boolean {
+    return this.lanes.some((lane) => this.laneHasProtectedPointerTasks(lane));
   }
 
   setZoomSensitivity(value: string): void {
@@ -231,13 +241,15 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
         ));
 
         if (lane.exists) {
+          const resetBlocked = this.laneHasProtectedPointerTasks(lane);
           const resetBranchId = `branch:${laneIndex}:action:reset-main`;
           elements.push(this.node(resetBranchId, actionX + BRANCH_ACTION_GAP, y + BRANCH_ACTION_FAN_Y, {
-            label: '↺ main',
-            subtitle: 'Reset branch pointer',
+            label: resetBlocked ? 'Review locked' : '↺ main',
+            subtitle: resetBlocked ? 'Finish Review or pending push first' : 'Reset branch pointer',
             featureId,
+            resetBlocked: resetBlocked ? 1 : 0,
             color,
-          }, `branch-action-option branch-action-reset branch-action-menu-item${collapsedClass}`));
+          }, `branch-action-option branch-action-reset branch-action-menu-item${resetBlocked ? ' branch-action-disabled' : ''}${collapsedClass}`));
           elements.push(this.edge(
             `branch-action-edge:${laneIndex}:reset-main`, actionMenuId, resetBranchId, color,
             `branch-action-fan branch-action-menu-item${collapsedClass}`, { featureId },
@@ -305,7 +317,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     });
     this.graph.on('tap', 'node.branch-action-reset', (event) => {
       const featureId = Number(event.target.data('featureId'));
-      if (!Number.isInteger(featureId)) return;
+      if (!Number.isInteger(featureId) || Number(event.target.data('resetBlocked')) === 1) return;
       this.toggleBranchActions(featureId, false);
       this.branchResetRequested.emit(featureId);
     });
@@ -412,6 +424,9 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       { selector: 'node.branch-action-reset', style: {
         'border-color': '#c46d35', color: '#92502a',
       } },
+      { selector: 'node.branch-action-disabled', style: {
+        'border-color': '#aeb5bd', 'background-color': '#f1f3f5', color: '#777f87', opacity: 0.72,
+      } },
       { selector: 'node.status-done', style: { 'border-color': '#29966a', 'background-color': '#dff4e9' } },
       { selector: 'node.status-failed', style: { 'border-color': '#c84545', 'background-color': '#fae2e2' } },
       { selector: 'node.status-cherry_pick_conflict', style: { 'border-color': '#d06b28', 'background-color': '#fff0e4' } },
@@ -490,6 +505,10 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
 
   private statusLabel(status: TaskStatus): string {
     return status.replaceAll('_', ' ').toLowerCase();
+  }
+
+  private laneHasProtectedPointerTasks(lane: BranchLane): boolean {
+    return lane.tasks.some((task) => POINTER_RESET_BLOCKING_STATUSES.has(task.status));
   }
 
   private firstLine(value: string): string {

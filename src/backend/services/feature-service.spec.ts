@@ -106,15 +106,32 @@ describe('FeatureService', () => {
     const project = projects.create({ name: 'Example', repository_path: '/example', context: '' });
     const feature = features.create({ project_id: project.id, name: 'Search' }, 'feature/search', 'main');
     const resetFeatureBranchToMain = vi.fn(async () => undefined);
+    const resetFeatureBranchesToMain = vi.fn(async () => undefined);
+    const inspectBranches = vi.fn(async () => ({
+      currentBranch: 'main', localBranches: ['main', 'feature/search'],
+    }));
     const service = new FeatureService(
       features,
       projects,
       tasks,
-      { resetFeatureBranchToMain } as unknown as GitService,
+      { resetFeatureBranchToMain, resetFeatureBranchesToMain, inspectBranches } as unknown as GitService,
     );
 
     await expect(service.resetBranchToMain(feature.id)).resolves.toEqual(feature);
     expect(resetFeatureBranchToMain).toHaveBeenCalledWith('/example', 'feature/search');
+    await expect(service.resetProjectBranchesToMain(project.id)).resolves.toEqual({ reset_count: 1 });
+    expect(resetFeatureBranchesToMain).toHaveBeenCalledWith('/example', ['feature/search']);
+
+    const reviewTask = tasks.create({
+      project_id: project.id, feature_id: feature.id, title: 'Awaiting review', description: '', priority: 'MEDIUM',
+    });
+    expect(tasks.transition(reviewTask.id, 'TODO', 'IN_REVIEW')).not.toBeNull();
+    resetFeatureBranchToMain.mockClear();
+    resetFeatureBranchesToMain.mockClear();
+    await expect(service.resetBranchToMain(feature.id)).rejects.toThrow(`#${reviewTask.id} (IN_REVIEW)`);
+    await expect(service.resetProjectBranchesToMain(project.id)).rejects.toThrow(`#${reviewTask.id} (IN_REVIEW)`);
+    expect(resetFeatureBranchToMain).not.toHaveBeenCalled();
+    expect(resetFeatureBranchesToMain).not.toHaveBeenCalled();
     await expect(service.resetBranchToMain(999)).rejects.toThrow('Feature 999 was not found.');
   });
 });

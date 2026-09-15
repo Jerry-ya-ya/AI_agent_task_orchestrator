@@ -78,6 +78,18 @@
   color: #2f65ad;
 }
 
+.cytoscape-branch-graph__reset--danger {
+  border-color: #d9a4a4;
+  background: #fff7f7;
+  color: #b4232c;
+}
+
+.cytoscape-branch-graph__reset--danger:hover:not(:disabled) {
+  border-color: #b4232c;
+  background: #fde8e8;
+  color: #8f1820;
+}
+
 .cytoscape-branch-graph__reset:focus-visible {
   outline: 2px solid #3977d4;
   outline-offset: 2px;

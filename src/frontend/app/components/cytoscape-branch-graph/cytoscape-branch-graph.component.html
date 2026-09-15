@@ -17,6 +17,14 @@
       title="Reset zoom and position"
       aria-label="Reset branch graph view"
     ><span aria-hidden="true">↺</span> Reset view</button>
+    <button
+      type="button"
+      class="cytoscape-branch-graph__reset cytoscape-branch-graph__reset--danger"
+      [disabled]="!graphReady || !hasResettableBranches() || hasProtectedPointerTasks()"
+      (click)="allBranchesResetRequested.emit(map.project.id)"
+      [title]="hasProtectedPointerTasks() ? 'Finish In review, Reviewing, and Pending push tasks before resetting branch pointers' : 'Reset every local Feature branch pointer to latest main'"
+      aria-label="Reset all Feature branch pointers to latest main"
+    ><span aria-hidden="true">↺</span> Reset all to main</button>
   </div>
 </div>
 <div

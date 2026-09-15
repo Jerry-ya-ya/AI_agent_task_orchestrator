@@ -154,6 +154,10 @@ describe('backend API', () => {
       encoding: 'utf8', windowsHide: true,
     }).trim();
     expect(featureCommit).toBe(mainCommit);
+
+    await request(app).post(`/projects/${project.body.id}/features/reset-to-main`).send({}).expect(200, {
+      reset_count: 1,
+    });
   });
 
   it('pauses and resumes Worker task claiming through explicit endpoints', async () => {

@@ -149,6 +149,30 @@ describe('GitService', () => {
     expect(await gitExitCode(runner, repository, ['cat-file', '-e', `${task.branch_name}:feature-only.txt`])).toBe(128);
   });
 
+  it('resets all requested Feature branch pointers together after validating every target', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const service = new GitService(runner);
+    const branches = ['feature/first', 'feature/second'];
+    for (const [index, branchName] of branches.entries()) {
+      const task = { ...exampleTask(), id: 201 + index, feature_id: index + 1, branch_name: branchName, base_branch: 'main' };
+      const prepared = await service.prepareBranch(task, repository);
+      await writeFile(path.join(repository, `feature-${index}.txt`), `${branchName}\n`);
+      await service.completeBranch(prepared, task.id, `feat: advance ${branchName}.`);
+    }
+    const firstCommit = (await git(runner, repository, ['rev-parse', branches[0]!])).trim();
+
+    await expect(service.resetFeatureBranchesToMain(repository, [branches[0]!, 'feature/missing']))
+      .rejects.toThrow('Feature branch does not exist locally: feature/missing');
+    expect((await git(runner, repository, ['rev-parse', branches[0]!])).trim()).toBe(firstCommit);
+
+    await service.resetFeatureBranchesToMain(repository, branches);
+
+    const mainCommit = (await git(runner, repository, ['rev-parse', 'main'])).trim();
+    for (const branchName of branches) {
+      expect((await git(runner, repository, ['rev-parse', branchName])).trim()).toBe(mainCommit);
+    }
+  });
+
   it('publishes an approved task branch to its base branch and origin', async () => {
     const { repository, runner } = await temporaryRepository();
     const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-remote-'));

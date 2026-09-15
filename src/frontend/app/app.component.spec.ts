@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ApiService } from './api.service';
 import { AppComponent } from './app.component';
-import type { AgentUsage, Feature, Project, Task, WorkerStatus } from './models';
+import type { AgentUsage, Feature, Project, ProjectBranchMap, Task, WorkerStatus } from './models';
 import { completedTaskHistory } from './task-view.utils';
 
 afterEach(() => {
@@ -87,6 +87,47 @@ describe('AppComponent initialization', () => {
     expect(resetFeatureBranchToMain).toHaveBeenCalledWith(feature.id);
     expect(api.getBranchMap).toHaveBeenCalledOnce();
     expect(markForCheck).toHaveBeenCalled();
+  });
+
+  it('blocks pointer resets during Review and resets all eligible Project branches after confirmation', async () => {
+    const project = { ...exampleProject(), id: 3, name: 'Search project' };
+    const feature: Feature = {
+      id: 8, project_id: project.id, name: 'Search', branch_name: 'feature/search', base_branch: 'main',
+      created_at: '', updated_at: '',
+    };
+    const resetFeatureBranchToMain = vi.fn(() => of(feature));
+    const resetProjectBranchesToMain = vi.fn(() => of({ reset_count: 1 }));
+    const api = {
+      baseUrl: 'http://127.0.0.1:4317', resetFeatureBranchToMain, resetProjectBranchesToMain,
+      getBranchMap: vi.fn(() => of([])),
+    } as unknown as ApiService;
+    const markForCheck = vi.fn();
+    const component = new AppComponent(api, { markForCheck } as unknown as ChangeDetectorRef);
+    component.projects = [project];
+    component.features = [feature];
+    component.branchMaps = [{
+      project, current_branch: 'main', primary_branch: 'main', primary_commits: [],
+      branches: [{
+        name: feature.branch_name, exists: true, is_current: false, is_primary: false,
+        ahead: 1, behind: 0, fork_commit: null, feature, tasks: [],
+      }],
+    } satisfies ProjectBranchMap];
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal('window', { confirm });
+    component.tasks = [exampleTask({ id: 17, project_id: project.id, feature_id: feature.id, status: 'REVIEWING' })];
+
+    await component.resetFeatureBranchToMain(feature.id);
+    await component.resetAllFeatureBranchesToMain(project.id);
+
+    expect(resetFeatureBranchToMain).not.toHaveBeenCalled();
+    expect(resetProjectBranchesToMain).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(component.apiError).toContain('#17 (REVIEWING)');
+
+    component.tasks = [];
+    await component.resetAllFeatureBranchesToMain(project.id);
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Reset all 1 local Feature branch pointers'));
+    expect(resetProjectBranchesToMain).toHaveBeenCalledWith(project.id);
   });
 
   it('minimizes the Electron window from the title-bar control', () => {

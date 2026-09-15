@@ -98,6 +98,21 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(laneElements.every((element) => String(element.classes).includes('missing'))).toBe(true);
   });
 
+  it('locks pointer reset actions while a branch has protected Review work', () => {
+    const component = new CytoscapeBranchGraphComponent();
+    const protectedLane = { ...lane(), tasks: [task(8, 'PENDING_PUSH')] };
+    component.map = map(protectedLane);
+    component.lanes = [protectedLane];
+
+    expect(component.hasProtectedPointerTasks()).toBe(true);
+    expect(component.hasResettableBranches()).toBe(true);
+    const resetAction = component.graphModel().elements.find((element) =>
+      element.data.id === 'branch:0:action:reset-main',
+    );
+    expect(resetAction).toMatchObject({ data: { label: 'Review locked', resetBlocked: 1 } });
+    expect(String(resetAction?.classes)).toContain('branch-action-disabled');
+  });
+
   it('keeps branch labels at the left viewport edge while preserving their vertical lane position', () => {
     const component = new CytoscapeBranchGraphComponent();
     const labelPositions = new Map<string, { x: number; y: number }>([
@@ -152,7 +167,7 @@ function lane(): BranchLane {
     },
     tasks: [
       task(1, 'DONE', 'feat: index documents'),
-      task(2, 'IN_REVIEW'),
+      task(2, 'DONE'),
       task(3, 'TODO'),
     ],
   };

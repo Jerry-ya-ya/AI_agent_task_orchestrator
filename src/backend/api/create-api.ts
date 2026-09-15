@@ -113,6 +113,11 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     response.json(await dependencies.featureService.resetBranchToMain(idSchema.parse(request.params.id)));
   });
 
+  app.post('/projects/:id/features/reset-to-main', async (request, response) => {
+    if (dependencies.featureService === undefined) throw new AppError('Feature service is unavailable.', 503, 'UNAVAILABLE');
+    response.json(await dependencies.featureService.resetProjectBranchesToMain(idSchema.parse(request.params.id)));
+  });
+
   app.get('/branches', async (_request, response) => {
     response.json(await dependencies.featureService?.branchMap() ?? []);
   });

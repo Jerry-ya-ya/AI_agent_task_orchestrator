@@ -655,32 +655,51 @@ export class GitService {
 
   /** Moves a configured local Feature branch to the current main commit without running arbitrary input. */
   public async resetFeatureBranchToMain(repositoryPath: string, featureBranch: string): Promise<void> {
+    await this.resetFeatureBranchesToMain(repositoryPath, [featureBranch]);
+  }
+
+  /** Atomically moves configured local Feature branch refs to the current main commit. */
+  public async resetFeatureBranchesToMain(repositoryPath: string, featureBranches: readonly string[]): Promise<void> {
     const repositoryRoot = await this.validateRepository(repositoryPath);
     await this.requireCleanCheckout(repositoryRoot);
     const current = await this.currentBranch(repositoryRoot);
 
     if (current !== 'main') {
       throw new ConflictError(
-        `Repository must be on main before resetting ${featureBranch}; it is on ${current}.`,
+        `Repository must be on main before resetting Feature branches; it is on ${current}.`,
       );
     }
-    if (!featureBranch.startsWith('feature/')) {
-      throw new ConflictError(`Feature branch is not managed by the orchestrator: ${featureBranch}`);
+    const uniqueBranches = [...new Set(featureBranches)];
+    if (uniqueBranches.length === 0) return;
+    const invalidBranch = uniqueBranches.find((branch) =>
+      !branch.startsWith('feature/') || branch.includes('\n') || branch.includes('\r'),
+    );
+    if (invalidBranch !== undefined) {
+      throw new ConflictError(`Feature branch is not managed by the orchestrator: ${invalidBranch}`);
     }
-    if (!await this.localBranchExists(repositoryRoot, featureBranch)) {
-      throw new ConflictError(`Feature branch does not exist locally: ${featureBranch}`);
+    for (const branch of uniqueBranches) {
+      if (!await this.localBranchExists(repositoryRoot, branch)) {
+        throw new ConflictError(`Feature branch does not exist locally: ${branch}`);
+      }
     }
 
     const mainCommit = await this.currentCommit(repositoryRoot);
     const reset = await this.runGit(
       repositoryRoot,
-      ['branch', '--force', featureBranch, mainCommit],
+      ['update-ref', '--stdin'],
       undefined,
       true,
+      [
+        'start',
+        ...uniqueBranches.map((branch) => `update refs/heads/${branch} ${mainCommit}`),
+        'prepare',
+        'commit',
+        '',
+      ].join('\n'),
     );
     if (reset.exitCode !== 0) {
       throw new GitCommandError(
-        `Unable to reset Feature branch ${featureBranch} to main: ${formatFailure(reset)}`,
+        `Unable to reset Feature branches to main: ${formatFailure(reset)}`,
         reset,
       );
     }
@@ -807,12 +826,14 @@ export class GitService {
     cwd: string,
     args: readonly string[],
     signal: AbortSignal | undefined,
-    allowFailure: boolean
+    allowFailure: boolean,
+    stdin?: string,
   ): Promise<ProcessResult> {
     const result = await this.processRunner.run({
       command: 'git',
       args,
       cwd,
+      stdin,
       signal,
       timeoutMs: GIT_TIMEOUT_MS,
       maxOutputBytes: GIT_OUTPUT_LIMIT_BYTES,

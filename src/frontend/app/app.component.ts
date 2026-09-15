@@ -406,6 +406,12 @@ export class AppComponent implements OnInit, OnDestroy {
   async resetFeatureBranchToMain(featureId: number): Promise<void> {
     const feature = this.features.find((item) => item.id === featureId);
     if (feature === undefined || this.saving) return;
+    const blockers = this.pointerResetBlockers(feature.project_id, feature.id);
+    if (blockers.length > 0) {
+      this.setError(this.pointerResetBlockedMessage(blockers));
+      this.changeDetector.markForCheck();
+      return;
+    }
     const confirmed = window.confirm(
       `Reset ${feature.branch_name} to the latest local main commit? ` +
       'This moves the branch pointer and removes its current commits from the branch. Unpublished work may become unreachable.',
@@ -417,6 +423,39 @@ export class AppComponent implements OnInit, OnDestroy {
     try {
       await firstValueFrom(this.api.resetFeatureBranchToMain(feature.id));
       this.showNotice(`${feature.branch_name} now points to the latest local main commit.`);
+      await this.refreshBranchMap();
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+      await this.refreshBranchMap();
+    } finally {
+      this.saving = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  async resetAllFeatureBranchesToMain(projectId: number): Promise<void> {
+    const project = this.projects.find((item) => item.id === projectId);
+    if (project === undefined || this.saving) return;
+    const blockers = this.pointerResetBlockers(projectId);
+    if (blockers.length > 0) {
+      this.setError(this.pointerResetBlockedMessage(blockers));
+      this.changeDetector.markForCheck();
+      return;
+    }
+    const branchCount = this.branchMaps.find((map) => map.project.id === projectId)?.branches
+      .filter((lane) => lane.exists && lane.feature !== null).length ?? 0;
+    if (branchCount === 0) return;
+    const confirmed = window.confirm(
+      `Reset all ${branchCount} local Feature branch pointers in “${project.name}” to the latest local main commit? ` +
+      'This removes their current commits from those branches. Unpublished work may become unreachable.',
+    );
+    if (!confirmed) return;
+
+    this.saving = true;
+    this.clearError();
+    try {
+      const result = await firstValueFrom(this.api.resetProjectBranchesToMain(projectId));
+      this.showNotice(`${result.reset_count} Feature branch pointer${result.reset_count === 1 ? '' : 's'} reset to latest main.`);
       await this.refreshBranchMap();
     } catch (error: unknown) {
       this.setError(this.errorMessage(error));
@@ -863,6 +902,18 @@ export class AppComponent implements OnInit, OnDestroy {
     } catch {
       return null;
     }
+  }
+
+  private pointerResetBlockers(projectId: number, featureId?: number): Task[] {
+    return this.tasks.filter((task) =>
+      task.project_id === projectId && (featureId === undefined || task.feature_id === featureId)
+      && ['IN_REVIEW', 'REVIEWING', 'PENDING_PUSH'].includes(task.status),
+    );
+  }
+
+  private pointerResetBlockedMessage(tasks: readonly Task[]): string {
+    const details = tasks.map((task) => `#${task.id} (${task.status})`).join(', ');
+    return `Branch pointers cannot be reset while Review or pending-push tasks exist: ${details}.`;
   }
 
   private storeWorkerDispatchPreference(paused: boolean): void {

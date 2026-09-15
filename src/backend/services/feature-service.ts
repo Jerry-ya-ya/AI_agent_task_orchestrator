@@ -7,6 +7,8 @@ import { ProjectRepository } from '../database/project-repository.js';
 import { TaskRepository } from '../database/task-repository.js';
 import { GitService, slugifyTaskTitle } from './git-service.js';
 
+const POINTER_RESET_BLOCKING_STATUSES = new Set(['IN_REVIEW', 'REVIEWING', 'PENDING_PUSH']);
+
 export class FeatureService {
   public constructor(
     private readonly features: FeatureRepository,
@@ -63,8 +65,24 @@ export class FeatureService {
     if (feature === null) throw new NotFoundError(`Feature ${featureId} was not found.`);
     const project = this.projects.findById(feature.project_id);
     if (project === null) throw new NotFoundError(`Project ${feature.project_id} was not found.`);
+    this.assertBranchesCanReset([feature]);
     await this.git.resetFeatureBranchToMain(project.repository_path, feature.branch_name);
     return feature;
+  }
+
+  public async resetProjectBranchesToMain(projectId: number): Promise<{ reset_count: number }> {
+    const project = this.projects.findById(projectId);
+    if (project === null) throw new NotFoundError(`Project ${projectId} was not found.`);
+    const features = this.features.list(projectId);
+    const snapshot = await this.git.inspectBranches(project.repository_path);
+    const localBranches = new Set(snapshot.localBranches);
+    const resettableFeatures = features.filter((feature) => localBranches.has(feature.branch_name));
+    this.assertBranchesCanReset(resettableFeatures);
+    await this.git.resetFeatureBranchesToMain(
+      project.repository_path,
+      resettableFeatures.map((feature) => feature.branch_name),
+    );
+    return { reset_count: resettableFeatures.length };
   }
 
   public async branchMap(): Promise<ProjectBranchMap[]> {
@@ -124,6 +142,19 @@ export class FeatureService {
         branches,
       };
     }));
+  }
+
+  private assertBranchesCanReset(features: readonly Feature[]): void {
+    const featureIds = new Set(features.map((feature) => feature.id));
+    const blockers = this.tasks.list().filter((task) =>
+      task.feature_id !== null && task.feature_id !== undefined && featureIds.has(task.feature_id)
+      && POINTER_RESET_BLOCKING_STATUSES.has(task.status),
+    );
+    if (blockers.length === 0) return;
+    const details = blockers.map((task) => `#${task.id} (${task.status})`).join(', ');
+    throw new ConflictError(
+      `Feature branch pointers cannot be reset while Review or pending-push tasks exist: ${details}.`,
+    );
   }
 }
 

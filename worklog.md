@@ -129,3 +129,5 @@
 ## 2026/09/15
 
 - Add fan-out Feature branch actions for task creation and safely resetting local branch pointers to main.
+
+- Protect single and bulk Feature pointer resets from review-state tasks and add an atomic red reset-all control.
