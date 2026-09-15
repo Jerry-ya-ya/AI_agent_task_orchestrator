@@ -137,3 +137,5 @@
 - Detach dragged navigation pages into secure Electron windows after crossing the sidebar threshold.
 
 - Add confirmed hierarchical Feature branch deletion controls that remove local Git refs or Feature records while preserving task history.
+
+- Enable confirmed Git deletion for unconfigured legacy agent and Feature branches from their HEAD nodes.

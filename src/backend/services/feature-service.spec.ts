@@ -179,6 +179,34 @@ describe('FeatureService', () => {
     expect(runs.findById(run.id)).toMatchObject({ id: run.id, task_id: task.id });
   });
 
+  it('deletes an inspected managed legacy branch only when it has no Feature configuration', async () => {
+    const projects = new ProjectRepository(database);
+    const features = new FeatureRepository(database);
+    const tasks = new TaskRepository(database, new TaskRunRepository(database));
+    const project = projects.create({ name: 'Legacy', repository_path: '/legacy', context: '' });
+    features.create({ project_id: project.id, name: 'Configured' }, 'feature/configured', 'main');
+    const inspectBranches = vi.fn(async () => ({
+      currentBranch: 'main',
+      primaryBranch: 'main',
+      localBranches: ['main', 'agent/legacy', 'feature/configured'],
+    }));
+    const removeManagedBranch = vi.fn(async () => true);
+    const service = new FeatureService(
+      features, projects, tasks, { inspectBranches, removeManagedBranch } as unknown as GitService,
+    );
+
+    await expect(service.deleteUnconfiguredGitBranch(project.id, 'agent/legacy')).resolves.toEqual({
+      git_branch_deleted: true,
+    });
+    expect(removeManagedBranch).toHaveBeenCalledWith('/legacy', 'agent/legacy');
+    await expect(service.deleteUnconfiguredGitBranch(project.id, 'feature/configured')).rejects.toThrow(
+      'must use Feature deletion',
+    );
+    await expect(service.deleteUnconfiguredGitBranch(project.id, 'agent/missing')).rejects.toThrow(
+      'was not found',
+    );
+  });
+
   it('infers the reset boundary for branches already pointing at the latest main commit', async () => {
     const projects = new ProjectRepository(database);
     const features = new FeatureRepository(database);

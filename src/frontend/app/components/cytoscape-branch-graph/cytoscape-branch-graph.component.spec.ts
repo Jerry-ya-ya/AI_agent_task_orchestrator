@@ -118,6 +118,36 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(laneElements.every((element) => String(element.classes).includes('missing'))).toBe(true);
   });
 
+  it('adds a nested Git deletion action to managed legacy branches without a Feature record', () => {
+    const component = new CytoscapeBranchGraphComponent();
+    const legacy = { ...lane(), name: 'agent/legacy', feature: null, tasks: [] };
+    component.map = map(legacy);
+    component.lanes = [legacy];
+
+    const collapsed = component.graphModel().elements;
+    expect(collapsed.find((element) => element.data.id === 'branch:0:pointer')).toMatchObject({
+      data: { label: 'HEAD +', legacyBranchName: 'agent/legacy', projectId: 1 },
+      classes: 'branch-pointer branch-actions',
+    });
+    expect(String(collapsed.find((element) => element.data.id === 'branch:0:action:delete-legacy')?.classes))
+      .toContain('branch-action-collapsed');
+
+    (component as unknown as { toggleLegacyBranchActions(branchName: string): void })
+      .toggleLegacyBranchActions('agent/legacy');
+    let expanded = component.graphModel().elements;
+    expect(String(expanded.find((element) => element.data.id === 'branch:0:action:delete-legacy')?.classes))
+      .not.toContain('branch-action-collapsed');
+    expect(String(expanded.find((element) => element.data.id === 'branch:0:action:delete-legacy-git')?.classes))
+      .toContain('branch-action-collapsed');
+
+    (component as unknown as { toggleLegacyDeleteActions(branchName: string): void })
+      .toggleLegacyDeleteActions('agent/legacy');
+    expanded = component.graphModel().elements;
+    expect(String(expanded.find((element) => element.data.id === 'branch:0:action:delete-legacy-git')?.classes))
+      .not.toContain('branch-action-collapsed');
+    expect(expanded.some((element) => String(element.data.id).includes('delete-database'))).toBe(false);
+  });
+
   it('locks pointer reset actions while a branch has protected Review work', () => {
     const component = new CytoscapeBranchGraphComponent();
     const protectedLane = { ...lane(), tasks: [task(8, 'PENDING_PUSH')] };

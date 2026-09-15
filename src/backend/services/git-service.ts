@@ -710,7 +710,15 @@ export class GitService {
     if (!featureBranch.startsWith('feature/') || featureBranch.includes('\n') || featureBranch.includes('\r')) {
       throw new ConflictError(`Feature branch is not managed by the orchestrator: ${featureBranch}`);
     }
-    return this.removeTaskBranch(repositoryPath, featureBranch, 'main', true);
+    return this.removeManagedBranch(repositoryPath, featureBranch);
+  }
+
+  /** Force-removes one local agent/Feature branch selected from the inspected branch map. */
+  public async removeManagedBranch(repositoryPath: string, branchName: string): Promise<boolean> {
+    if (!MANAGED_BRANCH_PATTERN.test(branchName) || branchName.includes('\n') || branchName.includes('\r')) {
+      throw new ConflictError(`Branch is not managed by the orchestrator: ${branchName}`);
+    }
+    return this.removeTaskBranch(repositoryPath, branchName, 'main', true);
   }
 
   /** Removes a task branch after merge verification, or force-removes explicitly rejected work. */

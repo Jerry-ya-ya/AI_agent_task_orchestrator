@@ -183,6 +183,15 @@ describe('backend API', () => {
     const project = await request(app).post('/projects').send({
       name: 'Delete project', repository_path: repositoryPath,
     }).expect(201);
+    execFileSync('git', ['-C', repositoryPath, 'branch', 'agent/legacy', 'main'], {
+      windowsHide: true, stdio: 'pipe',
+    });
+    await request(app).delete(`/projects/${project.body.id}/unconfigured-branches`).send({
+      branch_name: 'agent/legacy',
+    }).expect(200, { git_branch_deleted: true });
+    expect(() => execFileSync('git', [
+      '-C', repositoryPath, 'show-ref', '--verify', 'refs/heads/agent/legacy',
+    ], { windowsHide: true, stdio: 'pipe' })).toThrow();
     const feature = await request(app).post('/features').send({
       project_id: project.body.id, name: 'Disposable Feature',
     }).expect(201);

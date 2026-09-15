@@ -542,6 +542,31 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  async deleteLegacyGitBranch(request: { projectId: number; branchName: string }): Promise<void> {
+    const project = this.projects.find((item) => item.id === request.projectId);
+    if (project === undefined || this.saving) return;
+    const confirmed = window.confirm(
+      `Delete the legacy local Git branch ${request.branchName} from “${project.name}”?\n\n` +
+      'This branch has no Taskboard Feature record. Its unmerged commits may become unreachable. ' +
+      'No remote branch will be deleted.',
+    );
+    if (!confirmed) return;
+
+    this.saving = true;
+    this.clearError();
+    try {
+      await firstValueFrom(this.api.deleteUnconfiguredGitBranch(request.projectId, request.branchName));
+      this.showNotice(`${request.branchName} was deleted from the local Git repository.`);
+      await this.refreshBranchMap();
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+      await this.refreshBranchMap();
+    } finally {
+      this.saving = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
   async saveTask(): Promise<void> {
     if (this.taskDraft.project_id === null || this.taskDraft.feature_id === null || this.saving) return;
 

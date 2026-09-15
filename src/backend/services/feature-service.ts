@@ -109,6 +109,24 @@ export class FeatureService {
     };
   }
 
+  public async deleteUnconfiguredGitBranch(
+    projectId: number,
+    branchName: string,
+  ): Promise<{ git_branch_deleted: boolean }> {
+    const project = this.projects.findById(projectId);
+    if (project === null) throw new NotFoundError(`Project ${projectId} was not found.`);
+    if (this.features.list(projectId).some((feature) => feature.branch_name === branchName)) {
+      throw new ConflictError(`Branch ${branchName} is configured as a Feature and must use Feature deletion.`);
+    }
+    const snapshot = await this.git.inspectBranches(project.repository_path);
+    const primaryBranch = snapshot.primaryBranch ?? 'main';
+    if (branchName === primaryBranch || !snapshot.localBranches.includes(branchName)) {
+      throw new NotFoundError(`Local branch ${branchName} was not found.`);
+    }
+    const gitBranchDeleted = await this.git.removeManagedBranch(project.repository_path, branchName);
+    return { git_branch_deleted: gitBranchDeleted };
+  }
+
   public async branchMap(): Promise<ProjectBranchMap[]> {
     const allTasks = this.tasks.list();
     const allFeatures = this.features.list();

@@ -111,6 +111,13 @@ export class ApiService {
     }>(`${this.baseUrl}/features/${featureId}`);
   }
 
+  deleteUnconfiguredGitBranch(projectId: number, branchName: string): Observable<{ git_branch_deleted: boolean }> {
+    return this.http.delete<{ git_branch_deleted: boolean }>(
+      `${this.baseUrl}/projects/${projectId}/unconfigured-branches`,
+      { body: { branch_name: branchName } },
+    );
+  }
+
   resetProjectBranchesToMain(projectId: number): Observable<{ reset_count: number }> {
     return this.http.post<{ reset_count: number }>(`${this.baseUrl}/projects/${projectId}/features/reset-to-main`, {});
   }

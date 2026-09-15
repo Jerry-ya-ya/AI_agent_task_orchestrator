@@ -188,6 +188,11 @@ describe('GitService', () => {
     await expect(service.removeFeatureBranch(repository, 'main')).rejects.toThrow(
       'Feature branch is not managed by the orchestrator',
     );
+    await git(runner, repository, ['branch', 'agent/legacy', 'main']);
+    await expect(service.removeManagedBranch(repository, 'agent/legacy')).resolves.toBe(true);
+    await expect(service.removeManagedBranch(repository, 'user/personal')).rejects.toThrow(
+      'Branch is not managed by the orchestrator',
+    );
   });
 
   it('publishes an approved task branch to its base branch and origin', async () => {

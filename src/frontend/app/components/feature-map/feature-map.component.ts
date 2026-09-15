@@ -38,6 +38,7 @@ export class FeatureMapComponent {
   @Output() resetAllBranches = new EventEmitter<number>();
   @Output() deleteGitBranch = new EventEmitter<number>();
   @Output() deleteDatabaseBranch = new EventEmitter<number>();
+  @Output() deleteLegacyGitBranch = new EventEmitter<{ projectId: number; branchName: string }>();
   @Output() branchOrderChanged = new EventEmitter<{ projectId: number; branchNames: string[] }>();
 
   branchColor(index: number): string {

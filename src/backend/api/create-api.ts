@@ -46,6 +46,9 @@ const featureInput = z.object({
 const branchOrderInput = z.object({
   branch_names: z.array(z.string().min(1).max(255)).max(500)
 }).strict();
+const legacyBranchDeleteInput = z.object({
+  branch_name: z.string().min(1).max(255),
+}).strict();
 const reviewRetryInput = z.object({
   prompt: z.string().min(1).max(100_000)
 }).strict();
@@ -121,6 +124,15 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   app.delete('/features/:id', async (request, response) => {
     if (dependencies.featureService === undefined) throw new AppError('Feature service is unavailable.', 503, 'UNAVAILABLE');
     response.json(await dependencies.featureService.deleteFeature(idSchema.parse(request.params.id)));
+  });
+
+  app.delete('/projects/:id/unconfigured-branches', async (request, response) => {
+    if (dependencies.featureService === undefined) throw new AppError('Feature service is unavailable.', 503, 'UNAVAILABLE');
+    const input = legacyBranchDeleteInput.parse(request.body);
+    response.json(await dependencies.featureService.deleteUnconfiguredGitBranch(
+      idSchema.parse(request.params.id),
+      input.branch_name,
+    ));
   });
 
   app.post('/projects/:id/features/reset-to-main', async (request, response) => {
