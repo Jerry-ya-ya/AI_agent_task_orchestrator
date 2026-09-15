@@ -139,3 +139,5 @@
 - Add confirmed hierarchical Feature branch deletion controls that remove local Git refs or Feature records while preserving task history.
 
 - Enable confirmed Git deletion for unconfigured legacy agent and Feature branches from their HEAD nodes.
+
+- Align each Feature HEAD with its actual main commit, reserve left-side history space, and replace ambiguous dashed reset edges with labeled muted nodes.

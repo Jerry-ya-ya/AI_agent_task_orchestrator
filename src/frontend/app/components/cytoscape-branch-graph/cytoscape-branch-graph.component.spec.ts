@@ -63,30 +63,31 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(waiting?.classes).not.toContain('checkpoint');
     expect(actionMenu).toMatchObject({
       data: { label: 'HEAD +', featureId: 7, color: '#3977d4' },
-      position: { x: 1010, y: 220 },
+      position: { x: 820, y: 220 },
       classes: 'branch-pointer branch-actions',
     });
     expect(addTask).toMatchObject({
       data: { label: '+ Task', subtitle: 'Create task', featureId: 7, color: '#3977d4' },
-      position: { x: 1132, y: 164 },
+      position: { x: 942, y: 164 },
     });
     expect(String(addTask?.classes)).toContain('branch-action-collapsed');
     expect(resetBranch).toMatchObject({
       data: { label: '↺ main', subtitle: 'Reset branch pointer', featureId: 7, color: '#3977d4' },
-      position: { x: 1132, y: 220 },
+      position: { x: 942, y: 220 },
     });
     expect(String(resetBranch?.classes)).toContain('branch-action-collapsed');
     expect(deleteMenu).toMatchObject({
       data: { label: 'Delete ›', featureId: 7 },
-      position: { x: 1132, y: 276 },
+      position: { x: 942, y: 276 },
     });
-    expect(deleteGit).toMatchObject({ position: { x: 1248, y: 252 } });
-    expect(deleteDatabase).toMatchObject({ position: { x: 1248, y: 300 } });
+    expect(deleteGit).toMatchObject({ position: { x: 1058, y: 252 } });
+    expect(deleteDatabase).toMatchObject({ position: { x: 1058, y: 300 } });
     expect(String(deleteGit?.classes)).toContain('branch-action-collapsed');
     expect(String(deleteDatabase?.classes)).toContain('branch-action-collapsed');
     expect(pointerEdge).toMatchObject({ data: { source: 'branch:0:task:3', target: 'branch:0:pointer' } });
-    expect(model.elements.find((element) => element.data.id === 'branch:0:task:1')?.position).toEqual({ x: 440, y: 220 });
-    expect(model.elements.find((element) => element.data.id === 'branch:0:task:3')?.position).toEqual({ x: 820, y: 220 });
+    expect(model.elements.find((element) => element.data.id === 'primary:base')?.position).toEqual({ x: 820, y: 72 });
+    expect(model.elements.find((element) => element.data.id === 'branch:0:task:1')?.position).toEqual({ x: 250, y: 220 });
+    expect(model.elements.find((element) => element.data.id === 'branch:0:task:3')?.position).toEqual({ x: 630, y: 220 });
 
     (component as unknown as { toggleBranchActions(featureId: number): void }).toggleBranchActions(7);
     const expandedModel = component.graphModel();
@@ -175,8 +176,8 @@ describe('CytoscapeBranchGraphComponent', () => {
     component.lanes = [resetLane];
 
     const elements = component.graphModel().elements;
-    expect(elements.find((element) => element.data.id === 'primary:base')?.position).toEqual({ x: 250, y: 72 });
-    expect(elements.find((element) => element.data.id === 'primary:feature')?.position).toEqual({ x: 440, y: 72 });
+    expect(elements.find((element) => element.data.id === 'primary:base')?.position).toEqual({ x: 630, y: 72 });
+    expect(elements.find((element) => element.data.id === 'primary:feature')?.position).toEqual({ x: 820, y: 72 });
     expect(elements.find((element) => element.data.id === 'fork-edge:0')).toMatchObject({
       data: { source: 'primary:feature', target: 'branch:0:pointer' },
     });
@@ -184,6 +185,8 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(elements.find((element) => element.data.id === 'branch:0:task:9')?.position).toEqual({ x: 440, y: 220 });
     expect(elements.find((element) => element.data.id === 'branch:0:task:10')?.position).toEqual({ x: 630, y: 220 });
     expect(String(elements.find((element) => element.data.id === 'branch:0:task:9')?.classes)).toContain('historical');
+    expect(elements.filter((element) => element.data.source !== undefined)
+      .every((element) => !String(element.classes).includes('historical'))).toBe(true);
   });
 
   it('keeps branch labels at the left viewport edge while preserving their vertical lane position', () => {
@@ -212,6 +215,51 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(labelPositions.get('first')).toEqual({ x: 193, y: 220 });
     expect(labelPositions.get('second')).toEqual({ x: 193, y: 372 });
     expect((193 * 2) - 300).toBe(86);
+  });
+
+  it('preserves a valid viewport while the graph container resizes', () => {
+    const component = new CytoscapeBranchGraphComponent();
+    const calls: Array<[string, unknown?]> = [];
+    let zoom = 1.25;
+    let pan = { x: -180, y: 42 };
+    (component as unknown as { graph: unknown }).graph = {
+      zoom: (value?: number) => {
+        if (value !== undefined) {
+          zoom = value;
+          calls.push(['zoom', value]);
+        }
+        return zoom;
+      },
+      pan: (value?: { x: number; y: number }) => {
+        if (value !== undefined) {
+          pan = value;
+          calls.push(['pan', value]);
+        }
+        return pan;
+      },
+      resize: () => calls.push(['resize']),
+      stop: () => calls.push(['stop']),
+    };
+
+    (component as unknown as { resizeGraphPreservingViewport(): void }).resizeGraphPreservingViewport();
+
+    expect(calls).toEqual([
+      ['resize'],
+      ['stop'],
+      ['zoom', 1.25],
+      ['pan', { x: -180, y: 42 }],
+    ]);
+  });
+
+  it('normalizes invalid or out-of-range viewport values before applying them', () => {
+    const component = new CytoscapeBranchGraphComponent();
+    const normalize = (viewport: { zoom: number; pan: { x: number; y: number } }) =>
+      (component as unknown as { normalizeViewport(value: typeof viewport): typeof viewport }).normalizeViewport(viewport);
+
+    expect(normalize({ zoom: 99, pan: { x: Number.NaN, y: Number.POSITIVE_INFINITY } }))
+      .toEqual({ zoom: 2, pan: { x: 24, y: 30 } });
+    expect(normalize({ zoom: Number.NaN, pan: { x: 5, y: 6 } }))
+      .toEqual({ zoom: 0.88, pan: { x: 5, y: 6 } });
   });
 });
 

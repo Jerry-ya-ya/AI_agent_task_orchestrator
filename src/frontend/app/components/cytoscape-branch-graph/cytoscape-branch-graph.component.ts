@@ -28,6 +28,8 @@ const BRANCH_DELETE_ACTION_GAP = 116;
 const BRANCH_DELETE_ACTION_FAN_Y = 24;
 const INITIAL_ZOOM = 0.88;
 const INITIAL_PAN: cytoscape.Position = { x: 24, y: 30 };
+const MIN_ZOOM = 0.35;
+const MAX_ZOOM = 2;
 const ZOOM_SENSITIVITIES = [1, 2, 3] as const;
 const ZOOM_SENSITIVITY_STORAGE_PREFIX = 'agentboard.featureMap.zoomSensitivity.';
 const POINTER_RESET_BLOCKING_STATUSES: ReadonlySet<TaskStatus> = new Set(['IN_REVIEW', 'REVIEWING', 'PENDING_PUSH']);
@@ -94,7 +96,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     this.viewReady = true;
     this.requestRender();
     if (typeof ResizeObserver !== 'undefined') {
-      this.resizeObserver = new ResizeObserver(() => this.graph?.resize());
+      this.resizeObserver = new ResizeObserver(() => this.resizeGraphPreservingViewport());
       this.resizeObserver.observe(this.graphHost.nativeElement);
     }
   }
@@ -149,19 +151,24 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   graphModel(): BranchGraphModel {
     const elements: cytoscape.ElementDefinition[] = [];
     const primaryCommits = this.map.primary_commits;
+    const longestBranchHistory = this.lanes.reduce(
+      (longest, lane) => Math.max(longest, lane.tasks.length),
+      0,
+    );
+    const primaryStartX = FIRST_NODE_X + (longestBranchHistory * COMMIT_GAP);
     const primaryNodeIds = primaryCommits.length === 0
       ? [this.primaryNodeId('start')]
       : primaryCommits.map((commit) => this.primaryNodeId(commit.sha));
 
     if (primaryCommits.length === 0) {
-      elements.push(this.node(primaryNodeIds[0]!, FIRST_NODE_X, MAIN_Y, {
+      elements.push(this.node(primaryNodeIds[0]!, primaryStartX, MAIN_Y, {
         label: this.map.primary_branch ?? 'main',
         subtitle: 'No commit history available',
       }, 'primary primary-empty'));
     } else {
       primaryCommits.forEach((commit, index) => {
         const colors = this.commitFeatureColors(commit.summary);
-        elements.push(this.node(primaryNodeIds[index]!, FIRST_NODE_X + (index * COMMIT_GAP), MAIN_Y, {
+        elements.push(this.node(primaryNodeIds[index]!, primaryStartX + (index * COMMIT_GAP), MAIN_Y, {
           label: commit.summary,
           subtitle: commit.short_sha,
           color: colors[0] ?? '#46515e',
@@ -184,11 +191,11 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       const missingClass = lane.exists ? '' : ' missing';
       const currentClass = lane.is_current ? ' current' : '';
       const forkIndex = this.forkIndex(primaryCommits, lane.fork_commit);
-      const forkX = FIRST_NODE_X + (forkIndex * COMMIT_GAP);
+      const forkX = primaryStartX + (forkIndex * COMMIT_GAP);
       const sourceId = primaryNodeIds[Math.min(forkIndex, primaryNodeIds.length - 1)]!;
       const labelId = `branch:${laneIndex}:label`;
       const pointerId = `branch:${laneIndex}:pointer`;
-      const pointerX = Math.max(forkX, FIRST_NODE_X + ((lane.tasks.length + 1) * COMMIT_GAP));
+      const pointerX = forkX;
       const managedLegacyBranch = lane.feature === null && lane.exists && this.isManagedBranch(lane.name);
       const hasBranchActions = lane.feature !== null || managedLegacyBranch;
 
@@ -225,7 +232,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
             previousId,
             taskId,
             color,
-            `branch-edge${task.is_before_pointer_reset ? ' historical' : ''}${missingClass}`,
+            `branch-edge${missingClass}`,
           ));
         }
         previousId = taskId;
@@ -385,8 +392,9 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     this.graph?.destroy();
     this.graphReady = false;
     const model = this.graphModel();
-    const viewport = CytoscapeBranchGraphComponent.viewportByProject.get(this.map.project.id)
-      ?? this.initialViewport();
+    const viewport = this.normalizeViewport(
+      CytoscapeBranchGraphComponent.viewportByProject.get(this.map.project.id) ?? this.initialViewport(),
+    );
     this.graph = createCytoscape({
       container: this.graphHost.nativeElement,
       elements: model.elements,
@@ -394,13 +402,15 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       style: this.graphStyles(),
       zoom: viewport.zoom,
       pan: viewport.pan,
-      minZoom: 0.35,
-      maxZoom: 2,
+      minZoom: MIN_ZOOM,
+      maxZoom: MAX_ZOOM,
       wheelSensitivity: this.zoomSensitivity,
       boxSelectionEnabled: false,
       selectionType: 'single',
     });
     this.renderedProjectId = this.map.project.id;
+    this.graph.resize();
+    this.applyViewport(viewport);
     this.graphReady = true;
     this.syncBranchLabels();
     this.syncBranchActionVisibility();
@@ -473,10 +483,33 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   private saveViewport(): void {
     if (this.graph === null || this.renderedProjectId === null) return;
     const pan = this.graph.pan();
-    CytoscapeBranchGraphComponent.viewportByProject.set(this.renderedProjectId, {
+    CytoscapeBranchGraphComponent.viewportByProject.set(this.renderedProjectId, this.normalizeViewport({
       zoom: this.graph.zoom(),
       pan: { x: pan.x, y: pan.y },
-    });
+    }));
+  }
+
+  private resizeGraphPreservingViewport(): void {
+    if (this.graph === null) return;
+    const viewport = this.normalizeViewport({ zoom: this.graph.zoom(), pan: this.graph.pan() });
+    this.graph.resize();
+    this.applyViewport(viewport);
+  }
+
+  private applyViewport(viewport: GraphViewport): void {
+    if (this.graph === null) return;
+    this.graph.stop();
+    this.graph.zoom(viewport.zoom);
+    this.graph.pan(viewport.pan);
+  }
+
+  private normalizeViewport(viewport: GraphViewport): GraphViewport {
+    const zoom = Number.isFinite(viewport.zoom)
+      ? Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, viewport.zoom))
+      : INITIAL_ZOOM;
+    const x = Number.isFinite(viewport.pan.x) ? viewport.pan.x : INITIAL_PAN.x;
+    const y = Number.isFinite(viewport.pan.y) ? viewport.pan.y : INITIAL_PAN.y;
+    return { zoom, pan: { x, y } };
   }
 
   private syncBranchLabels(): void {
@@ -627,7 +660,6 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
         'curve-style': 'taxi', 'taxi-direction': 'downward', 'taxi-turn': '50%',
       } },
       { selector: 'edge.branch-action-fan', style: { width: 2, 'curve-style': 'bezier' } },
-      { selector: 'edge.historical', style: { opacity: 0.5, 'line-style': 'dashed' } },
       { selector: '.branch-action-collapsed', style: { display: 'none' } },
       { selector: 'edge.missing', style: { 'line-color': '#9ba1a8', opacity: 0.38 } },
       { selector: 'node:selected', style: { 'overlay-color': '#3977d4', 'overlay-opacity': 0.12, 'overlay-padding': 8 } },
