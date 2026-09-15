@@ -141,3 +141,7 @@
 - Enable confirmed Git deletion for unconfigured legacy agent and Feature branches from their HEAD nodes.
 
 - Align each Feature HEAD with its actual main commit, reserve left-side history space, and replace ambiguous dashed reset edges with labeled muted nodes.
+
+## 2026/09/16
+
+- Stabilize Feature graph view state and add main-aligned POINTER markers that separate pre-reset history from current branch work.

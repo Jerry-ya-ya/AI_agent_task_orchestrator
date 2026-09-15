@@ -152,7 +152,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     const elements: cytoscape.ElementDefinition[] = [];
     const primaryCommits = this.map.primary_commits;
     const longestBranchHistory = this.lanes.reduce(
-      (longest, lane) => Math.max(longest, lane.tasks.length),
+      (longest, lane) => Math.max(longest, this.pointerResetBoundaryIndex(lane)),
       0,
     );
     const primaryStartX = FIRST_NODE_X + (longestBranchHistory * COMMIT_GAP);
@@ -196,6 +196,14 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       const labelId = `branch:${laneIndex}:label`;
       const pointerId = `branch:${laneIndex}:pointer`;
       const pointerX = forkX;
+      const resetPointerId = `branch:${laneIndex}:reset-pointer`;
+      const pointerResetTaskId = lane.feature?.pointer_reset_task_id;
+      const hasPointerResetMarker = pointerResetTaskId !== null && pointerResetTaskId !== undefined;
+      const resetBoundaryIndex = this.pointerResetBoundaryIndex(lane);
+      const postResetTaskCount = hasPointerResetMarker ? lane.tasks.length - resetBoundaryIndex : 0;
+      const headX = hasPointerResetMarker
+        ? pointerX + ((postResetTaskCount + 1) * COMMIT_GAP)
+        : pointerX;
       const managedLegacyBranch = lane.feature === null && lane.exists && this.isManagedBranch(lane.name);
       const hasBranchActions = lane.feature !== null || managedLegacyBranch;
 
@@ -204,21 +212,51 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
         subtitle: `${lane.name}\n${lane.exists ? (lane.is_current ? 'current' : 'local') : 'not created'}`,
         color,
       }, `branch-label${missingClass}${currentClass}`));
-      elements.push(this.node(pointerId, pointerX, y, {
+      elements.push(this.node(pointerId, headX, y, {
         label: hasBranchActions ? 'HEAD +' : 'HEAD',
-        subtitle: this.forkLabel(lane),
+        subtitle: hasPointerResetMarker ? 'current branch end' : this.forkLabel(lane),
         ...(lane.feature === null ? {} : { featureId: lane.feature.id }),
         ...(managedLegacyBranch ? { legacyBranchName: lane.name, projectId: this.map.project.id } : {}),
         color,
       }, `branch-pointer${hasBranchActions ? ' branch-actions' : ''}${missingClass}`));
-      elements.push(this.edge(`fork-edge:${laneIndex}`, sourceId, pointerId, color, `fork-edge${missingClass}`));
+      elements.push(this.edge(
+        `fork-edge:${laneIndex}`,
+        sourceId,
+        hasPointerResetMarker ? resetPointerId : pointerId,
+        color,
+        `fork-edge${missingClass}`,
+      ));
 
       let previousId: string | null = null;
+      let firstHistoryId: string | null = null;
       lane.tasks.forEach((task, taskIndex) => {
+        if (hasPointerResetMarker && taskIndex === resetBoundaryIndex) {
+          elements.push(this.node(resetPointerId, pointerX, y, {
+            label: 'POINTER',
+            subtitle: `reset to ${this.forkLabel(lane)}`,
+            color,
+          }, `branch-pointer reset-pointer${missingClass}`));
+          if (previousId !== null) {
+            elements.push(this.edge(
+              `reset-pointer-edge:${laneIndex}`,
+              previousId,
+              resetPointerId,
+              color,
+              `branch-edge reset-boundary-edge${missingClass}`,
+            ));
+          }
+          firstHistoryId ??= resetPointerId;
+          previousId = resetPointerId;
+        }
         const taskId = `branch:${laneIndex}:task:${task.id}`;
+        const taskX = hasPointerResetMarker
+          ? taskIndex < resetBoundaryIndex
+            ? pointerX - ((resetBoundaryIndex - taskIndex) * COMMIT_GAP)
+            : pointerX + ((taskIndex - resetBoundaryIndex + 1) * COMMIT_GAP)
+          : pointerX - ((lane.tasks.length - taskIndex) * COMMIT_GAP);
         const checkpointClass = this.isCheckpoint(lane.tasks, task.id) ? ' checkpoint' : '';
         const historicalClass = task.is_before_pointer_reset ? ' historical' : '';
-        elements.push(this.node(taskId, pointerX - ((lane.tasks.length - taskIndex) * COMMIT_GAP), y, {
+        elements.push(this.node(taskId, taskX, y, {
           label: `#${task.id} ${task.title}`,
           subtitle: task.is_before_pointer_reset
             ? `${this.statusLabel(task.status)} · before pointer reset`
@@ -235,12 +273,31 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
             `branch-edge${missingClass}`,
           ));
         }
+        firstHistoryId ??= taskId;
         previousId = taskId;
       });
+      if (hasPointerResetMarker && resetBoundaryIndex === lane.tasks.length) {
+        elements.push(this.node(resetPointerId, pointerX, y, {
+          label: 'POINTER',
+          subtitle: `reset to ${this.forkLabel(lane)}`,
+          color,
+        }, `branch-pointer reset-pointer${missingClass}`));
+        if (previousId !== null) {
+          elements.push(this.edge(
+            `reset-pointer-edge:${laneIndex}`,
+            previousId,
+            resetPointerId,
+            color,
+            `branch-edge reset-boundary-edge${missingClass}`,
+          ));
+        }
+        firstHistoryId ??= resetPointerId;
+        previousId = resetPointerId;
+      }
       elements.push(this.edge(
         `label-edge:${laneIndex}`,
         labelId,
-        lane.tasks.length > 0 ? `branch:${laneIndex}:task:${lane.tasks[0]!.id}` : pointerId,
+        firstHistoryId ?? (hasPointerResetMarker ? resetPointerId : pointerId),
         color,
         `branch-edge${missingClass}`,
       ));
@@ -262,7 +319,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
           : ' branch-action-collapsed';
 
         const addTaskId = `branch:${laneIndex}:action:add-task`;
-        elements.push(this.node(addTaskId, pointerX + BRANCH_ACTION_GAP, y - BRANCH_ACTION_FAN_Y, {
+        elements.push(this.node(addTaskId, headX + BRANCH_ACTION_GAP, y - BRANCH_ACTION_FAN_Y, {
           label: '+ Task',
           subtitle: 'Create task',
           featureId,
@@ -276,7 +333,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
         if (lane.exists) {
           const resetBlocked = this.laneHasProtectedPointerTasks(lane);
           const resetBranchId = `branch:${laneIndex}:action:reset-main`;
-          elements.push(this.node(resetBranchId, pointerX + BRANCH_ACTION_GAP, y, {
+          elements.push(this.node(resetBranchId, headX + BRANCH_ACTION_GAP, y, {
             label: resetBlocked ? 'Review locked' : '↺ main',
             subtitle: resetBlocked ? 'Finish Review or pending push first' : 'Reset branch pointer',
             featureId,
@@ -290,7 +347,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
         }
 
         const deleteMenuId = `branch:${laneIndex}:action:delete`;
-        const deleteMenuX = pointerX + BRANCH_ACTION_GAP;
+        const deleteMenuX = headX + BRANCH_ACTION_GAP;
         const deleteMenuY = y + BRANCH_ACTION_FAN_Y;
         elements.push(this.node(deleteMenuId, deleteMenuX, deleteMenuY, {
           label: 'Delete ›',
@@ -347,7 +404,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
           : ' branch-action-collapsed';
         const commonData = { legacyBranchName: lane.name, projectId: this.map.project.id };
         const deleteMenuId = `branch:${laneIndex}:action:delete-legacy`;
-        const deleteMenuX = pointerX + BRANCH_ACTION_GAP;
+        const deleteMenuX = headX + BRANCH_ACTION_GAP;
         elements.push(this.node(deleteMenuId, deleteMenuX, y, {
           label: 'Delete ›',
           subtitle: 'Legacy branch deletion',
@@ -625,6 +682,10 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       { selector: 'node.branch-actions', style: {
         'border-width': 3,
       } },
+      { selector: 'node.reset-pointer', style: {
+        width: 66, 'text-max-width': '62px', 'border-style': 'double', 'border-width': 5,
+        'background-color': '#f5f8fc', color: '#315f9d',
+      } },
       { selector: 'node.branch-action-option', style: {
         shape: 'round-rectangle', width: 88, height: 30, 'background-color': '#ffffff',
         'border-width': 2, 'font-size': 9, 'font-weight': 650, 'text-valign': 'center',
@@ -721,6 +782,13 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
 
   private laneHasProtectedPointerTasks(lane: BranchLane): boolean {
     return lane.tasks.some((task) => POINTER_RESET_BLOCKING_STATUSES.has(task.status));
+  }
+
+  private pointerResetBoundaryIndex(lane: BranchLane): number {
+    const pointerResetTaskId = lane.feature?.pointer_reset_task_id;
+    if (pointerResetTaskId === null || pointerResetTaskId === undefined) return lane.tasks.length;
+    const firstPostResetTaskIndex = lane.tasks.findIndex((task) => task.id > pointerResetTaskId);
+    return firstPostResetTaskIndex < 0 ? lane.tasks.length : firstPostResetTaskIndex;
   }
 
   private isManagedBranch(branchName: string): boolean {

@@ -176,14 +176,33 @@ describe('CytoscapeBranchGraphComponent', () => {
     component.lanes = [resetLane];
 
     const elements = component.graphModel().elements;
-    expect(elements.find((element) => element.data.id === 'primary:base')?.position).toEqual({ x: 630, y: 72 });
-    expect(elements.find((element) => element.data.id === 'primary:feature')?.position).toEqual({ x: 820, y: 72 });
+    expect(elements.find((element) => element.data.id === 'primary:base')?.position).toEqual({ x: 440, y: 72 });
+    expect(elements.find((element) => element.data.id === 'primary:feature')?.position).toEqual({ x: 630, y: 72 });
     expect(elements.find((element) => element.data.id === 'fork-edge:0')).toMatchObject({
-      data: { source: 'primary:feature', target: 'branch:0:pointer' },
+      data: { source: 'primary:feature', target: 'branch:0:reset-pointer' },
     });
-    expect(elements.find((element) => element.data.id === 'branch:0:pointer')?.position).toEqual({ x: 820, y: 220 });
+    expect(elements.find((element) => element.data.id === 'branch:0:pointer')).toMatchObject({
+      data: { label: 'HEAD +', subtitle: 'current branch end' },
+      position: { x: 1010, y: 220 },
+    });
     expect(elements.find((element) => element.data.id === 'branch:0:task:9')?.position).toEqual({ x: 440, y: 220 });
-    expect(elements.find((element) => element.data.id === 'branch:0:task:10')?.position).toEqual({ x: 630, y: 220 });
+    expect(elements.find((element) => element.data.id === 'branch:0:reset-pointer')).toMatchObject({
+      data: { label: 'POINTER', subtitle: 'reset to feature · feat: index documents' },
+      position: { x: 630, y: 220 },
+      classes: 'branch-pointer reset-pointer',
+    });
+    expect(elements.find((element) => element.data.id === 'branch:0:task:10')?.position).toEqual({ x: 820, y: 220 });
+    expect(elements.find((element) => element.data.id === 'reset-pointer-edge:0')).toMatchObject({
+      data: { source: 'branch:0:task:9', target: 'branch:0:reset-pointer' },
+    });
+    expect(elements.find((element) => element.data.id === 'task-edge:0:10')).toMatchObject({
+      data: { source: 'branch:0:reset-pointer', target: 'branch:0:task:10' },
+    });
+    expect(elements.find((element) => element.data.id === 'pointer-edge:0')).toMatchObject({
+      data: { source: 'branch:0:task:10', target: 'branch:0:pointer' },
+    });
+    expect(elements.find((element) => element.data.id === 'primary:feature')?.position?.x)
+      .toBe(elements.find((element) => element.data.id === 'branch:0:reset-pointer')?.position?.x);
     expect(String(elements.find((element) => element.data.id === 'branch:0:task:9')?.classes)).toContain('historical');
     expect(elements.filter((element) => element.data.source !== undefined)
       .every((element) => !String(element.classes).includes('historical'))).toBe(true);
