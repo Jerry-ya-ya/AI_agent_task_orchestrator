@@ -133,3 +133,5 @@
 - Protect single and bulk Feature pointer resets from review-state tasks and add an atomic red reset-all control.
 
 - Render main commits chronologically and preserve pointer reset checkpoints in rightmost HEAD-anchored branch histories.
+
+- Detach dragged navigation pages into secure Electron windows after crossing the sidebar threshold.

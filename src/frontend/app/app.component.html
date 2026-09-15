@@ -7,6 +7,7 @@
       [historyCount]="historyTaskCount()"
       (expandedChange)="setNavigationExpanded($event)"
       (pageSelected)="selectPage($event)"
+      (pageDetached)="detachPage($event)"
     />
     <main class="page-content" [class.page-content--taskboard]="activePage === 'taskboard'" [class.page-content--features]="activePage === 'features'" [class.page-content--history]="activePage === 'history'" [ngSwitch]="activePage">
       <ng-container *ngSwitchCase="'taskboard'">

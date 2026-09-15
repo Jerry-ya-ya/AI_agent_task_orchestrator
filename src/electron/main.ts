@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell } from 'electron';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OrchestratorRuntime } from '../backend/runtime.js';
@@ -8,6 +8,14 @@ let runtime: OrchestratorRuntime | null = null;
 let mainWindow: BrowserWindow | null = null;
 let quittingAfterShutdown = false;
 let shutdownPromise: Promise<void> | null = null;
+const APP_PAGES = new Set(['features', 'taskboard', 'history']);
+
+type AppPage = 'features' | 'taskboard' | 'history';
+
+interface WindowPlacement {
+  x: number;
+  y: number;
+}
 
 Menu.setApplicationMenu(null);
 
@@ -29,15 +37,30 @@ ipcMain.handle('window:minimize', (event) => {
   return true;
 });
 
+ipcMain.handle('window:open-page', async (_event, request: unknown) => {
+  if (runtime === null || typeof request !== 'object' || request === null) return false;
+  const candidate = request as Record<string, unknown>;
+  if (typeof candidate['page'] !== 'string' || !APP_PAGES.has(candidate['page'])) return false;
+  if (typeof candidate['screenX'] !== 'number' || !Number.isFinite(candidate['screenX'])
+    || typeof candidate['screenY'] !== 'number' || !Number.isFinite(candidate['screenY'])) return false;
+
+  await createWindow(runtime.baseUrl, candidate['page'] as AppPage, {
+    x: Math.round(candidate['screenX']),
+    y: Math.round(candidate['screenY']),
+  });
+  return true;
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow !== null) {
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore();
+    const browserWindow = mainWindow ?? BrowserWindow.getAllWindows()[0] ?? null;
+    if (browserWindow !== null) {
+      if (browserWindow.isMinimized()) {
+        browserWindow.restore();
       }
-      mainWindow.focus();
+      browserWindow.focus();
     }
   });
 
@@ -82,10 +105,18 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
-async function createWindow(apiUrl: string): Promise<void> {
+async function createWindow(
+  apiUrl: string,
+  initialPage: AppPage = 'taskboard',
+  placement?: WindowPlacement,
+): Promise<void> {
+  const width = 1180;
+  const height = 780;
+  const bounds = placement === undefined ? {} : detachedWindowBounds(placement, width, height);
   const browserWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    width: placement === undefined ? 1440 : width,
+    height: placement === undefined ? 900 : height,
+    ...bounds,
     minWidth: 980,
     minHeight: 680,
     title: 'AI Agent Task Orchestrator',
@@ -100,7 +131,7 @@ async function createWindow(apiUrl: string): Promise<void> {
       sandbox: true
     }
   });
-  mainWindow = browserWindow;
+  if (mainWindow === null) mainWindow = browserWindow;
   browserWindow.once('ready-to-show', () => {
     browserWindow.show();
     browserWindow.focus();
@@ -127,14 +158,26 @@ async function createWindow(apiUrl: string): Promise<void> {
   if (developmentUrl !== undefined) {
     const url = new URL(developmentUrl);
     url.searchParams.set('apiBaseUrl', apiUrl);
+    url.searchParams.set('page', initialPage);
     await browserWindow.loadURL(url.toString());
   } else {
-    await browserWindow.loadURL(apiUrl);
+    const url = new URL(apiUrl);
+    url.searchParams.set('page', initialPage);
+    await browserWindow.loadURL(url.toString());
   }
   if (!browserWindow.isDestroyed() && !browserWindow.isVisible()) {
     browserWindow.show();
     browserWindow.focus();
   }
+}
+
+function detachedWindowBounds(placement: WindowPlacement, width: number, height: number): WindowPlacement {
+  const display = screen.getDisplayNearestPoint(placement);
+  const { workArea } = display;
+  return {
+    x: Math.min(Math.max(placement.x - 48, workArea.x), workArea.x + Math.max(0, workArea.width - width)),
+    y: Math.min(Math.max(placement.y - 32, workArea.y), workArea.y + Math.max(0, workArea.height - height)),
+  };
 }
 
 async function shutdown(): Promise<void> {

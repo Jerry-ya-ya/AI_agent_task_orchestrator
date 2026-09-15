@@ -95,6 +95,13 @@
   content: '';
 }
 
+.navigation-link--dragging {
+  background: rgba(105, 160, 243, 0.16);
+  color: #fff;
+  cursor: grabbing;
+  opacity: 0.78;
+}
+
 .navigation-links {
   display: flex;
   gap: 5px;

@@ -12,7 +12,11 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from './api.service';
 import { AppHeaderComponent } from './components/app-header/app-header.component';
-import { AppNavigationComponent, type AppPage } from './components/app-navigation/app-navigation.component';
+import {
+  AppNavigationComponent,
+  type AppPage,
+  type DetachedPageRequest,
+} from './components/app-navigation/app-navigation.component';
 import { FeatureEditorDialogComponent } from './components/feature-editor-dialog/feature-editor-dialog.component';
 import { FeatureMapComponent } from './components/feature-map/feature-map.component';
 import { ProjectEditorDialogComponent } from './components/project-editor-dialog/project-editor-dialog.component';
@@ -129,6 +133,10 @@ export class AppComponent implements OnInit, OnDestroy {
     private readonly changeDetector: ChangeDetectorRef,
   ) {
     this.apiBaseUrl = api.baseUrl;
+    const requestedPage = new URLSearchParams(globalThis.location?.search ?? '').get('page');
+    if (requestedPage === 'features' || requestedPage === 'taskboard' || requestedPage === 'history') {
+      this.activePage = requestedPage;
+    }
   }
 
   ngOnInit(): void {
@@ -188,6 +196,16 @@ export class AppComponent implements OnInit, OnDestroy {
   selectPage(page: AppPage): void {
     this.activePage = page;
     if (page === 'features') void this.refreshBranchMap();
+  }
+
+  detachPage(request: DetachedPageRequest): void {
+    if (window.desktopWindow?.openPage !== undefined) {
+      void window.desktopWindow.openPage(request.page, request.screenX, request.screenY);
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', request.page);
+    window.open(url.toString(), '_blank', 'noopener');
   }
 
   setNavigationExpanded(expanded: boolean): void {
