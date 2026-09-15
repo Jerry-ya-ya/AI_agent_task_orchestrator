@@ -131,6 +131,24 @@ describe('GitService', () => {
       .toBe(1);
   });
 
+  it('moves a local Feature branch pointer to the latest main commit', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const service = new GitService(runner);
+    const task = { ...exampleTask(), feature_id: 1, branch_name: 'feature/reset-me', base_branch: 'main' };
+    const prepared = await service.prepareBranch(task, repository);
+    await writeFile(path.join(repository, 'feature-only.txt'), 'discard from branch pointer\n');
+    await service.completeBranch(prepared, task.id, 'feat: add disposable feature work.');
+    const mainCommit = (await git(runner, repository, ['rev-parse', 'main'])).trim();
+    const featureCommit = (await git(runner, repository, ['rev-parse', task.branch_name])).trim();
+    expect(featureCommit).not.toBe(mainCommit);
+
+    await service.resetFeatureBranchToMain(repository, task.branch_name);
+
+    expect((await git(runner, repository, ['rev-parse', task.branch_name])).trim()).toBe(mainCommit);
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
+    expect(await gitExitCode(runner, repository, ['cat-file', '-e', `${task.branch_name}:feature-only.txt`])).toBe(128);
+  });
+
   it('publishes an approved task branch to its base branch and origin', async () => {
     const { repository, runner } = await temporaryRepository();
     const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-remote-'));

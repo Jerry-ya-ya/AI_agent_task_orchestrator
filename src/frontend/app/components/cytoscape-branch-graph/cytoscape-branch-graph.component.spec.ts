@@ -44,8 +44,10 @@ describe('CytoscapeBranchGraphComponent', () => {
     const forkEdge = model.elements.find((element) => element.data.id === 'fork-edge:0');
     const checkpoint = model.elements.find((element) => element.data.id === 'branch:0:task:2');
     const waiting = model.elements.find((element) => element.data.id === 'branch:0:task:3');
-    const addTask = model.elements.find((element) => element.data.id === 'branch:0:add-task');
-    const addTaskEdge = model.elements.find((element) => element.data.id === 'add-task-edge:0');
+    const actionMenu = model.elements.find((element) => element.data.id === 'branch:0:actions');
+    const addTask = model.elements.find((element) => element.data.id === 'branch:0:action:add-task');
+    const resetBranch = model.elements.find((element) => element.data.id === 'branch:0:action:reset-main');
+    const actionMenuEdge = model.elements.find((element) => element.data.id === 'branch-actions-edge:0');
 
     expect(featureCommit).toMatchObject({
       data: { color: '#3977d4' }, classes: 'primary feature-owned', grabbable: false, pannable: true,
@@ -56,12 +58,30 @@ describe('CytoscapeBranchGraphComponent', () => {
     });
     expect(checkpoint?.classes).toContain('checkpoint');
     expect(waiting?.classes).not.toContain('checkpoint');
-    expect(addTask).toMatchObject({
-      data: { label: '+', subtitle: 'Add task', featureId: 7, color: '#3977d4' },
+    expect(actionMenu).toMatchObject({
+      data: { label: '+', subtitle: 'Branch actions', featureId: 7, color: '#3977d4' },
       position: { x: 1010, y: 220 },
-      classes: 'add-task',
+      classes: 'branch-actions',
     });
-    expect(addTaskEdge).toMatchObject({ data: { source: 'branch:0:task:3', target: 'branch:0:add-task' } });
+    expect(addTask).toMatchObject({
+      data: { label: '+ Task', subtitle: 'Create task', featureId: 7, color: '#3977d4' },
+      position: { x: 1132, y: 178 },
+    });
+    expect(String(addTask?.classes)).toContain('branch-action-collapsed');
+    expect(resetBranch).toMatchObject({
+      data: { label: '↺ main', subtitle: 'Reset branch pointer', featureId: 7, color: '#3977d4' },
+      position: { x: 1132, y: 262 },
+    });
+    expect(String(resetBranch?.classes)).toContain('branch-action-collapsed');
+    expect(actionMenuEdge).toMatchObject({ data: { source: 'branch:0:task:3', target: 'branch:0:actions' } });
+
+    (component as unknown as { toggleBranchActions(featureId: number): void }).toggleBranchActions(7);
+    const expandedModel = component.graphModel();
+    const expandedActions = expandedModel.elements.filter((element) =>
+      String(element.classes).includes('branch-action-menu-item'),
+    );
+    expect(expandedActions.length).toBe(4);
+    expect(expandedActions.every((element) => !String(element.classes).includes('branch-action-collapsed'))).toBe(true);
   });
 
   it('renders a missing branch as a monochrome Cytoscape lane', () => {

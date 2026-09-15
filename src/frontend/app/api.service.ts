@@ -91,6 +91,10 @@ export class ApiService {
     return this.http.post<Feature>(`${this.baseUrl}/features`, input);
   }
 
+  resetFeatureBranchToMain(featureId: number): Observable<Feature> {
+    return this.http.post<Feature>(`${this.baseUrl}/features/${featureId}/reset-to-main`, {});
+  }
+
   getBranchMap(): Observable<ProjectBranchMap[]> {
     return this.http.get<ProjectBranchMap[]>(`${this.baseUrl}/branches`);
   }

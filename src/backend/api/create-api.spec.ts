@@ -115,6 +115,47 @@ describe('backend API', () => {
     });
   });
 
+  it('resets a configured local Feature branch to the latest main commit', async () => {
+    await writeFile(path.join(repositoryPath, 'README.md'), 'main\n');
+    execFileSync('git', ['-C', repositoryPath, 'add', 'README.md'], { windowsHide: true, stdio: 'pipe' });
+    execFileSync('git', [
+      '-C', repositoryPath,
+      '-c', 'user.name=Test User',
+      '-c', 'user.email=test@example.invalid',
+      'commit', '-m', 'initial',
+    ], { windowsHide: true, stdio: 'pipe' });
+    const project = await request(app).post('/projects').send({
+      name: 'Reset project',
+      repository_path: repositoryPath,
+    }).expect(201);
+    const feature = await request(app).post('/features').send({
+      project_id: project.body.id,
+      name: 'Reset me',
+    }).expect(201);
+    execFileSync('git', ['-C', repositoryPath, 'switch', '-c', feature.body.branch_name], {
+      windowsHide: true, stdio: 'pipe',
+    });
+    await writeFile(path.join(repositoryPath, 'feature-only.txt'), 'feature\n');
+    execFileSync('git', ['-C', repositoryPath, 'add', 'feature-only.txt'], { windowsHide: true, stdio: 'pipe' });
+    execFileSync('git', [
+      '-C', repositoryPath,
+      '-c', 'user.name=Test User',
+      '-c', 'user.email=test@example.invalid',
+      'commit', '-m', 'feature work',
+    ], { windowsHide: true, stdio: 'pipe' });
+    execFileSync('git', ['-C', repositoryPath, 'switch', 'main'], { windowsHide: true, stdio: 'pipe' });
+
+    await request(app).post(`/features/${feature.body.id}/reset-to-main`).send({}).expect(200);
+
+    const mainCommit = execFileSync('git', ['-C', repositoryPath, 'rev-parse', 'main'], {
+      encoding: 'utf8', windowsHide: true,
+    }).trim();
+    const featureCommit = execFileSync('git', ['-C', repositoryPath, 'rev-parse', feature.body.branch_name], {
+      encoding: 'utf8', windowsHide: true,
+    }).trim();
+    expect(featureCommit).toBe(mainCommit);
+  });
+
   it('pauses and resumes Worker task claiming through explicit endpoints', async () => {
     await request(app).post('/worker/pause').send({}).expect(200)
       .expect((response) => expect(response.body).toMatchObject({ running: true, paused: true }));

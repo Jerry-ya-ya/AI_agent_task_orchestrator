@@ -64,6 +64,31 @@ describe('AppComponent initialization', () => {
     expect(component.taskDraft).toMatchObject({ project_id: 3, feature_id: 8 });
   });
 
+  it('requires confirmation before resetting a Feature branch to main', async () => {
+    const feature: Feature = {
+      id: 8, project_id: 3, name: 'Search', branch_name: 'feature/search', base_branch: 'main',
+      created_at: '', updated_at: '',
+    };
+    const resetFeatureBranchToMain = vi.fn(() => of(feature));
+    const api = {
+      baseUrl: 'http://127.0.0.1:4317',
+      resetFeatureBranchToMain,
+      getBranchMap: vi.fn(() => of([])),
+    } as unknown as ApiService;
+    const markForCheck = vi.fn();
+    const component = new AppComponent(api, { markForCheck } as unknown as ChangeDetectorRef);
+    component.features = [feature];
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal('window', { confirm });
+
+    await component.resetFeatureBranchToMain(feature.id);
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Unpublished work may become unreachable.'));
+    expect(resetFeatureBranchToMain).toHaveBeenCalledWith(feature.id);
+    expect(api.getBranchMap).toHaveBeenCalledOnce();
+    expect(markForCheck).toHaveBeenCalled();
+  });
+
   it('minimizes the Electron window from the title-bar control', () => {
     const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
     const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;

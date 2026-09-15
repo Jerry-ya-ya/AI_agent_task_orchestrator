@@ -403,6 +403,30 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  async resetFeatureBranchToMain(featureId: number): Promise<void> {
+    const feature = this.features.find((item) => item.id === featureId);
+    if (feature === undefined || this.saving) return;
+    const confirmed = window.confirm(
+      `Reset ${feature.branch_name} to the latest local main commit? ` +
+      'This moves the branch pointer and removes its current commits from the branch. Unpublished work may become unreachable.',
+    );
+    if (!confirmed) return;
+
+    this.saving = true;
+    this.clearError();
+    try {
+      await firstValueFrom(this.api.resetFeatureBranchToMain(feature.id));
+      this.showNotice(`${feature.branch_name} now points to the latest local main commit.`);
+      await this.refreshBranchMap();
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+      await this.refreshBranchMap();
+    } finally {
+      this.saving = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
   async saveTask(): Promise<void> {
     if (this.taskDraft.project_id === null || this.taskDraft.feature_id === null || this.saving) return;
 

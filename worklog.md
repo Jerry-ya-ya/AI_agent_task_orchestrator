@@ -125,3 +125,7 @@
 - Persist the selected Feature project and per-project zoom multiplier across page and app reloads.
 
 - Keep visible Feature branch labels pinned to the graph's left edge while vertically tracking their lanes.
+
+## 2026/09/15
+
+- Add fan-out Feature branch actions for task creation and safely resetting local branch pointers to main.

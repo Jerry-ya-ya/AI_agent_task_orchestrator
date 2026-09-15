@@ -653,6 +653,39 @@ export class GitService {
     return { currentBranch, localBranches, primaryBranch, primaryCommits, branchRelations };
   }
 
+  /** Moves a configured local Feature branch to the current main commit without running arbitrary input. */
+  public async resetFeatureBranchToMain(repositoryPath: string, featureBranch: string): Promise<void> {
+    const repositoryRoot = await this.validateRepository(repositoryPath);
+    await this.requireCleanCheckout(repositoryRoot);
+    const current = await this.currentBranch(repositoryRoot);
+
+    if (current !== 'main') {
+      throw new ConflictError(
+        `Repository must be on main before resetting ${featureBranch}; it is on ${current}.`,
+      );
+    }
+    if (!featureBranch.startsWith('feature/')) {
+      throw new ConflictError(`Feature branch is not managed by the orchestrator: ${featureBranch}`);
+    }
+    if (!await this.localBranchExists(repositoryRoot, featureBranch)) {
+      throw new ConflictError(`Feature branch does not exist locally: ${featureBranch}`);
+    }
+
+    const mainCommit = await this.currentCommit(repositoryRoot);
+    const reset = await this.runGit(
+      repositoryRoot,
+      ['branch', '--force', featureBranch, mainCommit],
+      undefined,
+      true,
+    );
+    if (reset.exitCode !== 0) {
+      throw new GitCommandError(
+        `Unable to reset Feature branch ${featureBranch} to main: ${formatFailure(reset)}`,
+        reset,
+      );
+    }
+  }
+
   /** Removes a task branch after merge verification, or force-removes explicitly rejected work. */
   public async removeTaskBranch(
     repositoryPath: string,

@@ -98,4 +98,23 @@ describe('FeatureService', () => {
       .rejects.toThrow('Repository must be on main before configuring a Feature; it is on feature/task.');
     expect(features.list(project.id)).toEqual([]);
   });
+
+  it('resets a configured Feature branch through its owning Project repository', async () => {
+    const projects = new ProjectRepository(database);
+    const features = new FeatureRepository(database);
+    const tasks = new TaskRepository(database, new TaskRunRepository(database));
+    const project = projects.create({ name: 'Example', repository_path: '/example', context: '' });
+    const feature = features.create({ project_id: project.id, name: 'Search' }, 'feature/search', 'main');
+    const resetFeatureBranchToMain = vi.fn(async () => undefined);
+    const service = new FeatureService(
+      features,
+      projects,
+      tasks,
+      { resetFeatureBranchToMain } as unknown as GitService,
+    );
+
+    await expect(service.resetBranchToMain(feature.id)).resolves.toEqual(feature);
+    expect(resetFeatureBranchToMain).toHaveBeenCalledWith('/example', 'feature/search');
+    await expect(service.resetBranchToMain(999)).rejects.toThrow('Feature 999 was not found.');
+  });
 });

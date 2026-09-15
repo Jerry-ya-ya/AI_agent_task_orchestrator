@@ -22,6 +22,8 @@ const COMMIT_GAP = 190;
 const FIRST_BRANCH_Y = 220;
 const BRANCH_GAP = 152;
 const STICKY_BRANCH_LABEL_X = 86;
+const BRANCH_ACTION_GAP = 122;
+const BRANCH_ACTION_FAN_Y = 42;
 const INITIAL_ZOOM = 0.88;
 const INITIAL_PAN: cytoscape.Position = { x: 24, y: 30 };
 const ZOOM_SENSITIVITIES = [1, 2, 3] as const;
@@ -50,6 +52,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
 
   @Input({ required: true })
   set map(value: ProjectBranchMap) {
+    if (this.projectMap?.project.id !== value.project.id) this.expandedFeatureId = null;
     this.projectMap = value;
     this.zoomSensitivity = this.readZoomSensitivity(value.project.id);
   }
@@ -59,6 +62,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   @Input({ required: true }) lanes: readonly BranchLane[] = [];
   @Output() taskOpened = new EventEmitter<number>();
   @Output() taskCreationRequested = new EventEmitter<number>();
+  @Output() branchResetRequested = new EventEmitter<number>();
   @ViewChild('graphHost', { static: true }) private graphHost!: ElementRef<HTMLDivElement>;
 
   graphReady = false;
@@ -69,6 +73,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   private renderVersion = 0;
   private requestedSignature: string | null = null;
   private renderedProjectId: number | null = null;
+  private expandedFeatureId: number | null = null;
 
   ngAfterViewInit(): void {
     this.viewReady = true;
@@ -195,20 +200,49 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       });
 
       if (lane.feature !== null) {
-        const addTaskId = `branch:${laneIndex}:add-task`;
-        elements.push(this.node(addTaskId, forkX + ((lane.tasks.length + 1) * COMMIT_GAP), y, {
+        const featureId = lane.feature.id;
+        const actionX = forkX + ((lane.tasks.length + 1) * COMMIT_GAP);
+        const actionMenuId = `branch:${laneIndex}:actions`;
+        const collapsedClass = this.expandedFeatureId === featureId ? '' : ' branch-action-collapsed';
+        elements.push(this.node(actionMenuId, actionX, y, {
           label: '+',
-          subtitle: 'Add task',
-          featureId: lane.feature.id,
+          subtitle: 'Branch actions',
+          featureId,
           color,
-        }, `add-task${missingClass}`));
+        }, `branch-actions${missingClass}`));
         elements.push(this.edge(
-          `add-task-edge:${laneIndex}`,
+          `branch-actions-edge:${laneIndex}`,
           previousId,
-          addTaskId,
+          actionMenuId,
           color,
           `branch-edge${missingClass}`,
         ));
+
+        const addTaskId = `branch:${laneIndex}:action:add-task`;
+        elements.push(this.node(addTaskId, actionX + BRANCH_ACTION_GAP, y - BRANCH_ACTION_FAN_Y, {
+          label: '+ Task',
+          subtitle: 'Create task',
+          featureId,
+          color,
+        }, `branch-action-option branch-action-add branch-action-menu-item${collapsedClass}${missingClass}`));
+        elements.push(this.edge(
+          `branch-action-edge:${laneIndex}:add-task`, actionMenuId, addTaskId, color,
+          `branch-action-fan branch-action-menu-item${collapsedClass}${missingClass}`, { featureId },
+        ));
+
+        if (lane.exists) {
+          const resetBranchId = `branch:${laneIndex}:action:reset-main`;
+          elements.push(this.node(resetBranchId, actionX + BRANCH_ACTION_GAP, y + BRANCH_ACTION_FAN_Y, {
+            label: '↺ main',
+            subtitle: 'Reset branch pointer',
+            featureId,
+            color,
+          }, `branch-action-option branch-action-reset branch-action-menu-item${collapsedClass}`));
+          elements.push(this.edge(
+            `branch-action-edge:${laneIndex}:reset-main`, actionMenuId, resetBranchId, color,
+            `branch-action-fan branch-action-menu-item${collapsedClass}`, { featureId },
+          ));
+        }
       }
     });
 
@@ -250,6 +284,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     this.renderedProjectId = this.map.project.id;
     this.graphReady = true;
     this.syncBranchLabels();
+    this.syncBranchActionVisibility();
     this.graph.on('pan zoom', () => {
       this.saveViewport();
       this.syncBranchLabels();
@@ -258,14 +293,26 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       const taskId = Number(event.target.data('taskId'));
       if (Number.isInteger(taskId)) this.taskOpened.emit(taskId);
     });
-    this.graph.on('tap', 'node.add-task', (event) => {
+    this.graph.on('tap', 'node.branch-actions', (event) => {
       const featureId = Number(event.target.data('featureId'));
-      if (Number.isInteger(featureId)) this.taskCreationRequested.emit(featureId);
+      if (Number.isInteger(featureId)) this.toggleBranchActions(featureId);
     });
-    this.graph.on('mouseover', 'node.task, node.add-task', () => {
+    this.graph.on('tap', 'node.branch-action-add', (event) => {
+      const featureId = Number(event.target.data('featureId'));
+      if (!Number.isInteger(featureId)) return;
+      this.toggleBranchActions(featureId, false);
+      this.taskCreationRequested.emit(featureId);
+    });
+    this.graph.on('tap', 'node.branch-action-reset', (event) => {
+      const featureId = Number(event.target.data('featureId'));
+      if (!Number.isInteger(featureId)) return;
+      this.toggleBranchActions(featureId, false);
+      this.branchResetRequested.emit(featureId);
+    });
+    this.graph.on('mouseover', 'node.task, node.branch-actions, node.branch-action-option', () => {
       this.graphHost.nativeElement.style.cursor = 'pointer';
     });
-    this.graph.on('mouseout', 'node.task, node.add-task', () => {
+    this.graph.on('mouseout', 'node.task, node.branch-actions, node.branch-action-option', () => {
       this.graphHost.nativeElement.style.cursor = 'grab';
     });
   }
@@ -286,6 +333,20 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     const modelX = (STICKY_BRANCH_LABEL_X - pan.x) / zoom;
     this.graph.nodes('node.branch-label').forEach((label) => {
       label.position('x', modelX);
+    });
+  }
+
+  private toggleBranchActions(featureId: number, expanded?: boolean): void {
+    const shouldExpand = expanded ?? this.expandedFeatureId !== featureId;
+    this.expandedFeatureId = shouldExpand ? featureId : null;
+    this.syncBranchActionVisibility();
+  }
+
+  private syncBranchActionVisibility(): void {
+    if (this.graph === null) return;
+    this.graph.elements('.branch-action-menu-item').forEach((element) => {
+      const visible = Number(element.data('featureId')) === this.expandedFeatureId;
+      element.toggleClass('branch-action-collapsed', !visible);
     });
   }
 
@@ -338,10 +399,18 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       { selector: 'node.current', style: { 'border-width': 5 } },
       { selector: 'node.fork', style: { width: 16, height: 16, 'font-size': 8, 'text-max-width': '135px' } },
       { selector: 'node.task', style: { width: 19, height: 19 } },
-      { selector: 'node.add-task', style: {
+      { selector: 'node.branch-actions', style: {
         width: 30, height: 30, 'background-color': '#ffffff', 'border-width': 2,
         'font-size': 22, 'font-weight': 500, 'text-valign': 'center', 'text-margin-y': 0,
-        'text-max-width': '80px',
+        'text-max-width': '90px',
+      } },
+      { selector: 'node.branch-action-option', style: {
+        shape: 'round-rectangle', width: 88, height: 30, 'background-color': '#ffffff',
+        'border-width': 2, 'font-size': 9, 'font-weight': 650, 'text-valign': 'center',
+        'text-margin-y': 0, 'text-max-width': '78px',
+      } },
+      { selector: 'node.branch-action-reset', style: {
+        'border-color': '#c46d35', color: '#92502a',
       } },
       { selector: 'node.status-done', style: { 'border-color': '#29966a', 'background-color': '#dff4e9' } },
       { selector: 'node.status-failed', style: { 'border-color': '#c84545', 'background-color': '#fae2e2' } },
@@ -359,6 +428,8 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       { selector: 'edge.fork-edge', style: {
         'curve-style': 'taxi', 'taxi-direction': 'downward', 'taxi-turn': '50%',
       } },
+      { selector: 'edge.branch-action-fan', style: { width: 2, 'curve-style': 'bezier' } },
+      { selector: '.branch-action-collapsed', style: { display: 'none' } },
       { selector: 'edge.missing', style: { 'line-color': '#9ba1a8', opacity: 0.38 } },
       { selector: 'node:selected', style: { 'overlay-color': '#3977d4', 'overlay-opacity': 0.12, 'overlay-padding': 8 } },
     ];
@@ -374,8 +445,15 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     return { data: { id, ...data }, position: { x, y }, classes, grabbable: false, pannable: true };
   }
 
-  private edge(id: string, source: string, target: string, color: string, classes: string): cytoscape.EdgeDefinition {
-    return { data: { id, source, target, color }, classes };
+  private edge(
+    id: string,
+    source: string,
+    target: string,
+    color: string,
+    classes: string,
+    extraData: Record<string, string | number> = {},
+  ): cytoscape.EdgeDefinition {
+    return { data: { id, source, target, color, ...extraData }, classes };
   }
 
   private primaryNodeId(sha: string): string {

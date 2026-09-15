@@ -58,6 +58,15 @@ export class FeatureService {
     this.features.saveBranchOrder(projectId, branchNames);
   }
 
+  public async resetBranchToMain(featureId: number): Promise<Feature> {
+    const feature = this.features.findById(featureId);
+    if (feature === null) throw new NotFoundError(`Feature ${featureId} was not found.`);
+    const project = this.projects.findById(feature.project_id);
+    if (project === null) throw new NotFoundError(`Project ${feature.project_id} was not found.`);
+    await this.git.resetFeatureBranchToMain(project.repository_path, feature.branch_name);
+    return feature;
+  }
+
   public async branchMap(): Promise<ProjectBranchMap[]> {
     const allTasks = this.tasks.list();
     const allFeatures = this.features.list();
