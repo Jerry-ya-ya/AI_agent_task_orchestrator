@@ -36,6 +36,8 @@ export class FeatureMapComponent {
   @Output() createTask = new EventEmitter<number>();
   @Output() resetBranch = new EventEmitter<number>();
   @Output() resetAllBranches = new EventEmitter<number>();
+  @Output() deleteGitBranch = new EventEmitter<number>();
+  @Output() deleteDatabaseBranch = new EventEmitter<number>();
   @Output() branchOrderChanged = new EventEmitter<{ projectId: number; branchNames: string[] }>();
 
   branchColor(index: number): string {

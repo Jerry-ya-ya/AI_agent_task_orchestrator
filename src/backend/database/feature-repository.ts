@@ -72,4 +72,19 @@ export class FeatureRepository {
     const now = this.clock();
     this.database.transaction(() => featureIds.forEach((featureId) => update.run(now, featureId)));
   }
+
+  public delete(id: number): { deleted: boolean; detachedTaskCount: number } {
+    return this.database.transaction(() => {
+      const feature = this.findById(id);
+      if (feature === null) return { deleted: false, detachedTaskCount: 0 };
+      const taskCount = this.database.connection.prepare(
+        'SELECT COUNT(*) AS count FROM tasks WHERE feature_id = ?',
+      ).get(id) as { count: number };
+      this.database.connection.prepare(
+        'DELETE FROM branch_display_order WHERE project_id = ? AND branch_name = ?',
+      ).run(feature.project_id, feature.branch_name);
+      const removed = this.database.connection.prepare('DELETE FROM features WHERE id = ?').run(id);
+      return { deleted: removed.changes > 0, detachedTaskCount: taskCount.count };
+    });
+  }
 }

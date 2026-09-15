@@ -23,7 +23,9 @@ const FIRST_BRANCH_Y = 220;
 const BRANCH_GAP = 152;
 const STICKY_BRANCH_LABEL_X = 86;
 const BRANCH_ACTION_GAP = 122;
-const BRANCH_ACTION_FAN_Y = 42;
+const BRANCH_ACTION_FAN_Y = 56;
+const BRANCH_DELETE_ACTION_GAP = 116;
+const BRANCH_DELETE_ACTION_FAN_Y = 24;
 const INITIAL_ZOOM = 0.88;
 const INITIAL_PAN: cytoscape.Position = { x: 24, y: 30 };
 const ZOOM_SENSITIVITIES = [1, 2, 3] as const;
@@ -53,7 +55,10 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
 
   @Input({ required: true })
   set map(value: ProjectBranchMap) {
-    if (this.projectMap?.project.id !== value.project.id) this.expandedFeatureId = null;
+    if (this.projectMap?.project.id !== value.project.id) {
+      this.expandedFeatureId = null;
+      this.expandedDeleteFeatureId = null;
+    }
     this.projectMap = value;
     this.zoomSensitivity = this.readZoomSensitivity(value.project.id);
   }
@@ -64,6 +69,8 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   @Output() taskOpened = new EventEmitter<number>();
   @Output() taskCreationRequested = new EventEmitter<number>();
   @Output() branchResetRequested = new EventEmitter<number>();
+  @Output() gitBranchDeleteRequested = new EventEmitter<number>();
+  @Output() databaseBranchDeleteRequested = new EventEmitter<number>();
   @Output() allBranchesResetRequested = new EventEmitter<number>();
   @ViewChild('graphHost', { static: true }) private graphHost!: ElementRef<HTMLDivElement>;
 
@@ -76,6 +83,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   private requestedSignature: string | null = null;
   private renderedProjectId: number | null = null;
   private expandedFeatureId: number | null = null;
+  private expandedDeleteFeatureId: number | null = null;
 
   ngAfterViewInit(): void {
     this.viewReady = true;
@@ -234,6 +242,9 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       if (lane.feature !== null) {
         const featureId = lane.feature.id;
         const collapsedClass = this.expandedFeatureId === featureId ? '' : ' branch-action-collapsed';
+        const deleteCollapsedClass = this.expandedDeleteFeatureId === featureId
+          ? ''
+          : ' branch-action-collapsed';
 
         const addTaskId = `branch:${laneIndex}:action:add-task`;
         elements.push(this.node(addTaskId, pointerX + BRANCH_ACTION_GAP, y - BRANCH_ACTION_FAN_Y, {
@@ -250,7 +261,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
         if (lane.exists) {
           const resetBlocked = this.laneHasProtectedPointerTasks(lane);
           const resetBranchId = `branch:${laneIndex}:action:reset-main`;
-          elements.push(this.node(resetBranchId, pointerX + BRANCH_ACTION_GAP, y + BRANCH_ACTION_FAN_Y, {
+          elements.push(this.node(resetBranchId, pointerX + BRANCH_ACTION_GAP, y, {
             label: resetBlocked ? 'Review locked' : '↺ main',
             subtitle: resetBlocked ? 'Finish Review or pending push first' : 'Reset branch pointer',
             featureId,
@@ -262,6 +273,58 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
             `branch-action-fan branch-action-menu-item${collapsedClass}`, { featureId },
           ));
         }
+
+        const deleteMenuId = `branch:${laneIndex}:action:delete`;
+        const deleteMenuX = pointerX + BRANCH_ACTION_GAP;
+        const deleteMenuY = y + BRANCH_ACTION_FAN_Y;
+        elements.push(this.node(deleteMenuId, deleteMenuX, deleteMenuY, {
+          label: 'Delete ›',
+          subtitle: 'Branch deletion options',
+          featureId,
+          color,
+        }, `branch-action-option branch-action-delete-menu branch-action-menu-item${collapsedClass}${missingClass}`));
+        elements.push(this.edge(
+          `branch-action-edge:${laneIndex}:delete`, pointerId, deleteMenuId, color,
+          `branch-action-fan branch-action-menu-item${collapsedClass}${missingClass}`, { featureId },
+        ));
+
+        const deleteGitId = `branch:${laneIndex}:action:delete-git`;
+        const gitDeleteDisabled = lane.exists ? 0 : 1;
+        elements.push(this.node(
+          deleteGitId,
+          deleteMenuX + BRANCH_DELETE_ACTION_GAP,
+          deleteMenuY - BRANCH_DELETE_ACTION_FAN_Y,
+          {
+            label: lane.exists ? 'Delete Git' : 'Git missing',
+            subtitle: lane.exists ? 'Keep Feature and task history' : 'Local branch already absent',
+            featureId,
+            deleteDisabled: gitDeleteDisabled,
+            color,
+          },
+          `branch-action-option branch-action-delete-git branch-delete-menu-item${gitDeleteDisabled ? ' branch-action-disabled' : ''}${deleteCollapsedClass}${missingClass}`,
+        ));
+        elements.push(this.edge(
+          `branch-delete-edge:${laneIndex}:git`, deleteMenuId, deleteGitId, color,
+          `branch-action-fan branch-delete-menu-item${deleteCollapsedClass}${missingClass}`, { featureId },
+        ));
+
+        const deleteDatabaseId = `branch:${laneIndex}:action:delete-database`;
+        elements.push(this.node(
+          deleteDatabaseId,
+          deleteMenuX + BRANCH_DELETE_ACTION_GAP,
+          deleteMenuY + BRANCH_DELETE_ACTION_FAN_Y,
+          {
+            label: 'Delete both',
+            subtitle: 'Remove Git and Feature record',
+            featureId,
+            color,
+          },
+          `branch-action-option branch-action-delete-database branch-delete-menu-item${deleteCollapsedClass}${missingClass}`,
+        ));
+        elements.push(this.edge(
+          `branch-delete-edge:${laneIndex}:database`, deleteMenuId, deleteDatabaseId, color,
+          `branch-action-fan branch-delete-menu-item${deleteCollapsedClass}${missingClass}`, { featureId },
+        ));
       }
     });
 
@@ -328,6 +391,22 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       this.toggleBranchActions(featureId, false);
       this.branchResetRequested.emit(featureId);
     });
+    this.graph.on('tap', 'node.branch-action-delete-menu', (event) => {
+      const featureId = Number(event.target.data('featureId'));
+      if (Number.isInteger(featureId)) this.toggleDeleteActions(featureId);
+    });
+    this.graph.on('tap', 'node.branch-action-delete-git', (event) => {
+      const featureId = Number(event.target.data('featureId'));
+      if (!Number.isInteger(featureId) || Number(event.target.data('deleteDisabled')) === 1) return;
+      this.toggleBranchActions(featureId, false);
+      this.gitBranchDeleteRequested.emit(featureId);
+    });
+    this.graph.on('tap', 'node.branch-action-delete-database', (event) => {
+      const featureId = Number(event.target.data('featureId'));
+      if (!Number.isInteger(featureId)) return;
+      this.toggleBranchActions(featureId, false);
+      this.databaseBranchDeleteRequested.emit(featureId);
+    });
     this.graph.on('mouseover', 'node.task, node.branch-actions, node.branch-action-option', () => {
       this.graphHost.nativeElement.style.cursor = 'pointer';
     });
@@ -358,6 +437,12 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   private toggleBranchActions(featureId: number, expanded?: boolean): void {
     const shouldExpand = expanded ?? this.expandedFeatureId !== featureId;
     this.expandedFeatureId = shouldExpand ? featureId : null;
+    if (!shouldExpand || this.expandedDeleteFeatureId !== featureId) this.expandedDeleteFeatureId = null;
+    this.syncBranchActionVisibility();
+  }
+
+  private toggleDeleteActions(featureId: number): void {
+    this.expandedDeleteFeatureId = this.expandedDeleteFeatureId === featureId ? null : featureId;
     this.syncBranchActionVisibility();
   }
 
@@ -365,6 +450,10 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     if (this.graph === null) return;
     this.graph.elements('.branch-action-menu-item').forEach((element) => {
       const visible = Number(element.data('featureId')) === this.expandedFeatureId;
+      element.toggleClass('branch-action-collapsed', !visible);
+    });
+    this.graph.elements('.branch-delete-menu-item').forEach((element) => {
+      const visible = Number(element.data('featureId')) === this.expandedDeleteFeatureId;
       element.toggleClass('branch-action-collapsed', !visible);
     });
   }
@@ -433,6 +522,12 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       } },
       { selector: 'node.branch-action-reset', style: {
         'border-color': '#c46d35', color: '#92502a',
+      } },
+      { selector: 'node.branch-action-delete-menu, node.branch-action-delete-git', style: {
+        'border-color': '#c84545', color: '#a62f35',
+      } },
+      { selector: 'node.branch-action-delete-database', style: {
+        'border-color': '#9f1f27', 'background-color': '#fff3f3', color: '#8f1820',
       } },
       { selector: 'node.branch-action-disabled', style: {
         'border-color': '#aeb5bd', 'background-color': '#f1f3f5', color: '#777f87', opacity: 0.72,

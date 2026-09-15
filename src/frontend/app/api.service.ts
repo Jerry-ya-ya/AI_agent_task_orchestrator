@@ -95,6 +95,22 @@ export class ApiService {
     return this.http.post<Feature>(`${this.baseUrl}/features/${featureId}/reset-to-main`, {});
   }
 
+  deleteFeatureGitBranch(featureId: number): Observable<{ git_branch_deleted: boolean }> {
+    return this.http.delete<{ git_branch_deleted: boolean }>(`${this.baseUrl}/features/${featureId}/git-branch`);
+  }
+
+  deleteFeature(featureId: number): Observable<{
+    git_branch_deleted: boolean;
+    database_branch_deleted: boolean;
+    detached_task_count: number;
+  }> {
+    return this.http.delete<{
+      git_branch_deleted: boolean;
+      database_branch_deleted: boolean;
+      detached_task_count: number;
+    }>(`${this.baseUrl}/features/${featureId}`);
+  }
+
   resetProjectBranchesToMain(projectId: number): Observable<{ reset_count: number }> {
     return this.http.post<{ reset_count: number }>(`${this.baseUrl}/projects/${projectId}/features/reset-to-main`, {});
   }

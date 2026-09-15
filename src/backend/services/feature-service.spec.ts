@@ -143,6 +143,42 @@ describe('FeatureService', () => {
     await expect(service.resetBranchToMain(999)).rejects.toThrow('Feature 999 was not found.');
   });
 
+  it('deletes only the Git branch or removes the Feature while preserving task history', async () => {
+    const projects = new ProjectRepository(database);
+    const features = new FeatureRepository(database);
+    const runs = new TaskRunRepository(database);
+    const tasks = new TaskRepository(database, runs);
+    const project = projects.create({ name: 'Cleanup', repository_path: '/cleanup', context: '' });
+    const feature = features.create({ project_id: project.id, name: 'Search' }, 'feature/search', 'main');
+    const task = tasks.create({
+      project_id: project.id, feature_id: feature.id, title: 'Keep history', description: '', priority: 'MEDIUM',
+    });
+    const run = runs.create(task.id);
+    features.saveBranchOrder(project.id, [feature.branch_name]);
+    const removeFeatureBranch = vi.fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const service = new FeatureService(
+      features, projects, tasks, { removeFeatureBranch } as unknown as GitService,
+    );
+
+    await expect(service.deleteGitBranch(feature.id)).resolves.toEqual({ git_branch_deleted: true });
+    expect(features.findById(feature.id)).not.toBeNull();
+    expect(tasks.findById(task.id)?.feature_id).toBe(feature.id);
+
+    await expect(service.deleteFeature(feature.id)).resolves.toEqual({
+      git_branch_deleted: false,
+      database_branch_deleted: true,
+      detached_task_count: 1,
+    });
+    expect(removeFeatureBranch).toHaveBeenNthCalledWith(1, '/cleanup', 'feature/search');
+    expect(removeFeatureBranch).toHaveBeenNthCalledWith(2, '/cleanup', 'feature/search');
+    expect(features.findById(feature.id)).toBeNull();
+    expect(features.branchOrder(project.id).has(feature.branch_name)).toBe(false);
+    expect(tasks.findById(task.id)).toMatchObject({ id: task.id, feature_id: null });
+    expect(runs.findById(run.id)).toMatchObject({ id: run.id, task_id: task.id });
+  });
+
   it('infers the reset boundary for branches already pointing at the latest main commit', async () => {
     const projects = new ProjectRepository(database);
     const features = new FeatureRepository(database);

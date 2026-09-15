@@ -171,6 +171,55 @@ describe('backend API', () => {
     });
   }, 20_000);
 
+  it('deletes a Feature Git branch separately from its database configuration and task history', async () => {
+    await writeFile(path.join(repositoryPath, 'README.md'), 'main\n');
+    execFileSync('git', ['-C', repositoryPath, 'add', 'README.md'], { windowsHide: true, stdio: 'pipe' });
+    execFileSync('git', [
+      '-C', repositoryPath,
+      '-c', 'user.name=Test User',
+      '-c', 'user.email=test@example.invalid',
+      'commit', '-m', 'initial',
+    ], { windowsHide: true, stdio: 'pipe' });
+    const project = await request(app).post('/projects').send({
+      name: 'Delete project', repository_path: repositoryPath,
+    }).expect(201);
+    const feature = await request(app).post('/features').send({
+      project_id: project.body.id, name: 'Disposable Feature',
+    }).expect(201);
+    execFileSync('git', ['-C', repositoryPath, 'branch', feature.body.branch_name, 'main'], {
+      windowsHide: true, stdio: 'pipe',
+    });
+    const task = await request(app).post('/tasks').send({
+      project_id: project.body.id,
+      feature_id: feature.body.id,
+      title: 'Preserved task',
+      description: '',
+    }).expect(201);
+
+    await request(app).delete(`/features/${feature.body.id}/git-branch`).expect(200, {
+      git_branch_deleted: true,
+    });
+    expect(() => execFileSync('git', [
+      '-C', repositoryPath, 'show-ref', '--verify', `refs/heads/${feature.body.branch_name}`,
+    ], { windowsHide: true, stdio: 'pipe' })).toThrow();
+    await request(app).get('/branches').expect(200).expect((response) => {
+      const lane = response.body[0].branches.find((item: { name: string }) => item.name === feature.body.branch_name);
+      expect(lane).toMatchObject({ exists: false, feature: { id: feature.body.id } });
+    });
+
+    execFileSync('git', ['-C', repositoryPath, 'branch', feature.body.branch_name, 'main'], {
+      windowsHide: true, stdio: 'pipe',
+    });
+    await request(app).delete(`/features/${feature.body.id}`).expect(200, {
+      git_branch_deleted: true,
+      database_branch_deleted: true,
+      detached_task_count: 1,
+    });
+    await request(app).get('/features').expect(200, []);
+    await request(app).get(`/tasks/${task.body.id}`).expect(200)
+      .expect((response) => expect(response.body).toMatchObject({ id: task.body.id, feature_id: null }));
+  }, 20_000);
+
   it('pauses and resumes Worker task claiming through explicit endpoints', async () => {
     await request(app).post('/worker/pause').send({}).expect(200)
       .expect((response) => expect(response.body).toMatchObject({ running: true, paused: true }));

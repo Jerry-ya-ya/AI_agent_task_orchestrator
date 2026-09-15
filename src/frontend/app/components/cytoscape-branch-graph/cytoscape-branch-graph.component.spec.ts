@@ -47,6 +47,9 @@ describe('CytoscapeBranchGraphComponent', () => {
     const actionMenu = model.elements.find((element) => element.data.id === 'branch:0:pointer');
     const addTask = model.elements.find((element) => element.data.id === 'branch:0:action:add-task');
     const resetBranch = model.elements.find((element) => element.data.id === 'branch:0:action:reset-main');
+    const deleteMenu = model.elements.find((element) => element.data.id === 'branch:0:action:delete');
+    const deleteGit = model.elements.find((element) => element.data.id === 'branch:0:action:delete-git');
+    const deleteDatabase = model.elements.find((element) => element.data.id === 'branch:0:action:delete-database');
     const pointerEdge = model.elements.find((element) => element.data.id === 'pointer-edge:0');
 
     expect(featureCommit).toMatchObject({
@@ -65,14 +68,22 @@ describe('CytoscapeBranchGraphComponent', () => {
     });
     expect(addTask).toMatchObject({
       data: { label: '+ Task', subtitle: 'Create task', featureId: 7, color: '#3977d4' },
-      position: { x: 1132, y: 178 },
+      position: { x: 1132, y: 164 },
     });
     expect(String(addTask?.classes)).toContain('branch-action-collapsed');
     expect(resetBranch).toMatchObject({
       data: { label: '↺ main', subtitle: 'Reset branch pointer', featureId: 7, color: '#3977d4' },
-      position: { x: 1132, y: 262 },
+      position: { x: 1132, y: 220 },
     });
     expect(String(resetBranch?.classes)).toContain('branch-action-collapsed');
+    expect(deleteMenu).toMatchObject({
+      data: { label: 'Delete ›', featureId: 7 },
+      position: { x: 1132, y: 276 },
+    });
+    expect(deleteGit).toMatchObject({ position: { x: 1248, y: 252 } });
+    expect(deleteDatabase).toMatchObject({ position: { x: 1248, y: 300 } });
+    expect(String(deleteGit?.classes)).toContain('branch-action-collapsed');
+    expect(String(deleteDatabase?.classes)).toContain('branch-action-collapsed');
     expect(pointerEdge).toMatchObject({ data: { source: 'branch:0:task:3', target: 'branch:0:pointer' } });
     expect(model.elements.find((element) => element.data.id === 'branch:0:task:1')?.position).toEqual({ x: 440, y: 220 });
     expect(model.elements.find((element) => element.data.id === 'branch:0:task:3')?.position).toEqual({ x: 820, y: 220 });
@@ -82,8 +93,15 @@ describe('CytoscapeBranchGraphComponent', () => {
     const expandedActions = expandedModel.elements.filter((element) =>
       String(element.classes).includes('branch-action-menu-item'),
     );
-    expect(expandedActions.length).toBe(4);
+    expect(expandedActions.length).toBe(6);
     expect(expandedActions.every((element) => !String(element.classes).includes('branch-action-collapsed'))).toBe(true);
+
+    (component as unknown as { toggleDeleteActions(featureId: number): void }).toggleDeleteActions(7);
+    const deleteActions = component.graphModel().elements.filter((element) =>
+      String(element.classes).includes('branch-delete-menu-item'),
+    );
+    expect(deleteActions.length).toBe(4);
+    expect(deleteActions.every((element) => !String(element.classes).includes('branch-action-collapsed'))).toBe(true);
   });
 
   it('renders a missing branch as a monochrome Cytoscape lane', () => {

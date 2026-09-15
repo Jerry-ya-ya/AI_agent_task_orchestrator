@@ -173,6 +173,23 @@ describe('GitService', () => {
     }
   });
 
+  it('force-removes only orchestrator-managed local Feature branches from main', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const service = new GitService(runner);
+    const task = { ...exampleTask(), feature_id: 1, branch_name: 'feature/delete-me', base_branch: 'main' };
+    const prepared = await service.prepareBranch(task, repository);
+    await writeFile(path.join(repository, 'unpublished.txt'), 'unpublished\n');
+    await service.completeBranch(prepared, task.id, 'feat: add unpublished work.');
+
+    await expect(service.removeFeatureBranch(repository, task.branch_name)).resolves.toBe(true);
+    expect(await gitExitCode(runner, repository, ['show-ref', '--verify', '--quiet', `refs/heads/${task.branch_name}`]))
+      .toBe(1);
+    await expect(service.removeFeatureBranch(repository, task.branch_name)).resolves.toBe(false);
+    await expect(service.removeFeatureBranch(repository, 'main')).rejects.toThrow(
+      'Feature branch is not managed by the orchestrator',
+    );
+  });
+
   it('publishes an approved task branch to its base branch and origin', async () => {
     const { repository, runner } = await temporaryRepository();
     const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-remote-'));

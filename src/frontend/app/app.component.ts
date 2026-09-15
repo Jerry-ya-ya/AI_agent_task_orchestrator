@@ -484,6 +484,64 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  async deleteFeatureGitBranch(featureId: number): Promise<void> {
+    const feature = this.features.find((item) => item.id === featureId);
+    if (feature === undefined || this.saving) return;
+    const taskCount = this.tasks.filter((task) => task.feature_id === feature.id).length;
+    const confirmed = window.confirm(
+      `Delete the local Git branch ${feature.branch_name}?\n\n` +
+      `The Feature and its ${taskCount} task${taskCount === 1 ? '' : 's'} will stay in the Taskboard. ` +
+      'The branch will appear in monochrome and no remote branch will be deleted.',
+    );
+    if (!confirmed) return;
+
+    this.saving = true;
+    this.clearError();
+    try {
+      const result = await firstValueFrom(this.api.deleteFeatureGitBranch(feature.id));
+      this.showNotice(result.git_branch_deleted
+        ? `${feature.branch_name} was deleted from the local Git repository.`
+        : `${feature.branch_name} was already absent from the local Git repository.`);
+      await this.refreshBranchMap();
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+      await this.refreshBranchMap();
+    } finally {
+      this.saving = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  async deleteFeatureDatabaseBranch(featureId: number): Promise<void> {
+    const feature = this.features.find((item) => item.id === featureId);
+    if (feature === undefined || this.saving) return;
+    const taskCount = this.tasks.filter((task) => task.feature_id === feature.id).length;
+    const confirmed = window.confirm(
+      `Delete ${feature.name} from Git and the Taskboard branch list?\n\n` +
+      `The local branch ${feature.branch_name} and its Feature configuration will be removed. ` +
+      `${taskCount} existing task${taskCount === 1 ? '' : 's'} and their run history will be preserved without this Feature association. ` +
+      'No remote branch will be deleted.',
+    );
+    if (!confirmed) return;
+
+    this.saving = true;
+    this.clearError();
+    try {
+      const result = await firstValueFrom(this.api.deleteFeature(feature.id));
+      this.showNotice(
+        `${feature.name} was removed from the branch list; ${result.detached_task_count} task` +
+        `${result.detached_task_count === 1 ? '' : 's'} were preserved.`,
+      );
+      await this.refreshBoard(false);
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+      await this.refreshBranchMap();
+    } finally {
+      this.saving = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
   async saveTask(): Promise<void> {
     if (this.taskDraft.project_id === null || this.taskDraft.feature_id === null || this.saving) return;
 

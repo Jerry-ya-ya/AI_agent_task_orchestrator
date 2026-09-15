@@ -135,3 +135,5 @@
 - Render main commits chronologically and preserve pointer reset checkpoints in rightmost HEAD-anchored branch histories.
 
 - Detach dragged navigation pages into secure Electron windows after crossing the sidebar threshold.
+
+- Add confirmed hierarchical Feature branch deletion controls that remove local Git refs or Feature records while preserving task history.

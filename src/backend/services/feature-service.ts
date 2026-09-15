@@ -87,6 +87,28 @@ export class FeatureService {
     return { reset_count: resettableFeatures.length };
   }
 
+  public async deleteGitBranch(featureId: number): Promise<{ git_branch_deleted: boolean }> {
+    const { feature, project } = this.requireFeatureProject(featureId);
+    const gitBranchDeleted = await this.git.removeFeatureBranch(project.repository_path, feature.branch_name);
+    return { git_branch_deleted: gitBranchDeleted };
+  }
+
+  public async deleteFeature(featureId: number): Promise<{
+    git_branch_deleted: boolean;
+    database_branch_deleted: boolean;
+    detached_task_count: number;
+  }> {
+    const { feature, project } = this.requireFeatureProject(featureId);
+    const gitBranchDeleted = await this.git.removeFeatureBranch(project.repository_path, feature.branch_name);
+    const deleted = this.features.delete(feature.id);
+    if (!deleted.deleted) throw new NotFoundError(`Feature ${featureId} was not found.`);
+    return {
+      git_branch_deleted: gitBranchDeleted,
+      database_branch_deleted: true,
+      detached_task_count: deleted.detachedTaskCount,
+    };
+  }
+
   public async branchMap(): Promise<ProjectBranchMap[]> {
     const allTasks = this.tasks.list();
     const allFeatures = this.features.list();
@@ -174,6 +196,17 @@ export class FeatureService {
     throw new ConflictError(
       `Feature branch pointers cannot be reset while Review or pending-push tasks exist: ${details}.`,
     );
+  }
+
+  private requireFeatureProject(featureId: number): {
+    feature: Feature;
+    project: NonNullable<ReturnType<ProjectRepository['findById']>>;
+  } {
+    const feature = this.features.findById(featureId);
+    if (feature === null) throw new NotFoundError(`Feature ${featureId} was not found.`);
+    const project = this.projects.findById(feature.project_id);
+    if (project === null) throw new NotFoundError(`Project ${feature.project_id} was not found.`);
+    return { feature, project };
   }
 }
 

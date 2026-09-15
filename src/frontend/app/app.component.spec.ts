@@ -130,6 +130,40 @@ describe('AppComponent initialization', () => {
     expect(resetProjectBranchesToMain).toHaveBeenCalledWith(project.id);
   });
 
+  it('confirms Git-only and database Feature deletion with distinct preserved-data warnings', async () => {
+    const feature: Feature = {
+      id: 8, project_id: 3, name: 'Search', branch_name: 'feature/search', base_branch: 'main', pointer_reset_task_id: null,
+      created_at: '', updated_at: '',
+    };
+    const api = {
+      baseUrl: 'http://127.0.0.1:4317',
+      deleteFeatureGitBranch: vi.fn(() => of({ git_branch_deleted: true })),
+      deleteFeature: vi.fn(() => of({
+        git_branch_deleted: false, database_branch_deleted: true, detached_task_count: 1,
+      })),
+      getBranchMap: vi.fn(() => of([])),
+    } as unknown as ApiService;
+    const component = new AppComponent(api, { markForCheck: vi.fn() } as unknown as ChangeDetectorRef);
+    component.features = [feature];
+    component.tasks = [exampleTask({ project_id: feature.project_id, feature_id: feature.id })];
+    const refreshBoard = vi.spyOn(
+      component as unknown as { refreshBoard(silent: boolean): Promise<void> },
+      'refreshBoard',
+    ).mockResolvedValue(undefined);
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal('window', { confirm });
+
+    await component.deleteFeatureGitBranch(feature.id);
+    await component.deleteFeatureDatabaseBranch(feature.id);
+
+    expect(confirm).toHaveBeenNthCalledWith(1, expect.stringContaining('will stay in the Taskboard'));
+    expect(confirm).toHaveBeenNthCalledWith(2, expect.stringContaining('run history will be preserved'));
+    expect(api.deleteFeatureGitBranch).toHaveBeenCalledWith(feature.id);
+    expect(api.deleteFeature).toHaveBeenCalledWith(feature.id);
+    expect(api.getBranchMap).toHaveBeenCalledOnce();
+    expect(refreshBoard).toHaveBeenCalledWith(false);
+  });
+
   it('minimizes the Electron window from the title-bar control', () => {
     const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
     const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;

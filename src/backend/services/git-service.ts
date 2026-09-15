@@ -705,6 +705,14 @@ export class GitService {
     }
   }
 
+  /** Force-removes one configured local Feature branch while preserving its database history. */
+  public async removeFeatureBranch(repositoryPath: string, featureBranch: string): Promise<boolean> {
+    if (!featureBranch.startsWith('feature/') || featureBranch.includes('\n') || featureBranch.includes('\r')) {
+      throw new ConflictError(`Feature branch is not managed by the orchestrator: ${featureBranch}`);
+    }
+    return this.removeTaskBranch(repositoryPath, featureBranch, 'main', true);
+  }
+
   /** Removes a task branch after merge verification, or force-removes explicitly rejected work. */
   public async removeTaskBranch(
     repositoryPath: string,
