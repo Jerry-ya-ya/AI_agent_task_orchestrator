@@ -23,6 +23,7 @@ import { ProjectEditorDialogComponent } from './components/project-editor-dialog
 import { RetryReviewDialogComponent } from './components/retry-review-dialog/retry-review-dialog.component';
 import { RetryTaskDialogComponent, type RetryTaskRequest } from './components/retry-task-dialog/retry-task-dialog.component';
 import { ResolveCherryPickDialogComponent } from './components/resolve-cherry-pick-dialog/resolve-cherry-pick-dialog.component';
+import { SettingsPageComponent } from './components/settings-page/settings-page.component';
 import { TaskBoardComponent } from './components/task-board/task-board.component';
 import { TaskDetailDialogComponent } from './components/task-detail-dialog/task-detail-dialog.component';
 import { TaskEditorDialogComponent } from './components/task-editor-dialog/task-editor-dialog.component';
@@ -43,6 +44,7 @@ import {
   TaskDraft,
   WorkerStatus,
 } from './models';
+import { applyTheme, isThemeId, readStoredTheme, storeTheme, THEME_STORAGE_KEY, type ThemeId } from './theme-preferences';
 
 type TaskEditorMode = 'create' | 'edit';
 const WORKER_PAUSED_STORAGE_KEY = 'agentboard.workerPaused';
@@ -79,6 +81,7 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
     RetryReviewDialogComponent,
     ResolveCherryPickDialogComponent,
     TaskDetailDialogComponent,
+    SettingsPageComponent,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
@@ -105,6 +108,7 @@ export class AppComponent implements OnInit, OnDestroy {
   lastUpdated: Date | null = null;
   activePage: AppPage = 'taskboard';
   navigationExpanded = false;
+  selectedTheme: ThemeId = readStoredTheme();
 
   showProjectEditor = false;
   showFeatureEditor = false;
@@ -135,9 +139,24 @@ export class AppComponent implements OnInit, OnDestroy {
   ) {
     this.apiBaseUrl = api.baseUrl;
     const requestedPage = new URLSearchParams(globalThis.location?.search ?? '').get('page');
-    if (requestedPage === 'features' || requestedPage === 'taskboard' || requestedPage === 'history') {
+    if (requestedPage === 'features' || requestedPage === 'taskboard' || requestedPage === 'history' || requestedPage === 'settings') {
       this.activePage = requestedPage;
     }
+    applyTheme(this.selectedTheme);
+  }
+
+  selectTheme(theme: ThemeId): void {
+    this.selectedTheme = theme;
+    applyTheme(theme);
+    storeTheme(theme);
+  }
+
+  @HostListener('window:storage', ['$event'])
+  onThemeStorageChanged(event: StorageEvent): void {
+    if (event.key !== THEME_STORAGE_KEY || !isThemeId(event.newValue)) return;
+    this.selectedTheme = event.newValue;
+    applyTheme(this.selectedTheme);
+    this.changeDetector.markForCheck();
   }
 
   ngOnInit(): void {

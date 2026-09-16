@@ -15,6 +15,30 @@ afterEach(() => {
 });
 
 describe('AppComponent initialization', () => {
+  it('applies a theme choice and synchronizes changes from another window', () => {
+    const values = new Map<string, string>([['agentboard.theme', 'teal']]);
+    const setAttribute = vi.fn();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    });
+    vi.stubGlobal('document', { documentElement: { setAttribute } });
+    const component = new AppComponent(
+      { baseUrl: 'http://127.0.0.1:4317' } as ApiService,
+      { markForCheck: vi.fn() } as unknown as ChangeDetectorRef,
+    );
+
+    expect(component.selectedTheme).toBe('teal');
+    component.selectPage('settings');
+    expect(component.activePage).toBe('settings');
+    component.selectTheme('amber');
+    expect(values.get('agentboard.theme')).toBe('amber');
+    expect(setAttribute).toHaveBeenLastCalledWith('data-theme', 'amber');
+    component.onThemeStorageChanged({ key: 'agentboard.theme', newValue: 'rose' } as StorageEvent);
+    expect(component.selectedTheme).toBe('rose');
+    expect(setAttribute).toHaveBeenLastCalledWith('data-theme', 'rose');
+  });
+
   it('switches between the taskboard and history pages', () => {
     const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
     const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;

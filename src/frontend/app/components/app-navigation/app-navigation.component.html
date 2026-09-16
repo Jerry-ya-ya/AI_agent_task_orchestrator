@@ -74,5 +74,24 @@
       <span class="navigation-label">Task history</span>
       <span class="navigation-count" *ngIf="historyCount > 0">{{ historyCount }}</span>
     </button>
+    <button
+      class="navigation-link navigation-link--settings"
+      type="button"
+      [class.navigation-link--active]="activePage === 'settings'"
+      [class.navigation-link--dragging]="draggingPage === 'settings'"
+      [attr.aria-current]="activePage === 'settings' ? 'page' : null"
+      title="Settings"
+      (click)="selectPage($event, 'settings')"
+      (pointerdown)="beginPageDrag($event, 'settings')"
+      (pointermove)="continuePageDrag($event, 'settings')"
+      (pointerup)="finishPageDrag($event)"
+      (pointercancel)="finishPageDrag($event)"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M10 2.9h4l.6 2.1 1.8.8 2-.9 2.8 2.8-.9 2 .8 1.8 2.1.6v4l-2.1.6-.8 1.8.9 2-2.8 2.8-2-.9-1.8.8-.6 2.1h-4l-.6-2.1-1.8-.8-2 .9-2.8-2.8.9-2-.8-1.8-2.1-.6v-4l2.1-.6.8-1.8-.9-2 2.8-2.8 2 .9 1.8-.8z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+      <span class="navigation-label">Settings</span>
+    </button>
   </nav>
 </aside>

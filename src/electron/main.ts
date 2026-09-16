@@ -8,9 +8,9 @@ let runtime: OrchestratorRuntime | null = null;
 let mainWindow: BrowserWindow | null = null;
 let quittingAfterShutdown = false;
 let shutdownPromise: Promise<void> | null = null;
-const APP_PAGES = new Set(['features', 'taskboard', 'history']);
+const APP_PAGES = new Set(['features', 'taskboard', 'history', 'settings']);
 
-type AppPage = 'features' | 'taskboard' | 'history';
+type AppPage = 'features' | 'taskboard' | 'history' | 'settings';
 
 interface WindowPlacement {
   x: number;

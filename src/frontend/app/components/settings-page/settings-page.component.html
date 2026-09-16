@@ -1,0 +1,39 @@
+<section class="settings-page" aria-labelledby="settings-title">
+  <header class="settings-page__heading">
+    <p class="eyebrow">Personalize your workspace</p>
+    <h2 id="settings-title">Settings</h2>
+    <p>Choose a color theme for Agentboard. Your choice is saved on this device and applies to every window.</p>
+  </header>
+
+  <section class="settings-panel" aria-labelledby="theme-title">
+    <div class="settings-panel__heading">
+      <div>
+        <h3 id="theme-title">Theme color</h3>
+        <p>Preview a palette by selecting it below.</p>
+      </div>
+      <span class="settings-panel__count">{{ themes.length }} palettes</span>
+    </div>
+    <div class="theme-grid" role="group" aria-label="Theme color">
+      <button
+        *ngFor="let theme of themes"
+        type="button"
+        class="theme-option"
+        [class.theme-option--selected]="selectedTheme === theme.id"
+        [attr.aria-pressed]="selectedTheme === theme.id"
+        [attr.aria-label]="theme.name + ' theme'"
+        (click)="themeSelected.emit(theme.id)"
+      >
+        <span class="theme-option__preview" [style.--theme-swatch]="theme.swatch" aria-hidden="true">
+          <span class="theme-option__preview-bar"></span>
+          <span class="theme-option__preview-nav"></span>
+          <span class="theme-option__preview-card"><i></i><i></i></span>
+        </span>
+        <span class="theme-option__body">
+          <span class="theme-option__name"><i [style.background]="theme.swatch" aria-hidden="true"></i>{{ theme.name }}</span>
+          <span class="theme-option__description">{{ theme.description }}</span>
+        </span>
+        <span class="theme-option__check" aria-hidden="true">{{ selectedTheme === theme.id ? '✓' : '' }}</span>
+      </button>
+    </div>
+  </section>
+</section>

@@ -4,6 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { AppNavigationComponent } from './app-navigation.component';
 
 describe('AppNavigationComponent', () => {
+  it('opens Settings from the navigation bar', () => {
+    const component = new AppNavigationComponent();
+    const selected = vi.spyOn(component.pageSelected, 'emit');
+    component.selectPage({ preventDefault: vi.fn() } as unknown as MouseEvent, 'settings');
+    expect(selected).toHaveBeenCalledWith('settings');
+  });
+
   it('detaches a page only after the pointer moves 48 pixels beyond the navigation bounds', () => {
     const component = new AppNavigationComponent();
     const detached = vi.spyOn(component.pageDetached, 'emit');

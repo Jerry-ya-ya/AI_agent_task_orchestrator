@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
-export type AppPage = 'features' | 'taskboard' | 'history';
+export type AppPage = 'features' | 'taskboard' | 'history' | 'settings';
 
 export interface DetachedPageRequest {
   page: AppPage;

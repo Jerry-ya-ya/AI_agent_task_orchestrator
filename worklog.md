@@ -147,3 +147,5 @@
 - Stabilize Feature graph view state and add main-aligned POINTER markers that separate pre-reset history from current branch work.
 
 - Run only the current Todo batch and automatically retry Codex quota-limited tasks after usage resets.
+
+- Add a Settings page with five persistent, synchronized color themes for the Angular desktop app.
