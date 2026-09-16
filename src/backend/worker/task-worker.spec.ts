@@ -15,7 +15,7 @@ import type {
 } from '../domain/types.js';
 import type { GitService, PreparedBranch } from '../services/git-service.js';
 import type { TestService } from '../services/test-service.js';
-import { TaskWorker } from './task-worker.js';
+import { TaskWorker, type TaskWorkerOptions } from './task-worker.js';
 
 describe('TaskWorker', () => {
   let database: OrchestratorDatabase;
@@ -300,6 +300,95 @@ describe('TaskWorker', () => {
     expect(tasks.findById(task.id)?.status).toBe('IN_REVIEW');
   });
 
+  it('processes only the Todo batch present when Play is pressed and pauses afterward', async () => {
+    const first = createTask('Current task');
+    const second = createTask('Another current task');
+    const prepare = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
+      branchName: `agent/${claimed.id}-task`, workspacePath: project.repository_path,
+      originalBranch: 'main', startingCommitSha: 'start',
+    }));
+    const { worker } = createWorker(prepare, async () => successfulAgent(), async () => successfulTests());
+
+    worker.pause();
+    expect(worker.resume()).toMatchObject({ paused: false });
+    const later = createTask('Added after Play');
+
+    await expect(worker.processNext()).resolves.toBe(true);
+    expect(tasks.findById(first.id)?.status).toBe('IN_REVIEW');
+    expect(tasks.findById(second.id)?.status).toBe('TODO');
+    expect(tasks.findById(later.id)?.status).toBe('TODO');
+    expect(worker.getStatus()).toMatchObject({ paused: false, autoPaused: false });
+    await expect(worker.processNext()).resolves.toBe(true);
+    expect(tasks.findById(second.id)?.status).toBe('IN_REVIEW');
+    expect(worker.getStatus()).toMatchObject({ paused: true, autoPaused: true });
+    await expect(worker.processNext()).resolves.toBe(false);
+    expect(prepare).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for an exhausted Codex window and resumes the current batch after its reset', async () => {
+    const task = createTask('Wait for quota');
+    let now = 1_800_000_000_000;
+    let remainingPercent = 0;
+    const read = vi.fn(async () => ({
+      available: true, planType: 'plus', secondary: null, resetCredits: 0,
+      checkedAt: new Date(now).toISOString(), message: 'Codex usage is available.',
+      primary: { remainingPercent, usedPercent: 100 - remainingPercent,
+        windowDurationMins: 300, resetsAt: (now + 120_000) / 1_000 },
+    }));
+    const prepare = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
+      branchName: `agent/${claimed.id}-task`, workspacePath: project.repository_path,
+      originalBranch: 'main', startingCommitSha: 'start',
+    }));
+    const { worker } = createWorker(prepare, async () => successfulAgent(), async () => successfulTests(), {
+      usage: { read }, clock: () => now,
+    });
+    worker.setQuotaLoopEnabled(true);
+    worker.resume();
+
+    await expect(worker.processNext()).resolves.toBe(false);
+    expect(tasks.findById(task.id)?.status).toBe('TODO');
+    expect(worker.getStatus()).toMatchObject({ quotaLoopEnabled: true, quotaWaitingUntil: now + 120_000 });
+    now += 60_000;
+    await expect(worker.processNext()).resolves.toBe(false);
+    expect(read).toHaveBeenCalledTimes(1);
+    now += 60_000;
+    remainingPercent = 100;
+    await expect(worker.processNext()).resolves.toBe(true);
+    expect(tasks.findById(task.id)?.status).toBe('IN_REVIEW');
+    expect(worker.getStatus()).toMatchObject({ paused: true, autoPaused: true, quotaWaitingUntil: null });
+  });
+
+  it('requeues a Codex quota error instead of marking the task Failed', async () => {
+    const task = createTask('Continue after quota refresh');
+    const prepare = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
+      branchName: `agent/${claimed.id}-task`, workspacePath: project.repository_path,
+      originalBranch: 'main', startingCommitSha: 'start',
+    }));
+    const read = vi.fn(async () => ({
+      available: true, planType: 'plus', secondary: null, resetCredits: 0,
+      checkedAt: new Date().toISOString(), message: 'Codex usage exhausted.',
+      primary: { remainingPercent: 0, usedPercent: 100, windowDurationMins: 300, resetsAt: 1_900_000_000 },
+    }));
+    const usage = { read };
+    const { worker } = createWorker(prepare, async () => ({
+      ...successfulAgent(), exitCode: 1, stderr: 'rate_limit_exceeded: try later', summary: 'Usage limit reached.',
+    }), async () => successfulTests(), { usage });
+    worker.setQuotaLoopEnabled(true);
+    worker.resume();
+
+    // The first read must allow a claim; the forced read after failure reports exhaustion.
+    read.mockResolvedValueOnce({
+      available: true, planType: 'plus', secondary: null, resetCredits: 0,
+      checkedAt: new Date().toISOString(), message: 'Codex usage is available.',
+      primary: { remainingPercent: 10, usedPercent: 90, windowDurationMins: 300, resetsAt: 1_900_000_000 },
+    });
+    await expect(worker.processNext()).resolves.toBe(true);
+    expect(tasks.findById(task.id)?.status).toBe('TODO');
+    expect(runs.listForTask(task.id)[0]?.result_summary).toContain('usage limit reached');
+    expect(worker.getStatus().quotaWaitingUntil).not.toBeNull();
+    expect(worker.getStatus().paused).toBe(false);
+  });
+
   it('cancels the active task and waits for its pipeline to finish', async () => {
     const task = createTask('Cancel active task');
     const prepareBranch = vi.fn(async (claimed: Task): Promise<PreparedBranch> => ({
@@ -386,7 +475,8 @@ describe('TaskWorker', () => {
   function createWorker(
     prepareBranch: (task: Task) => Promise<PreparedBranch>,
     executeAgent: (task: Task) => Promise<AgentExecutionResult>,
-    executeTests: () => Promise<TestExecutionResult>
+    executeTests: () => Promise<TestExecutionResult>,
+    options: TaskWorkerOptions = {},
   ): {
     worker: TaskWorker;
     completeBranch: ReturnType<typeof vi.fn>;
@@ -418,7 +508,7 @@ describe('TaskWorker', () => {
     };
     const testService = { execute: executeTests } as unknown as TestService;
     return {
-      worker: new TaskWorker(tasks, runs, git, agent, testService, { pollIntervalMs: 1 }),
+      worker: new TaskWorker(tasks, runs, git, agent, testService, { pollIntervalMs: 1, ...options }),
       completeBranch,
       beginFeatureCherryPick,
       continueFeatureCherryPick,

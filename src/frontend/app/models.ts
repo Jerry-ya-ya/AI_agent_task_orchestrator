@@ -130,6 +130,9 @@ export interface TaskDetail extends Task {
 export interface WorkerStatus {
   running: boolean;
   paused?: boolean;
+  autoPaused?: boolean;
+  quotaLoopEnabled?: boolean;
+  quotaWaitingUntil?: number | null;
   busy: boolean;
   activeTaskId: number | null;
   agentAvailable: boolean;

@@ -145,3 +145,5 @@
 ## 2026/09/16
 
 - Stabilize Feature graph view state and add main-aligned POINTER markers that separate pre-reset history from current branch work.
+
+- Run only the current Todo batch and automatically retry Codex quota-limited tasks after usage resets.

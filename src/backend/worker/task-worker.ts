@@ -1,6 +1,7 @@
 import type {
   AgentAvailability,
   AgentExecutionResult,
+  AgentUsage,
   ClaimedTask,
   Task,
   TestExecutionResult,
@@ -12,8 +13,14 @@ import type { AgentExecutor } from '../agents/agent-executor.js';
 import { GitService, requireCanonicalCommitSummary, type PreparedCherryPick } from '../services/git-service.js';
 import { TestService } from '../services/test-service.js';
 
+interface UsageReader {
+  read(force?: boolean): Promise<AgentUsage>;
+}
+
 export interface TaskWorkerOptions {
   pollIntervalMs?: number;
+  usage?: UsageReader;
+  clock?: () => number;
 }
 
 class PipelineFailure extends Error {
@@ -32,6 +39,10 @@ const MAX_CHERRY_PICK_CONFLICT_ROUNDS = 20;
 export class TaskWorker {
   private running = false;
   private paused = false;
+  private autoPaused = false;
+  private batchTaskIds: Set<number> | null = null;
+  private quotaLoopEnabled = false;
+  private quotaWaitingUntil: number | null = null;
   private busy = false;
   private activeTaskId: number | null = null;
   private activeController: AbortController | null = null;
@@ -45,6 +56,8 @@ export class TaskWorker {
     message: 'Codex availability has not been checked yet.'
   };
   private readonly pollIntervalMs: number;
+  private readonly usage: UsageReader | undefined;
+  private readonly clock: () => number;
 
   public constructor(
     private readonly tasks: TaskRepository,
@@ -55,6 +68,8 @@ export class TaskWorker {
     options: TaskWorkerOptions = {}
   ) {
     this.pollIntervalMs = options.pollIntervalMs ?? 2_000;
+    this.usage = options.usage;
+    this.clock = options.clock ?? Date.now;
   }
 
   public start(): void {
@@ -79,22 +94,40 @@ export class TaskWorker {
     return {
       running: this.running,
       paused: this.paused,
+      autoPaused: this.autoPaused,
+      quotaLoopEnabled: this.quotaLoopEnabled,
+      quotaWaitingUntil: this.quotaWaitingUntil,
       busy: this.busy,
       activeTaskId: this.activeTaskId,
       agentAvailable: this.availability.available,
       message: this.paused
-        ? (this.busy ? 'Worker will pause after the current task finishes.' : 'Worker is paused and will not claim new tasks.')
-        : this.availability.message
+        ? (this.busy ? 'Worker will pause after the current task finishes.'
+          : this.autoPaused ? 'Current Todo batch finished; Worker paused automatically.'
+            : 'Worker is paused and will not claim new tasks.')
+        : this.quotaWaitingUntil !== null
+          ? `Codex usage is exhausted; waiting until ${new Date(this.quotaWaitingUntil).toLocaleString()} before retrying.`
+          : this.availability.message
     };
   }
 
   public pause(): WorkerStatus {
     this.paused = true;
+    this.autoPaused = false;
+    this.batchTaskIds = null;
     return this.getStatus();
   }
 
   public resume(): WorkerStatus {
     this.paused = false;
+    this.autoPaused = false;
+    this.batchTaskIds = new Set(this.tasks.runnableTodoIds());
+    this.wakeIdle?.();
+    return this.getStatus();
+  }
+
+  public setQuotaLoopEnabled(enabled: boolean): WorkerStatus {
+    this.quotaLoopEnabled = enabled;
+    if (!enabled) this.quotaWaitingUntil = null;
     this.wakeIdle?.();
     return this.getStatus();
   }
@@ -114,12 +147,24 @@ export class TaskWorker {
       return false;
     }
 
+    if (this.batchTaskIds !== null && !this.hasRemainingBatchTasks()) {
+      this.pauseAfterBatch();
+      return false;
+    }
+
+    if (this.quotaLoopEnabled && this.usage !== undefined) {
+      if (this.quotaWaitingUntil !== null && this.clock() < this.quotaWaitingUntil) return false;
+      const usage = await this.usage.read(this.quotaWaitingUntil !== null);
+      if (this.pauseForExhaustedUsage(usage)) return false;
+      this.quotaWaitingUntil = null;
+    }
+
     this.availability = await this.agent.checkAvailability();
     if (!this.availability.available || this.stopRequested || this.paused) {
       return false;
     }
 
-    const claimed = this.tasks.claimNext();
+    const claimed = this.tasks.claimNext(this.batchTaskIds === null ? undefined : [...this.batchTaskIds]);
     if (claimed === null) {
       return false;
     }
@@ -134,14 +179,57 @@ export class TaskWorker {
     try {
       await this.executePipeline(claimed, this.activeController.signal);
     } finally {
+      if (this.batchTaskIds !== null) {
+        const current = this.tasks.findById(claimed.id);
+        if (current?.status !== 'TODO') this.batchTaskIds.delete(claimed.id);
+      }
       this.activeController = null;
       this.activeTaskId = null;
       this.busy = false;
       this.finishActive?.();
       this.finishActive = null;
       this.activeCompletion = null;
+      if (!this.paused && this.batchTaskIds !== null && !this.hasRemainingBatchTasks()) {
+        this.pauseAfterBatch();
+      }
     }
     return true;
+  }
+
+  private hasRemainingBatchTasks(): boolean {
+    const queued = new Set(this.tasks.runnableTodoIds());
+    return [...(this.batchTaskIds ?? [])].some((id) => queued.has(id));
+  }
+
+  private pauseAfterBatch(): void {
+    this.paused = true;
+    this.autoPaused = true;
+    this.batchTaskIds = null;
+  }
+
+  private pauseForExhaustedUsage(usage: AgentUsage): boolean {
+    if (!usage.available) return false;
+    const exhausted = [usage.primary, usage.secondary].filter((window) =>
+      window !== null && window.remainingPercent <= 0);
+    if (exhausted.length === 0) return false;
+    const nextReset = Math.max(...exhausted.map((window) =>
+      window?.resetsAt === null ? 0 : (window?.resetsAt ?? 0) * 1_000));
+    this.quotaWaitingUntil = Math.max(this.clock() + 60_000, nextReset);
+    return true;
+  }
+
+  private async waitForQuotaRefresh(): Promise<void> {
+    if (!this.quotaLoopEnabled) return;
+    const usage = await this.usage?.read(true);
+    if (usage === undefined || !this.pauseForExhaustedUsage(usage)) {
+      const futureResets = [usage?.primary?.resetsAt, usage?.secondary?.resetsAt]
+        .filter((value): value is number => value !== null && value !== undefined)
+        .map((value) => value * 1_000)
+        .filter((value) => value > this.clock());
+      this.quotaWaitingUntil = futureResets.length > 0
+        ? Math.max(this.clock() + 60_000, Math.min(...futureResets))
+        : this.clock() + 60_000;
+    }
   }
 
   private async loop(): Promise<void> {
@@ -163,6 +251,7 @@ export class TaskWorker {
   private async executePipeline(claimed: ClaimedTask, signal: AbortSignal): Promise<void> {
     let exitCode = 1;
     let summary = 'Task pipeline failed.';
+    let quotaLimited = false;
 
     try {
       const isCherryPickResolution = claimed.agent_mode === 'cherry_pick_resolution';
@@ -229,6 +318,9 @@ export class TaskWorker {
           agentResult = await this.agent.execute(agentTask, prepared.workspacePath, signal);
           this.appendAgentResult(claimed.run_id, agentResult);
           if (agentResult.exitCode !== 0) {
+            quotaLimited = this.quotaLoopEnabled && !agentResult.timedOut && !agentResult.aborted
+              && /(?:rate[\s_-]*limit|usage[\s_-]*limit|quota|too many requests|(?:^|\W)429(?:\W|$))/iu
+                .test(`${agentResult.summary}\n${agentResult.stderr}\n${agentResult.stdout}`);
             throw new PipelineFailure(
               agentResult.timedOut ? 'Codex execution timed out.' : 'Codex execution failed.',
               agentResult.exitCode
@@ -303,14 +395,19 @@ export class TaskWorker {
       const failure = this.normalizeFailure(error, signal);
       exitCode = failure.exitCode;
       const stoppedDuringShutdown = signal.aborted && this.stopRequested;
-      summary = stoppedDuringShutdown
+      summary = quotaLimited
+        ? 'Codex usage limit reached; task returned to Todo until usage refreshes.'
+        : stoppedDuringShutdown
         ? 'Application stopped; task returned to TODO.'
         : failure.message;
       if (failure.stdout.length > 0 || failure.stderr.length > 0) {
         this.runs.appendOutput(claimed.run_id, failure.stdout, failure.stderr);
       }
       this.runs.appendOutput(claimed.run_id, '', `[orchestrator] ${summary}\n`);
-      if (stoppedDuringShutdown) {
+      if (quotaLimited) {
+        this.tasks.requeueAfterShutdown(claimed.id);
+        await this.waitForQuotaRefresh();
+      } else if (stoppedDuringShutdown) {
         this.tasks.requeueAfterShutdown(claimed.id);
       } else {
         this.tasks.transition(claimed.id, ['CLAIMED', 'IN_PROGRESS', 'TESTING'], 'FAILED');

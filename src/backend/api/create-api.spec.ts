@@ -41,9 +41,11 @@ describe('backend API', () => {
     const features = new FeatureRepository(database);
     const git = new GitService(new ProcessRunner());
     let workerPaused = false;
+    let quotaLoopEnabled = false;
     const workerStatus = () => ({
       running: true,
       paused: workerPaused,
+      quotaLoopEnabled,
       busy: false,
       activeTaskId: null,
       agentAvailable: true,
@@ -60,6 +62,10 @@ describe('backend API', () => {
       },
       resumeWorker: () => {
         workerPaused = false;
+        return workerStatus();
+      },
+      setQuotaLoopEnabled: (enabled) => {
+        quotaLoopEnabled = enabled;
         return workerStatus();
       },
       agentUsage: async () => ({
@@ -236,6 +242,14 @@ describe('backend API', () => {
       .expect((response) => expect(response.body.worker).toMatchObject({ paused: true }));
     await request(app).post('/worker/resume').send({}).expect(200)
       .expect((response) => expect(response.body).toMatchObject({ running: true, paused: false }));
+  });
+
+  it('toggles quota auto-resume only with an explicit boolean', async () => {
+    await request(app).post('/worker/quota-loop').send({ enabled: true }).expect(200)
+      .expect((response) => expect(response.body.quotaLoopEnabled).toBe(true));
+    await request(app).post('/worker/quota-loop').send({ enabled: 'yes' }).expect(400);
+    await request(app).post('/worker/quota-loop').send({ enabled: false }).expect(200)
+      .expect((response) => expect(response.body.quotaLoopEnabled).toBe(false));
   });
 
   afterEach(async () => {

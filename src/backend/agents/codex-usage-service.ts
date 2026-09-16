@@ -30,9 +30,9 @@ export class CodexUsageService {
     this.query = options.query ?? queryCodexAppServer;
   }
 
-  public async read(): Promise<AgentUsage> {
+  public async read(force = false): Promise<AgentUsage> {
     const now = this.clock();
-    if (this.cached !== null && this.cached.expiresAt > now.getTime()) {
+    if (!force && this.cached !== null && this.cached.expiresAt > now.getTime()) {
       return this.cached.value;
     }
 

@@ -59,6 +59,9 @@ describe('CodexUsageService', () => {
 
     expect(run).toHaveBeenCalledTimes(1);
     expect(run).toHaveBeenCalledWith('codex');
+
+    await service.read(true);
+    expect(run).toHaveBeenCalledTimes(2);
   });
 });
 

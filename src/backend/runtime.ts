@@ -59,7 +59,8 @@ export class OrchestratorRuntime {
     this.featureService = new FeatureService(features, projects, tasks, git);
     tasks.recoverInterrupted();
     this.worker = new TaskWorker(tasks, runs, git, agent, tests, {
-      pollIntervalMs: options.pollIntervalMs
+      pollIntervalMs: options.pollIntervalMs,
+      usage: agentUsage,
     });
 
     const api = createApi({
@@ -69,7 +70,8 @@ export class OrchestratorRuntime {
       workerStatus: () => this.worker.getStatus(),
       pauseWorker: () => this.worker.pause(),
       resumeWorker: () => this.worker.resume(),
-      agentUsage: () => agentUsage.read(),
+      setQuotaLoopEnabled: (enabled) => this.worker.setQuotaLoopEnabled(enabled),
+      agentUsage: (force) => agentUsage.read(force),
       cancelTask: (taskId) => this.worker.cancelTask(taskId)
     });
     if (options.uiPath !== undefined && existsSync(options.uiPath)) {

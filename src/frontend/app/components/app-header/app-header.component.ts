@@ -25,6 +25,7 @@ export class AppHeaderComponent {
   @Output() createProject = new EventEmitter<void>();
   @Output() createTask = new EventEmitter<void>();
   @Output() workerToggled = new EventEmitter<void>();
+  @Output() quotaLoopToggled = new EventEmitter<void>();
   @Output() minimizeApplication = new EventEmitter<void>();
   @Output() closeApplication = new EventEmitter<void>();
 
@@ -36,6 +37,9 @@ export class AppHeaderComponent {
       return this.workerStatus.busy && this.workerStatus.activeTaskId !== null
         ? `Finishing task #${this.workerStatus.activeTaskId}`
         : 'Worker paused';
+    }
+    if (this.workerStatus.quotaWaitingUntil !== null && this.workerStatus.quotaWaitingUntil !== undefined) {
+      return 'Waiting for Codex quota';
     }
     if (!this.workerStatus.agentAvailable) return 'Agent unavailable';
     if (this.workerStatus.busy) {
@@ -60,5 +64,19 @@ export class AppHeaderComponent {
 
   workerPaused(): boolean {
     return this.workerStatus?.paused ?? false;
+  }
+
+  quotaLoopTitle(): string {
+    if (!this.workerStatus?.quotaLoopEnabled) return 'Enable automatic Codex usage refresh and resume after quota reset';
+    const until = this.workerStatus.quotaWaitingUntil;
+    if (until !== null && until !== undefined) {
+      return `Waiting for Codex quota until ${new Date(until).toLocaleString()}`;
+    }
+    const nextReset = [this.agentUsage?.primary?.resetsAt, this.agentUsage?.secondary?.resetsAt]
+      .filter((value): value is number => value !== null && value !== undefined && value * 1_000 > Date.now())
+      .sort((left, right) => left - right)[0];
+    return nextReset === undefined
+      ? 'Usage auto-resume is on; checking Codex quota before each task'
+      : `Usage auto-resume is on; next quota refresh ${new Date(nextReset * 1_000).toLocaleString()}`;
   }
 }

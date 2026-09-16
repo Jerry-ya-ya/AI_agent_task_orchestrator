@@ -290,6 +290,25 @@
   opacity: 0.45;
 }
 
+.quota-loop--active {
+  border-color: #6aade4;
+  color: #9bd1ff;
+}
+
+.quota-loop--active svg {
+  animation: quota-loop-spin 2.4s linear infinite;
+}
+
+.quota-loop:disabled { opacity: 0.45; }
+
+@keyframes quota-loop-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quota-loop--active svg { animation: none; }
+}
+
 header-usage {
   display: block;
   min-width: 0;

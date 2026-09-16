@@ -258,7 +258,17 @@ export class TaskRepository {
     return result.changes > 0;
   }
 
-  public claimNext(): ClaimedTask | null {
+  public runnableTodoIds(): number[] {
+    return (this.database.connection.prepare(`
+      SELECT id FROM tasks WHERE status = 'TODO' AND is_paused = 0 ORDER BY id
+    `).all() as Array<{ id: number }>).map((row) => row.id);
+  }
+
+  public claimNext(allowedTaskIds?: readonly number[]): ClaimedTask | null {
+    if (allowedTaskIds !== undefined && allowedTaskIds.length === 0) return null;
+    const allowedFilter = allowedTaskIds === undefined
+      ? ''
+      : `AND id IN (${allowedTaskIds.map(() => '?').join(', ')})`;
     return this.database.transaction(() => {
       const now = this.clock();
       const row = this.database.connection.prepare(`
@@ -266,7 +276,7 @@ export class TaskRepository {
         SET status = 'CLAIMED', updated_at = ?
         WHERE id = (
           SELECT id FROM tasks
-          WHERE status = 'TODO' AND is_paused = 0
+          WHERE status = 'TODO' AND is_paused = 0 ${allowedFilter}
             AND NOT EXISTS (
               SELECT 1 FROM tasks reviewing
               WHERE reviewing.project_id = tasks.project_id
@@ -293,7 +303,7 @@ export class TaskRepository {
         )
         AND status = 'TODO' AND is_paused = 0
         RETURNING *
-      `).get(now) as unknown as StoredTask | undefined;
+      `).get(now, ...(allowedTaskIds ?? [])) as unknown as StoredTask | undefined;
 
       if (row === undefined) {
         return null;

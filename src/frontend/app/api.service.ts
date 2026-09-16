@@ -63,8 +63,8 @@ export class ApiService {
     return this.http.get<HealthResponse>(`${this.baseUrl}/health`);
   }
 
-  getAgentUsage(): Observable<AgentUsage> {
-    return this.http.get<AgentUsage>(`${this.baseUrl}/agent/usage`);
+  getAgentUsage(force = false): Observable<AgentUsage> {
+    return this.http.get<AgentUsage>(`${this.baseUrl}/agent/usage${force ? '?refresh=1' : ''}`);
   }
 
   getProjects(): Observable<Project[]> {
@@ -81,6 +81,10 @@ export class ApiService {
 
   resumeWorker(): Observable<WorkerStatus> {
     return this.http.post<WorkerStatus>(`${this.baseUrl}/worker/resume`, {});
+  }
+
+  setQuotaLoopEnabled(enabled: boolean): Observable<WorkerStatus> {
+    return this.http.post<WorkerStatus>(`${this.baseUrl}/worker/quota-loop`, { enabled });
   }
 
   getFeatures(): Observable<Feature[]> {

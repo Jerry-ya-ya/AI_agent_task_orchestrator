@@ -308,6 +308,34 @@ describe('AppComponent initialization', () => {
     expect(storage.setItem).toHaveBeenCalledWith('agentboard.workerPaused', 'false');
   });
 
+  it('persists quota auto-resume and saves automatic batch completion as paused', async () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    });
+    const worker: WorkerStatus = {
+      running: true, paused: false, quotaLoopEnabled: false, busy: false,
+      activeTaskId: null, agentAvailable: true, message: 'Worker idle.',
+    };
+    const api = {
+      baseUrl: 'http://127.0.0.1:4317',
+      setQuotaLoopEnabled: vi.fn((enabled: boolean) => of({ ...worker, quotaLoopEnabled: enabled })),
+      getAgentUsage: vi.fn(() => of(null)),
+      getHealth: vi.fn(() => of({ ok: true, worker: {
+        ...worker, paused: true, autoPaused: true,
+      } })),
+    } as unknown as ApiService;
+    const component = new AppComponent(api, { markForCheck: vi.fn() } as unknown as ChangeDetectorRef);
+    component.workerStatus = worker;
+    await component.toggleQuotaLoop();
+    expect(values.get('agentboard.quotaLoopEnabled')).toBe('true');
+    expect(api.getAgentUsage).toHaveBeenCalledWith(true);
+
+    await (component as unknown as { refreshWorkerStatus(): Promise<void> }).refreshWorkerStatus();
+    expect(values.get('agentboard.workerPaused')).toBe('true');
+  });
+
   it('shows only completed and failed tasks in newest-first history order', () => {
     const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
     const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;

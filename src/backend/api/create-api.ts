@@ -11,10 +11,11 @@ export interface ApiDependencies {
   taskService: TaskService;
   featureService?: FeatureService;
   workerStatus: () => WorkerStatus;
-  agentUsage: () => Promise<AgentUsage>;
+  agentUsage: (force?: boolean) => Promise<AgentUsage>;
   cancelTask?: (taskId: number) => Promise<boolean>;
   pauseWorker?: () => WorkerStatus;
   resumeWorker?: () => WorkerStatus;
+  setQuotaLoopEnabled?: (enabled: boolean) => WorkerStatus;
 }
 
 const idSchema = z.coerce.number().int().positive();
@@ -80,8 +81,8 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     response.json({ ok: true, worker: dependencies.workerStatus() });
   });
 
-  app.get('/agent/usage', async (_request, response) => {
-    response.json(await dependencies.agentUsage());
+  app.get('/agent/usage', async (request, response) => {
+    response.json(await dependencies.agentUsage(request.query['refresh'] === '1'));
   });
 
   app.get('/projects', (_request, response) => {
@@ -99,6 +100,11 @@ export function createApi(dependencies: ApiDependencies): express.Express {
 
   app.post('/worker/resume', (_request, response) => {
     response.json(dependencies.resumeWorker?.() ?? dependencies.workerStatus());
+  });
+
+  app.post('/worker/quota-loop', (request, response) => {
+    const enabled = z.object({ enabled: z.boolean() }).parse(request.body).enabled;
+    response.json(dependencies.setQuotaLoopEnabled?.(enabled) ?? dependencies.workerStatus());
   });
 
   app.get('/features', (request, response) => {

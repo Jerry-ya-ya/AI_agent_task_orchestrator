@@ -46,6 +46,7 @@ import {
 
 type TaskEditorMode = 'create' | 'edit';
 const WORKER_PAUSED_STORAGE_KEY = 'agentboard.workerPaused';
+const QUOTA_LOOP_STORAGE_KEY = 'agentboard.quotaLoopEnabled';
 
 const STATUS_COLUMNS: readonly StatusColumn[] = [
   { status: 'TODO', label: 'Todo', hint: 'Waiting for the worker' },
@@ -185,7 +186,25 @@ export class AppComponent implements OnInit, OnDestroy {
       this.storeWorkerDispatchPreference(Boolean(this.workerStatus.paused));
       this.showNotice(this.workerStatus.paused
         ? 'Worker paused. No new tasks will be claimed.'
-        : 'Worker resumed. Todo tasks may now be claimed.');
+        : 'Worker started the current Todo batch and will pause when it finishes.');
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  async toggleQuotaLoop(): Promise<void> {
+    if (this.workerStatus === null || !this.workerStatus.running) return;
+    this.clearError();
+    try {
+      const enabled = !this.workerStatus.quotaLoopEnabled;
+      this.workerStatus = await firstValueFrom(this.api.setQuotaLoopEnabled(enabled));
+      this.storeQuotaLoopPreference(enabled);
+      if (enabled) await this.refreshAgentUsage(true);
+      this.showNotice(enabled
+        ? 'Codex usage auto-resume enabled. Quota-limited tasks will wait for the next reset.'
+        : 'Codex usage auto-resume disabled.');
     } catch (error: unknown) {
       this.setError(this.errorMessage(error));
     } finally {
@@ -912,6 +931,7 @@ export class AppComponent implements OnInit, OnDestroy {
     try {
       const health = await firstValueFrom(this.api.getHealth());
       this.workerStatus = health.worker;
+      if (health.worker.autoPaused) this.storeWorkerDispatchPreference(true);
     } catch {
       // Health is supplementary; a transient failure must not block task and project updates.
       this.workerStatus = null;
@@ -926,13 +946,13 @@ export class AppComponent implements OnInit, OnDestroy {
     await Promise.all([this.refreshBoard(false), this.refreshAgentUsage()]);
   }
 
-  private async refreshAgentUsage(): Promise<void> {
+  private async refreshAgentUsage(force = false): Promise<void> {
     if (this.usageRefreshInFlight) {
       return;
     }
     this.usageRefreshInFlight = true;
     try {
-      this.agentUsage = await firstValueFrom(this.api.getAgentUsage());
+      this.agentUsage = await firstValueFrom(this.api.getAgentUsage(force));
     } catch (error: unknown) {
       this.agentUsage = {
         available: false,
@@ -952,6 +972,10 @@ export class AppComponent implements OnInit, OnDestroy {
   private async restoreWorkerDispatchPreference(): Promise<void> {
     const paused = this.readWorkerDispatchPreference() ?? false;
     try {
+      const quotaLoopEnabled = this.readQuotaLoopPreference();
+      if (typeof this.api.setQuotaLoopEnabled === 'function') {
+        await firstValueFrom(this.api.setQuotaLoopEnabled(quotaLoopEnabled));
+      }
       this.workerStatus = await firstValueFrom(paused ? this.api.pauseWorker() : this.api.resumeWorker());
     } catch {
       // Regular health polling will report a backend that is still starting or unavailable.
@@ -1022,6 +1046,22 @@ export class AppComponent implements OnInit, OnDestroy {
       globalThis.localStorage?.setItem(WORKER_PAUSED_STORAGE_KEY, String(paused));
     } catch {
       // The current session still works when storage is unavailable.
+    }
+  }
+
+  private readQuotaLoopPreference(): boolean {
+    try {
+      return globalThis.localStorage?.getItem(QUOTA_LOOP_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  private storeQuotaLoopPreference(enabled: boolean): void {
+    try {
+      globalThis.localStorage?.setItem(QUOTA_LOOP_STORAGE_KEY, String(enabled));
+    } catch {
+      // The current session remains usable when storage is unavailable.
     }
   }
 
