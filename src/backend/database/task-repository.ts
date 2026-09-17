@@ -378,6 +378,28 @@ export class TaskRepository {
     return result.changes > 0 ? this.findById(id) : null;
   }
 
+  public setPublishCommitSha(id: number, publishCommitSha: string): Task | null {
+    const result = this.database.connection.prepare(`
+      UPDATE tasks SET publish_commit_sha = ?, updated_at = ?
+      WHERE id = ? AND status IN ('IN_PROGRESS', 'TESTING')
+    `).run(publishCommitSha, this.clock(), id);
+    return result.changes > 0 ? this.findById(id) : null;
+  }
+
+  public publishedMainCommit(id: number): string | null {
+    const row = this.database.connection.prepare(
+      'SELECT main_commit_sha FROM feature_publications WHERE task_id = ?'
+    ).get(id) as { main_commit_sha: string } | undefined;
+    return row?.main_commit_sha ?? null;
+  }
+
+  public recordPublishedMainCommit(id: number, sha: string): void {
+    this.database.connection.prepare(`
+      INSERT INTO feature_publications (task_id, main_commit_sha) VALUES (?, ?)
+      ON CONFLICT(task_id) DO UPDATE SET main_commit_sha = excluded.main_commit_sha
+    `).run(id, sha);
+  }
+
   public finishCherryPickResolution(id: number, publishCommitSha: string): Task | null {
     const result = this.database.connection.prepare(`
       UPDATE tasks

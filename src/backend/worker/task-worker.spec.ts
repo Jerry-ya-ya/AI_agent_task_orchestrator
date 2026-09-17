@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentExecutor } from '../agents/agent-executor.js';
 import { OrchestratorDatabase } from '../database/database.js';
+import { FeatureRepository } from '../database/feature-repository.js';
 import { ProjectRepository } from '../database/project-repository.js';
 import { TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
@@ -209,6 +210,30 @@ describe('TaskWorker', () => {
     expect(run?.stderr).toContain('[test]\nAssertionError: expected true to be false');
     expect(run?.stderr).toContain('[orchestrator] Unit tests failed.');
     expect(completeBranch).toHaveBeenCalledOnce();
+  });
+
+  it('retains the checkpoint SHA when a Feature attempt fails after changing files', async () => {
+    const feature = new FeatureRepository(database).create(
+      { project_id: project.id, name: 'Migrations' }, 'feature/migrations', 'main',
+    );
+    const task = tasks.create({
+      project_id: project.id, feature_id: feature.id, title: 'Add migration',
+      description: '', priority: 'MEDIUM',
+    });
+    const prepareBranch = vi.fn(async (): Promise<PreparedBranch> => ({
+      branchName: 'feature/migrations', workspacePath: project.repository_path,
+      originalBranch: 'main', startingCommitSha: 'starting-commit-sha',
+    }));
+    const executeAgent = vi.fn(async (): Promise<AgentExecutionResult> => ({
+      ...successfulAgent(), exitCode: 1, summary: 'Agent stopped after writing a file.',
+    }));
+    const executeTests = vi.fn(async (): Promise<TestExecutionResult> => successfulTests());
+    const { worker } = createWorker(prepareBranch, executeAgent, executeTests);
+
+    await expect(worker.processNext()).resolves.toBe(true);
+    expect(tasks.findById(task.id)).toMatchObject({
+      status: 'FAILED', publish_commit_sha: 'task-commit-sha',
+    });
   });
 
   it('moves an unverified task to IN_REVIEW with a visible warning', async () => {

@@ -369,10 +369,15 @@ export class TaskWorker {
         if (isCherryPickResolution && verificationPassed && resolvedPublishCommitSha !== undefined) {
           this.tasks.finishCherryPickResolution(claimed.id, resolvedPublishCommitSha);
         } else if (!isCherryPickResolution && canonicalSummary !== undefined) {
-          const publishCommitSha = claimed.feature_id === null || claimed.feature_id === undefined
+          const publishCommitSha = !checkpointed || claimed.feature_id === null || claimed.feature_id === undefined
             ? null
             : await this.git.commitAtRef(prepared.workspacePath, prepared.branchName);
           this.tasks.setCommitSummary(claimed.id, canonicalSummary, publishCommitSha);
+        } else if (!isCherryPickResolution && checkpointed && claimed.feature_id !== null && claimed.feature_id !== undefined) {
+          this.tasks.setPublishCommitSha(
+            claimed.id,
+            await this.git.commitAtRef(prepared.workspacePath, prepared.branchName),
+          );
         }
         this.runs.appendOutput(
           claimed.run_id,

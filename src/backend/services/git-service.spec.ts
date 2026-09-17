@@ -277,6 +277,74 @@ describe('GitService', () => {
     )).resolves.toEqual({ baseBranch: 'main' });
   }, 20_000);
 
+  it('combines the original task and retries in order without publishing unrelated Feature commits', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const remote = await mkdtemp(path.join(tmpdir(), 'orchestrator-retry-remote-'));
+    temporaryPaths.push(remote);
+    await git(runner, remote, ['init', '--bare']);
+    await git(runner, repository, ['remote', 'add', 'origin', remote]);
+    const service = new GitService(runner);
+    const task = { ...exampleTask(), feature_id: 1, branch_name: 'feature/migrations', base_branch: 'main' };
+
+    const first = await service.prepareBranch(task, repository);
+    await writeFile(path.join(repository, 'migration.sql'), 'CREATE TABLE users (id INT);\n');
+    await service.completeBranch(first, task.id, 'feat: add initial migration.');
+    const firstSha = await service.commitAtRef(repository, 'feature/migrations');
+
+    const unrelated = await service.prepareBranch({ ...task, id: 99 }, repository);
+    await writeFile(path.join(repository, 'unrelated.txt'), 'not part of this task\n');
+    await service.completeBranch(unrelated, 99, 'feat: unrelated work.');
+
+    const retry = await service.prepareBranch({ ...task, id: 101 }, repository);
+    await writeFile(path.join(repository, 'migration.sql'), 'CREATE TABLE users (id INT, name TEXT);\n');
+    await service.completeBranch(retry, 101, 'fix: correct migration.');
+    const retrySha = await service.commitAtRef(repository, 'feature/migrations');
+    const originalMain = await service.currentCommit(repository);
+
+    const combinedSha = await service.combineFeatureTaskRevisions(repository, 'feature/migrations', 'main', [
+      { taskId: task.id, publishCommitSha: firstSha, commitSummary: 'feat: add initial migration.' },
+      { taskId: 101, publishCommitSha: retrySha, commitSummary: 'fix: correct migration.' },
+    ], 'fix: correct migration.');
+    expect(combinedSha).not.toBe(originalMain);
+    expect((await git(runner, repository, ['log', '-1', '--format=%s'])).trim()).toBe('fix: correct migration.');
+    expect((await git(runner, repository, ['rev-list', '--count', `${originalMain}..main`])).trim()).toBe('1');
+    expect((await git(runner, repository, ['show', 'main:migration.sql'])).trim())
+      .toBe('CREATE TABLE users (id INT, name TEXT);');
+    expect(await gitExitCode(runner, repository, ['cat-file', '-e', 'main:unrelated.txt'])).toBe(128);
+    await service.pushCombinedFeatureTask(repository, 'main', combinedSha);
+    expect((await git(runner, repository, ['--git-dir', remote, 'show', 'main:migration.sql'])).trim())
+      .toBe('CREATE TABLE users (id INT, name TEXT);');
+  }, 20_000);
+
+  it('restores main when a retry-lineage cherry-pick conflicts', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const service = new GitService(runner);
+    const task = { ...exampleTask(), feature_id: 1, branch_name: 'feature/retry-conflict', base_branch: 'main' };
+    const first = await service.prepareBranch(task, repository);
+    await writeFile(path.join(repository, 'README.md'), 'first feature version\n');
+    await service.completeBranch(first, task.id, 'feat: first version.');
+    const firstSha = await service.commitAtRef(repository, 'feature/retry-conflict');
+    const retry = await service.prepareBranch({ ...task, id: 101 }, repository);
+    await writeFile(path.join(repository, 'README.md'), 'corrected feature version\n');
+    await service.completeBranch(retry, 101, 'fix: corrected version.');
+    const retrySha = await service.commitAtRef(repository, 'feature/retry-conflict');
+    await writeFile(path.join(repository, 'README.md'), 'main version\n');
+    await git(runner, repository, ['add', 'README.md']);
+    await git(runner, repository, [
+      '-c', 'user.name=Test User', '-c', 'user.email=test@example.invalid',
+      'commit', '-m', 'feat: main change',
+    ]);
+    const originalMain = await service.currentCommit(repository);
+
+    await expect(service.combineFeatureTaskRevisions(repository, 'feature/retry-conflict', 'main', [
+      { taskId: task.id, publishCommitSha: firstSha, commitSummary: 'feat: first version.' },
+      { taskId: 101, publishCommitSha: retrySha, commitSummary: 'fix: corrected version.' },
+    ], 'fix: corrected version.')).rejects.toBeInstanceOf(CherryPickConflictError);
+    expect(await service.currentCommit(repository)).toBe(originalMain);
+    expect((await git(runner, repository, ['status', '--porcelain'])).trim()).toBe('');
+    expect((await readFile(path.join(repository, 'README.md'), 'utf8')).trim()).toBe('main version');
+  }, 20_000);
+
   it('refuses to remove an unmerged task branch', async () => {
     const { repository, runner } = await temporaryRepository();
     const service = new GitService(runner);

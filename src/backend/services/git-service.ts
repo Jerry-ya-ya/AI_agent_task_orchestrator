@@ -24,6 +24,12 @@ export interface PublishedBranch {
   baseBranch: string;
 }
 
+export interface FeatureTaskRevision {
+  taskId: number;
+  publishCommitSha: string | null;
+  commitSummary: string | null;
+}
+
 export interface RunDiff {
   fileDiff: string;
   codeDiff: string;
@@ -550,6 +556,99 @@ export class GitService {
       }
     }
     return { baseBranch };
+  }
+
+  /** Apply a retry lineage in order, retaining every patch in one final main commit. */
+  public async combineFeatureTaskRevisions(
+    repositoryPath: string,
+    featureBranch: string,
+    baseBranch: string,
+    revisions: readonly FeatureTaskRevision[],
+    finalSummary: string,
+  ): Promise<string> {
+    const repositoryRoot = await this.validateRepository(repositoryPath);
+    await this.requireCleanCheckout(repositoryRoot);
+    if (await this.currentBranch(repositoryRoot) !== baseBranch) {
+      throw new ConflictError(`Repository must be on ${baseBranch} before publishing ${featureBranch}.`);
+    }
+    if (!/^feature\//u.test(featureBranch) || !await this.localBranchExists(repositoryRoot, featureBranch)) {
+      throw new ConflictError(`Feature branch is missing or unmanaged: ${featureBranch}`);
+    }
+    const message = requireCanonicalCommitSummary(finalSummary);
+    if (revisions.length < 2) throw new ConflictError('A retry lineage needs at least two revisions.');
+
+    const sourceCommits: string[] = [];
+    for (const revision of revisions) {
+      const summary = revision.commitSummary ?? `chore(agent): checkpoint task #${revision.taskId}`;
+      try {
+        sourceCommits.push(await this.resolveTaskCommit(
+          repositoryRoot, featureBranch, revision.publishCommitSha, summary,
+        ));
+      } catch (error) {
+        // A run with no checkpoint has no patch to replay. A recorded SHA must never be skipped.
+        if (revision.publishCommitSha !== null || !(error instanceof ConflictError)
+          || !error.message.startsWith('No commit on ')) throw error;
+      }
+    }
+    if (sourceCommits.length === 0) {
+      throw new ConflictError('No retry revision has a Git commit to publish.');
+    }
+
+    let applied = false;
+    for (const sha of sourceCommits) {
+      const ancestor = await this.runGit(repositoryRoot, ['merge-base', '--is-ancestor', sha, baseBranch], undefined, true);
+      if (ancestor.exitCode === 0) continue;
+      if (ancestor.exitCode !== 1) throw new GitCommandError(`Unable to compare revision ${sha} with ${baseBranch}: ${formatFailure(ancestor)}`, ancestor);
+      const equivalent = await this.runGit(repositoryRoot, ['cherry', baseBranch, sha], undefined, true);
+      if (equivalent.exitCode !== 0) {
+        throw new GitCommandError(`Unable to compare revision patch ${sha} with ${baseBranch}: ${formatFailure(equivalent)}`, equivalent);
+      }
+      if (equivalent.stdout.split(/\r?\n/u).some((line) => line.trim() === `- ${sha}`)) continue;
+      const picked = await this.runGit(repositoryRoot, ['cherry-pick', '--no-commit', sha], undefined, true);
+      if (picked.exitCode !== 0) {
+        const conflictedFiles = await this.conflictFiles(repositoryRoot);
+        await this.runGit(repositoryRoot, ['cherry-pick', '--abort'], undefined, true);
+        const restored = await this.runGit(repositoryRoot, ['restore', '--source=HEAD', '--staged', '--worktree', '--', '.'], undefined, true);
+        if (restored.exitCode !== 0) {
+          throw new GitCommandError(`Retry cherry-pick failed and the checkout could not be restored: ${formatFailure(restored)}`, restored);
+        }
+        if (conflictedFiles.length > 0) {
+          throw new CherryPickConflictError(
+            `Retry history conflicts in ${conflictedFiles.join(', ')} while publishing ${featureBranch}. The checkout was restored; resolve the history before pushing.`,
+            picked, conflictedFiles,
+          );
+        }
+        throw new GitCommandError(`Unable to cherry-pick retry revision ${sha}: ${formatFailure(picked)}`, picked);
+      }
+      applied = true;
+    }
+    if (applied) {
+      const diff = await this.runGit(repositoryRoot, ['diff', '--cached', '--quiet'], undefined, true);
+      if (diff.exitCode === 0 || diff.exitCode === 1) {
+        const committed = await this.runGit(repositoryRoot, [
+          '-c', 'user.name=AI Agent Task Orchestrator',
+          '-c', 'user.email=agent@localhost',
+          'commit', ...(diff.exitCode === 0 ? ['--allow-empty'] : []), '-m', message,
+        ], undefined, true);
+        if (committed.exitCode !== 0) throw new GitCommandError(`Unable to commit combined retry history: ${formatFailure(committed)}`, committed);
+      } else if (diff.exitCode !== 0) {
+        throw new GitCommandError(`Unable to inspect combined retry changes: ${formatFailure(diff)}`, diff);
+      }
+    }
+    return this.currentCommit(repositoryRoot);
+  }
+
+  public async pushCombinedFeatureTask(repositoryPath: string, baseBranch: string, mainCommitSha: string): Promise<void> {
+    const repositoryRoot = await this.validateRepository(repositoryPath);
+    await this.requireCleanCheckout(repositoryRoot);
+    if (await this.currentBranch(repositoryRoot) !== baseBranch
+      || await this.currentCommit(repositoryRoot) !== mainCommitSha) {
+      throw new ConflictError(`The prepared combined commit is no longer the tip of ${baseBranch}.`);
+    }
+    const pushed = await this.runGit(repositoryRoot, ['push', 'origin', baseBranch], undefined, true);
+    if (pushed.exitCode !== 0) {
+      throw new GitCommandError(`${baseBranch} contains the combined retry commit locally, but could not be pushed: ${formatFailure(pushed)}`, pushed);
+    }
   }
 
   private async resolveTaskCommit(

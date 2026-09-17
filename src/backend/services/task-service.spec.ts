@@ -20,6 +20,8 @@ describe('TaskService state rules', () => {
   let project: Project;
   let publishBranch: ReturnType<typeof vi.fn>;
   let publishFeatureTask: ReturnType<typeof vi.fn>;
+  let combineFeatureTaskRevisions: ReturnType<typeof vi.fn>;
+  let pushCombinedFeatureTask: ReturnType<typeof vi.fn>;
   let removeTaskBranch: ReturnType<typeof vi.fn>;
   let beginTaskReview: ReturnType<typeof vi.fn>;
   let endTaskReview: ReturnType<typeof vi.fn>;
@@ -32,11 +34,14 @@ describe('TaskService state rules', () => {
     features = new FeatureRepository(database);
     publishBranch = vi.fn(async () => ({ baseBranch: 'main' }));
     publishFeatureTask = vi.fn(async () => ({ baseBranch: 'main' }));
+    combineFeatureTaskRevisions = vi.fn(async () => 'combined-main-sha');
+    pushCombinedFeatureTask = vi.fn(async () => undefined);
     removeTaskBranch = vi.fn(async () => true);
     beginTaskReview = vi.fn(async (task: Task) => `agent/${task.id}-review`);
     endTaskReview = vi.fn(async () => undefined);
     const git = {
-      publishBranch, publishFeatureTask, removeTaskBranch, beginTaskReview, endTaskReview,
+      publishBranch, publishFeatureTask, combineFeatureTaskRevisions, pushCombinedFeatureTask,
+      removeTaskBranch, beginTaskReview, endTaskReview,
     } as unknown as GitService;
     service = new TaskService(tasks, projects, runs, git, features);
     project = projects.create({
@@ -312,6 +317,32 @@ describe('TaskService state rules', () => {
     expect(publishFeatureTask).toHaveBeenCalledWith('/example', 'feature/search', 'main', null, null, task.id);
     expect(publishBranch).not.toHaveBeenCalled();
     await expect(service.removeBranch(task.id)).rejects.toThrow(ConflictError);
+  });
+
+  it('publishes the original and retry revisions together and resumes a failed push without recombining', async () => {
+    const feature = features.create({ project_id: project.id, name: 'Migrations' }, 'feature/migrations', 'main');
+    const original = service.create({ project_id: project.id, feature_id: feature.id, title: 'Add migration' });
+    database.connection.prepare('UPDATE tasks SET commit_summary = ?, publish_commit_sha = ? WHERE id = ?')
+      .run('feat: first migration.', 'original-sha', original.id);
+    const retry = await service.retry(original.id, { prompt: 'Correct the migration.' });
+    expect(tasks.transition(retry.id, 'TODO', 'IN_REVIEW')).not.toBeNull();
+    // The worker normally records this while TESTING; seed it directly for this state test.
+    database.connection.prepare('UPDATE tasks SET commit_summary = ?, publish_commit_sha = ? WHERE id = ?')
+      .run('fix: correct migration.', 'retry-sha', retry.id);
+    await service.startReview(retry.id);
+    await service.approve(retry.id);
+    pushCombinedFeatureTask.mockRejectedValueOnce(new Error('remote unavailable'));
+
+    await expect(service.push(retry.id)).rejects.toThrow('remote unavailable');
+    expect(tasks.findById(retry.id)?.status).toBe('PENDING_PUSH');
+    await expect(service.push(retry.id)).resolves.toMatchObject({ status: 'DONE' });
+    expect(combineFeatureTaskRevisions).toHaveBeenCalledTimes(1);
+    expect(combineFeatureTaskRevisions).toHaveBeenCalledWith('/example', 'feature/migrations', 'main', [
+      { taskId: original.id, publishCommitSha: 'original-sha', commitSummary: 'feat: first migration.' },
+      { taskId: retry.id, publishCommitSha: 'retry-sha', commitSummary: 'fix: correct migration.' },
+    ], 'fix: correct migration.');
+    expect(pushCombinedFeatureTask).toHaveBeenCalledTimes(2);
+    expect(publishFeatureTask).not.toHaveBeenCalled();
   });
 
   it('records a Feature cherry-pick conflict and queues Codex resolution with the selected strength', async () => {

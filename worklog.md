@@ -149,3 +149,7 @@
 - Run only the current Todo batch and automatically retry Codex quota-limited tasks after usage resets.
 
 - Add a Settings page with five persistent, synchronized color themes for the Angular desktop app.
+
+## 2026/09/17
+
+- Publish complete Feature retry history as one commit while preserving failed-attempt checkpoints.

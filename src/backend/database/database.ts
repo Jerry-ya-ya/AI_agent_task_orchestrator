@@ -73,6 +73,7 @@ const SCHEMA = `
     code_diff TEXT NOT NULL DEFAULT ''
   );
 
+
   CREATE INDEX IF NOT EXISTS idx_tasks_claim
     ON tasks(status, priority, created_at, id);
   CREATE INDEX IF NOT EXISTS idx_task_runs_task_started
@@ -164,6 +165,11 @@ export class OrchestratorDatabase {
       || !taskDefinition?.sql?.includes('REVIEWING')) {
       this.rebuildTasksForPublishing(hadPendingPush, needsPublishingMigration);
     }
+
+    this.connection.exec(`CREATE TABLE IF NOT EXISTS feature_publications (
+      task_id INTEGER PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+      main_commit_sha TEXT NOT NULL
+    );`);
 
     const taskRunColumns = this.connection.prepare('PRAGMA table_info(task_runs)').all();
     if (!taskRunColumns.some((column) => column['name'] === 'file_diff')) {

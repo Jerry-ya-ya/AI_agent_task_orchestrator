@@ -14,7 +14,7 @@ import { ProjectRepository } from '../database/project-repository.js';
 import { FeatureRepository } from '../database/feature-repository.js';
 import { type TaskFilters, TaskRepository } from '../database/task-repository.js';
 import { TaskRunRepository } from '../database/task-run-repository.js';
-import { CherryPickConflictError, GitService } from './git-service.js';
+import { CherryPickConflictError, GitService, type FeatureTaskRevision } from './git-service.js';
 
 const LOCKED_STATUSES: readonly TaskStatus[] = [
   'CLAIMED',
@@ -212,6 +212,22 @@ export class TaskService {
     }
 
     if (task.feature_id !== null && task.feature_id !== undefined) {
+      const revisions = this.retryRevisions(task);
+      if (revisions.length > 1) {
+        const summary = task.commit_summary?.trim();
+        if (!summary) throw new ConflictError('The final retry needs a canonical commit summary before publishing.');
+        let mainCommitSha = this.tasks.publishedMainCommit(task.id);
+        if (mainCommitSha === null) {
+          mainCommitSha = await this.git.combineFeatureTaskRevisions(
+            project.repository_path, task.branch_name, 'main', revisions, summary,
+          );
+          this.tasks.recordPublishedMainCommit(task.id, mainCommitSha);
+        }
+        await this.git.pushCombinedFeatureTask(project.repository_path, 'main', mainCommitSha);
+        const completed = this.tasks.transition(id, 'PENDING_PUSH', 'DONE');
+        if (completed === null) throw new ConflictError('Task state changed while its retry history was published.');
+        return completed;
+      }
       try {
         await this.git.publishFeatureTask(
           project.repository_path,
@@ -313,6 +329,29 @@ export class TaskService {
     if (this.projects.findById(id) === null) {
       throw new ValidationError(`Project ${id} does not exist.`);
     }
+  }
+
+  private retryRevisions(task: Task): FeatureTaskRevision[] {
+    const revisions: FeatureTaskRevision[] = [];
+    const seen = new Set<number>();
+    let current: Task | null = task;
+    while (current !== null) {
+      if (seen.has(current.id)) throw new ConflictError('Task retry history contains a cycle.');
+      seen.add(current.id);
+      if (current.project_id !== task.project_id || current.feature_id !== task.feature_id
+        || current.branch_name !== task.branch_name) {
+        throw new ConflictError('Task retry history crosses a different project or Feature branch.');
+      }
+      revisions.push({
+        taskId: current.id,
+        publishCommitSha: current.publish_commit_sha,
+        commitSummary: current.commit_summary,
+      });
+      if (current.source_task_id === null) break;
+      current = this.tasks.findById(current.source_task_id);
+      if (current === null) throw new ConflictError('A source task in the retry history is missing.');
+    }
+    return revisions.reverse();
   }
 
   private async leaveReviewCheckout(task: Task): Promise<void> {
