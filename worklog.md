@@ -153,3 +153,7 @@
 ## 2026/09/17
 
 - Publish complete Feature retry history as one commit while preserving failed-attempt checkpoints.
+
+## 2026/09/18
+
+- Create Feature Git branches immediately and materialize missing branches during pointer resets.

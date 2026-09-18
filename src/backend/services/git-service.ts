@@ -112,6 +112,34 @@ export class GitService {
     }
   }
 
+  /** Materializes a Feature ref on main without changing the user's checkout. */
+  public async createFeatureBranch(repositoryPath: string, featureBranch: string): Promise<boolean> {
+    const repositoryRoot = await this.validateRepository(repositoryPath);
+    const current = await this.currentBranch(repositoryRoot);
+    if (current !== 'main') {
+      throw new ConflictError(`Repository must be on main before creating ${featureBranch}; it is on ${current}.`);
+    }
+    if (!/^feature\//u.test(featureBranch) || !await this.validBranchName(repositoryRoot, featureBranch)) {
+      throw new ConflictError(`Feature branch name is invalid: ${featureBranch}`);
+    }
+    if (await this.localBranchExists(repositoryRoot, featureBranch)) {
+      throw new ConflictError(`Feature branch already exists locally: ${featureBranch}`);
+    }
+    // An unborn main cannot anchor a Git branch yet. The database Feature remains
+    // configured, and a later pointer reset or first task can materialize it.
+    if (!await this.localBranchExists(repositoryRoot, 'main')) return false;
+    const created = await this.runGit(repositoryRoot, ['branch', featureBranch, 'main'], undefined, true);
+    if (created.exitCode !== 0) {
+      throw new GitCommandError(`Unable to create Feature branch ${featureBranch}: ${formatFailure(created)}`, created);
+    }
+    return true;
+  }
+
+  private async validBranchName(repositoryRoot: string, branchName: string): Promise<boolean> {
+    const result = await this.runGit(repositoryRoot, ['check-ref-format', '--branch', branchName], undefined, true);
+    return result.exitCode === 0;
+  }
+
   /** Checks out a deterministic task branch. Retries reuse an existing branch. */
   public async prepareBranch(
     task: Task,
@@ -776,10 +804,12 @@ export class GitService {
     if (invalidBranch !== undefined) {
       throw new ConflictError(`Feature branch is not managed by the orchestrator: ${invalidBranch}`);
     }
+    const existing = new Map<string, boolean>();
     for (const branch of uniqueBranches) {
-      if (!await this.localBranchExists(repositoryRoot, branch)) {
-        throw new ConflictError(`Feature branch does not exist locally: ${branch}`);
+      if (!await this.validBranchName(repositoryRoot, branch)) {
+        throw new ConflictError(`Feature branch name is invalid: ${branch}`);
       }
+      existing.set(branch, await this.localBranchExists(repositoryRoot, branch));
     }
 
     const mainCommit = await this.currentCommit(repositoryRoot);
@@ -790,7 +820,9 @@ export class GitService {
       true,
       [
         'start',
-        ...uniqueBranches.map((branch) => `update refs/heads/${branch} ${mainCommit}`),
+        ...uniqueBranches.map((branch) => existing.get(branch)
+          ? `update refs/heads/${branch} ${mainCommit}`
+          : `create refs/heads/${branch} ${mainCommit}`),
         'prepare',
         'commit',
         '',

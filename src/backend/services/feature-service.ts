@@ -40,7 +40,14 @@ export class FeatureService {
       name,
       [...snapshot.localBranches, ...configuredFeatures.map((feature) => feature.branch_name)],
     );
-    return this.features.create({ project_id: project.id, name }, branchName, 'main');
+    const feature = this.features.create({ project_id: project.id, name }, branchName, 'main');
+    try {
+      await this.git.createFeatureBranch(project.repository_path, branchName);
+      return feature;
+    } catch (error) {
+      this.features.delete(feature.id);
+      throw error;
+    }
   }
 
   public async reorderBranches(projectId: number, branchNames: readonly string[]): Promise<void> {
@@ -75,16 +82,13 @@ export class FeatureService {
     const project = this.projects.findById(projectId);
     if (project === null) throw new NotFoundError(`Project ${projectId} was not found.`);
     const features = this.features.list(projectId);
-    const snapshot = await this.git.inspectBranches(project.repository_path);
-    const localBranches = new Set(snapshot.localBranches);
-    const resettableFeatures = features.filter((feature) => localBranches.has(feature.branch_name));
-    this.assertBranchesCanReset(resettableFeatures);
+    this.assertBranchesCanReset(features);
     await this.git.resetFeatureBranchesToMain(
       project.repository_path,
-      resettableFeatures.map((feature) => feature.branch_name),
+      features.map((feature) => feature.branch_name),
     );
-    this.features.markPointerReset(resettableFeatures.map((feature) => feature.id));
-    return { reset_count: resettableFeatures.length };
+    this.features.markPointerReset(features.map((feature) => feature.id));
+    return { reset_count: features.length };
   }
 
   public async deleteGitBranch(featureId: number): Promise<{ git_branch_deleted: boolean }> {

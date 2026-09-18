@@ -149,6 +149,41 @@ describe('GitService', () => {
     expect(await gitExitCode(runner, repository, ['cat-file', '-e', `${task.branch_name}:feature-only.txt`])).toBe(128);
   });
 
+  it('creates a new Feature branch on main before any Feature task commits and resets it later', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const service = new GitService(runner);
+    const branch = 'feature/empty-feature';
+    const originalMain = await service.currentCommit(repository);
+
+    await expect(service.createFeatureBranch(repository, branch)).resolves.toBe(true);
+    expect((await git(runner, repository, ['rev-parse', branch])).trim()).toBe(originalMain);
+    expect((await git(runner, repository, ['branch', '--show-current'])).trim()).toBe('main');
+
+    await writeFile(path.join(repository, 'main-update.txt'), 'new main work\n');
+    await git(runner, repository, ['add', 'main-update.txt']);
+    await git(runner, repository, [
+      '-c', 'user.name=Test User', '-c', 'user.email=test@example.invalid',
+      'commit', '-m', 'feat: advance main',
+    ]);
+    await service.resetFeatureBranchToMain(repository, branch);
+    expect((await git(runner, repository, ['rev-parse', branch])).trim())
+      .toBe((await git(runner, repository, ['rev-parse', 'main'])).trim());
+  });
+
+  it('materializes a legacy configured Feature branch when resetting its pointer', async () => {
+    const { repository, runner } = await temporaryRepository();
+    const service = new GitService(runner);
+    const branch = 'feature/not-created-yet';
+    expect(await gitExitCode(runner, repository, [
+      'show-ref', '--verify', '--quiet', `refs/heads/${branch}`,
+    ])).toBe(1);
+
+    await service.resetFeatureBranchToMain(repository, branch);
+
+    expect((await git(runner, repository, ['rev-parse', branch])).trim())
+      .toBe((await git(runner, repository, ['rev-parse', 'main'])).trim());
+  });
+
   it('resets all requested Feature branch pointers together after validating every target', async () => {
     const { repository, runner } = await temporaryRepository();
     const service = new GitService(runner);
@@ -161,14 +196,14 @@ describe('GitService', () => {
     }
     const firstCommit = (await git(runner, repository, ['rev-parse', branches[0]!])).trim();
 
-    await expect(service.resetFeatureBranchesToMain(repository, [branches[0]!, 'feature/missing']))
-      .rejects.toThrow('Feature branch does not exist locally: feature/missing');
+    await expect(service.resetFeatureBranchesToMain(repository, [branches[0]!, 'feature/invalid..name']))
+      .rejects.toThrow('Feature branch name is invalid: feature/invalid..name');
     expect((await git(runner, repository, ['rev-parse', branches[0]!])).trim()).toBe(firstCommit);
 
-    await service.resetFeatureBranchesToMain(repository, branches);
+    await service.resetFeatureBranchesToMain(repository, [...branches, 'feature/missing']);
 
     const mainCommit = (await git(runner, repository, ['rev-parse', 'main'])).trim();
-    for (const branchName of branches) {
+    for (const branchName of [...branches, 'feature/missing']) {
       expect((await git(runner, repository, ['rev-parse', branchName])).trim()).toBe(mainCommit);
     }
   });

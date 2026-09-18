@@ -121,6 +121,33 @@ describe('backend API', () => {
     });
   });
 
+  it('materializes a Feature configured before the first main commit when its pointer is reset', async () => {
+    const project = await request(app).post('/projects').send({
+      name: 'Unborn project', repository_path: repositoryPath,
+    }).expect(201);
+    const feature = await request(app).post('/features').send({
+      project_id: project.body.id, name: 'First feature',
+    }).expect(201);
+    expect(() => execFileSync('git', [
+      '-C', repositoryPath, 'show-ref', '--verify', `refs/heads/${feature.body.branch_name}`,
+    ], { windowsHide: true, stdio: 'pipe' })).toThrow();
+
+    await writeFile(path.join(repositoryPath, 'README.md'), 'first main commit\n');
+    execFileSync('git', ['-C', repositoryPath, 'add', 'README.md'], { windowsHide: true, stdio: 'pipe' });
+    execFileSync('git', [
+      '-C', repositoryPath, '-c', 'user.name=Test User', '-c', 'user.email=test@example.invalid',
+      'commit', '-m', 'initial',
+    ], { windowsHide: true, stdio: 'pipe' });
+
+    await request(app).post(`/projects/${project.body.id}/features/reset-to-main`).send({})
+      .expect(200, { reset_count: 1 });
+    expect(execFileSync('git', ['-C', repositoryPath, 'rev-parse', feature.body.branch_name], {
+      encoding: 'utf8', windowsHide: true,
+    }).trim()).toBe(execFileSync('git', ['-C', repositoryPath, 'rev-parse', 'main'], {
+      encoding: 'utf8', windowsHide: true,
+    }).trim());
+  }, 20_000);
+
   it('resets a configured local Feature branch to the latest main commit', async () => {
     await writeFile(path.join(repositoryPath, 'README.md'), 'main\n');
     execFileSync('git', ['-C', repositoryPath, 'add', 'README.md'], { windowsHide: true, stdio: 'pipe' });
@@ -138,7 +165,13 @@ describe('backend API', () => {
       project_id: project.body.id,
       name: 'Reset me',
     }).expect(201);
-    execFileSync('git', ['-C', repositoryPath, 'switch', '-c', feature.body.branch_name], {
+    const initialMain = execFileSync('git', ['-C', repositoryPath, 'rev-parse', 'main'], {
+      encoding: 'utf8', windowsHide: true,
+    }).trim();
+    expect(execFileSync('git', ['-C', repositoryPath, 'rev-parse', feature.body.branch_name], {
+      encoding: 'utf8', windowsHide: true,
+    }).trim()).toBe(initialMain);
+    execFileSync('git', ['-C', repositoryPath, 'switch', feature.body.branch_name], {
       windowsHide: true, stdio: 'pipe',
     });
     await writeFile(path.join(repositoryPath, 'feature-only.txt'), 'feature\n');
@@ -201,9 +234,6 @@ describe('backend API', () => {
     const feature = await request(app).post('/features').send({
       project_id: project.body.id, name: 'Disposable Feature',
     }).expect(201);
-    execFileSync('git', ['-C', repositoryPath, 'branch', feature.body.branch_name, 'main'], {
-      windowsHide: true, stdio: 'pipe',
-    });
     const task = await request(app).post('/tasks').send({
       project_id: project.body.id,
       feature_id: feature.body.id,

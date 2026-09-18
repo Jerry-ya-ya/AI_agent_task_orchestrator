@@ -25,11 +25,12 @@ describe('FeatureService', () => {
     const tasks = new TaskRepository(database, runs);
     const project = projects.create({ name: 'Example', repository_path: '/example', context: '' });
     const inspectBranches = vi.fn(async () => ({ currentBranch: 'main', localBranches: ['main'] }));
+    const createFeatureBranch = vi.fn(async () => false);
     const service = new FeatureService(
       features,
       projects,
       tasks,
-      { inspectBranches } as unknown as GitService,
+      { inspectBranches, createFeatureBranch } as unknown as GitService,
     );
 
     const feature = await service.create({ project_id: project.id, name: '  Account Settings  ' });
@@ -38,6 +39,7 @@ describe('FeatureService', () => {
       branch_name: 'feature/account-settings',
       base_branch: 'main',
     });
+    expect(createFeatureBranch).toHaveBeenCalledWith('/example', 'feature/account-settings');
     tasks.create({
       project_id: project.id,
       feature_id: feature.id,
@@ -99,6 +101,22 @@ describe('FeatureService', () => {
     expect(features.list(project.id)).toEqual([]);
   });
 
+  it('does not retain a Feature record if its Git branch cannot be created', async () => {
+    const projects = new ProjectRepository(database);
+    const features = new FeatureRepository(database);
+    const tasks = new TaskRepository(database, new TaskRunRepository(database));
+    const project = projects.create({ name: 'Example', repository_path: '/example', context: '' });
+    const git = {
+      inspectBranches: vi.fn(async () => ({ currentBranch: 'main', localBranches: ['main'] })),
+      createFeatureBranch: vi.fn(async () => { throw new ConflictError('Git branch creation failed.'); }),
+    } as unknown as GitService;
+    const service = new FeatureService(features, projects, tasks, git);
+
+    await expect(service.create({ project_id: project.id, name: 'Search' }))
+      .rejects.toThrow('Git branch creation failed.');
+    expect(features.list(project.id)).toEqual([]);
+  });
+
   it('resets a configured Feature branch through its owning Project repository', async () => {
     const projects = new ProjectRepository(database);
     const features = new FeatureRepository(database);
@@ -113,7 +131,7 @@ describe('FeatureService', () => {
     const resetFeatureBranchToMain = vi.fn(async () => undefined);
     const resetFeatureBranchesToMain = vi.fn(async () => undefined);
     const inspectBranches = vi.fn(async () => ({
-      currentBranch: 'main', localBranches: ['main', 'feature/search'],
+      currentBranch: 'main', localBranches: ['main'],
     }));
     const service = new FeatureService(
       features,
