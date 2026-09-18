@@ -27,6 +27,7 @@
   background: var(--surface);
   box-shadow: var(--shadow);
 }
+.settings-panel--icons { margin-top: 18px; }
 .settings-panel__heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .settings-panel__heading h3 { margin: 0; font-size: 17px; }
 .settings-panel__heading p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
@@ -69,7 +70,34 @@
 .theme-option__check { position: absolute; top: 16px; right: 16px; display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; }
 .theme-option:not(.theme-option--selected) .theme-option__check { display: none; }
 
+.icon-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 13px; }
+.icon-option {
+  display: flex;
+  position: relative;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  flex-direction: column;
+  padding: 16px 12px 14px;
+  border: 2px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+  color: var(--ink);
+  text-align: center;
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+.icon-option:hover { transform: translateY(-2px); border-color: var(--accent); }
+.icon-option--selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.icon-option__preview { display: grid; width: 86px; height: 86px; place-items: center; border-radius: 18px; background: #f3f6fa; }
+.icon-option__preview img { width: 70px; height: 70px; }
+.icon-option__name { font-size: 13px; font-weight: 700; }
+.icon-option__description { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.icon-option__check { position: absolute; top: 10px; right: 10px; display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; }
+.icon-option:not(.icon-option--selected) .icon-option__check { display: none; }
+.settings-panel__footnote { margin: 16px 0 0; color: var(--muted); font-size: 11px; }
+
 @media (max-width: 620px) {
   .settings-panel { padding: 16px; }
   .theme-grid { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+  .icon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -198,28 +198,10 @@
 }
 
 .brand-mark {
-  display: grid;
-  grid-template-columns: repeat(2, 10px);
-  grid-template-rows: repeat(2, 10px);
-  gap: 3px;
   width: 34px;
   height: 34px;
-  padding: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 9px;
-}
-
-.brand-mark span {
-  border-radius: 2px;
-  background: #fff;
-}
-
-.brand-mark span:nth-child(2) {
-  opacity: 0.5;
-}
-
-.brand-mark span:nth-child(3) {
-  opacity: 0.72;
+  flex: 0 0 34px;
+  user-select: none;
 }
 
 .eyebrow {

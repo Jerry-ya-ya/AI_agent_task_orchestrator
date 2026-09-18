@@ -12,4 +12,14 @@ describe('SettingsPageComponent', () => {
     component.themeSelected.emit('amber');
     expect(selected).toHaveBeenCalledWith('amber');
   });
+
+  it('keeps the original icon and offers selectable derived variants', () => {
+    const component = new SettingsPageComponent();
+    const selected = vi.spyOn(component.iconSelected, 'emit');
+
+    expect(component.icons.map((icon) => icon.id)).toEqual(['original', 'violet', 'ember', 'frost']);
+    expect(component.icons[0]?.source).toBe('favicon.svg');
+    component.iconSelected.emit('frost');
+    expect(selected).toHaveBeenCalledWith('frost');
+  });
 });

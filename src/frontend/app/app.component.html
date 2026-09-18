@@ -1,5 +1,5 @@
 <div class="app-shell">
-  <app-header [connected]="connected" [apiBaseUrl]="apiBaseUrl" [workerStatus]="workerStatus" [agentUsage]="agentUsage" [projectCount]="projects.length" (createProject)="openProjectEditor()" (createTask)="openCreateTask()" (workerToggled)="toggleWorkerDispatch()" (quotaLoopToggled)="toggleQuotaLoop()" (minimizeApplication)="minimizeApplication()" (closeApplication)="closeApplication()" />
+  <app-header [connected]="connected" [apiBaseUrl]="apiBaseUrl" [workerStatus]="workerStatus" [agentUsage]="agentUsage" [projectCount]="projects.length" [iconSource]="iconSource" (createProject)="openProjectEditor()" (createTask)="openCreateTask()" (workerToggled)="toggleWorkerDispatch()" (quotaLoopToggled)="toggleQuotaLoop()" (minimizeApplication)="minimizeApplication()" (closeApplication)="closeApplication()" />
   <div class="app-workspace" [class.app-workspace--navigation-expanded]="navigationExpanded">
     <app-navigation
       [expanded]="navigationExpanded"
@@ -30,7 +30,7 @@
         <task-history [tasks]="tasks" [projects]="projects" [columns]="columns" (taskOpened)="openTaskDetail($event)" />
       </ng-container>
       <ng-container *ngSwitchCase="'settings'">
-        <settings-page [selectedTheme]="selectedTheme" (themeSelected)="selectTheme($event)" />
+        <settings-page [selectedTheme]="selectedTheme" [selectedIcon]="selectedIcon" (themeSelected)="selectTheme($event)" (iconSelected)="selectIcon($event)" />
       </ng-container>
     </main>
   </div>

@@ -34,9 +34,40 @@ describe('AppComponent initialization', () => {
     component.selectTheme('amber');
     expect(values.get('agentboard.theme')).toBe('amber');
     expect(setAttribute).toHaveBeenLastCalledWith('data-theme', 'amber');
-    component.onThemeStorageChanged({ key: 'agentboard.theme', newValue: 'rose' } as StorageEvent);
+    component.onPreferencesStorageChanged({ key: 'agentboard.theme', newValue: 'rose' } as StorageEvent);
     expect(component.selectedTheme).toBe('rose');
     expect(setAttribute).toHaveBeenLastCalledWith('data-theme', 'rose');
+  });
+
+  it('restores and synchronizes the selected icon without accepting unknown variants', () => {
+    const values = new Map<string, string>([['agentboard.icon', 'violet']]);
+    const setAttribute = vi.fn();
+    const setIcon = vi.fn(async () => true);
+    const markForCheck = vi.fn();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    });
+    vi.stubGlobal('document', { querySelector: () => ({ setAttribute }) });
+    vi.stubGlobal('window', { desktopWindow: { setIcon } });
+    const component = new AppComponent(
+      { baseUrl: 'http://127.0.0.1:4317' } as ApiService,
+      { markForCheck } as unknown as ChangeDetectorRef,
+    );
+
+    expect(component.selectedIcon).toBe('violet');
+    expect(component.iconSource).toBe('icon-violet.svg');
+    expect(setIcon).toHaveBeenCalledWith('violet');
+    component.selectIcon('ember');
+    expect(values.get('agentboard.icon')).toBe('ember');
+    expect(setAttribute).toHaveBeenLastCalledWith('href', 'icon-ember.svg');
+    expect(setIcon).toHaveBeenLastCalledWith('ember');
+    component.onPreferencesStorageChanged({ key: 'agentboard.icon', newValue: 'frost' } as StorageEvent);
+    expect(component.selectedIcon).toBe('frost');
+    expect(component.iconSource).toBe('icon-frost.svg');
+    expect(markForCheck).toHaveBeenCalled();
+    component.onPreferencesStorageChanged({ key: 'agentboard.icon', newValue: 'unsafe/path' } as StorageEvent);
+    expect(component.selectedIcon).toBe('frost');
   });
 
   it('switches between the taskboard and history pages', () => {

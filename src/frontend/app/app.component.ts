@@ -11,6 +11,7 @@ import {
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from './api.service';
+import { applyIcon, iconSource, isIconId, readStoredIcon, storeIcon, ICON_STORAGE_KEY, type IconId } from './icon-preferences';
 import { AppHeaderComponent } from './components/app-header/app-header.component';
 import {
   AppNavigationComponent,
@@ -109,6 +110,8 @@ export class AppComponent implements OnInit, OnDestroy {
   activePage: AppPage = 'taskboard';
   navigationExpanded = false;
   selectedTheme: ThemeId = readStoredTheme();
+  selectedIcon: IconId = readStoredIcon();
+  iconSource = iconSource(this.selectedIcon);
 
   showProjectEditor = false;
   showFeatureEditor = false;
@@ -143,6 +146,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.activePage = requestedPage;
     }
     applyTheme(this.selectedTheme);
+    this.applySelectedIcon();
   }
 
   selectTheme(theme: ThemeId): void {
@@ -151,11 +155,29 @@ export class AppComponent implements OnInit, OnDestroy {
     storeTheme(theme);
   }
 
+  selectIcon(icon: IconId): void {
+    this.selectedIcon = icon;
+    this.applySelectedIcon();
+    storeIcon(icon);
+  }
+
+  private applySelectedIcon(): void {
+    this.iconSource = iconSource(this.selectedIcon);
+    applyIcon(this.selectedIcon);
+    void globalThis.window?.desktopWindow?.setIcon?.(this.selectedIcon);
+  }
+
   @HostListener('window:storage', ['$event'])
-  onThemeStorageChanged(event: StorageEvent): void {
-    if (event.key !== THEME_STORAGE_KEY || !isThemeId(event.newValue)) return;
-    this.selectedTheme = event.newValue;
-    applyTheme(this.selectedTheme);
+  onPreferencesStorageChanged(event: StorageEvent): void {
+    if (event.key === THEME_STORAGE_KEY && isThemeId(event.newValue)) {
+      this.selectedTheme = event.newValue;
+      applyTheme(this.selectedTheme);
+    } else if (event.key === ICON_STORAGE_KEY && isIconId(event.newValue)) {
+      this.selectedIcon = event.newValue;
+      this.applySelectedIcon();
+    } else {
+      return;
+    }
     this.changeDetector.markForCheck();
   }
 

@@ -59,6 +59,8 @@ pnpm package
 pnpm dist
 ```
 
+The Agentboard mark is in `src/frontend/public/favicon.svg`. On Windows, run `pnpm icons:generate` after changing it to refresh the packaged PNG and ICO desktop icons.
+
 Application data is stored under Electron's per-user `userData/data/orchestrator.sqlite`. Browser-only development uses `.data/orchestrator.sqlite` unless `ORCHESTRATOR_DATABASE_PATH` is set.
 
 For a production-UI browser smoke test, set `ORCHESTRATOR_UI_PATH=dist/frontend/browser` when launching `src/backend/standalone.ts`; the backend then serves Angular from the same loopback origin.

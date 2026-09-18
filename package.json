@@ -16,6 +16,7 @@
     "build:frontend": "ng build",
     "build:main": "tsc -p tsconfig.electron.json",
     "start": "electron .",
+    "icons:generate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-app-icon.ps1",
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke:electron-runtime": "cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/electron-runtime-smoke.mjs",
@@ -62,12 +63,15 @@
       "package.json"
     ],
     "win": {
+      "icon": "src/frontend/public/icon.ico",
       "target": "nsis"
     },
     "mac": {
+      "icon": "src/frontend/public/icon.png",
       "target": "dmg"
     },
     "linux": {
+      "icon": "src/frontend/public/icon.png",
       "target": "AppImage"
     }
   }

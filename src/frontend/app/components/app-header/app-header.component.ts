@@ -21,6 +21,7 @@ export class AppHeaderComponent {
   @Input() workerStatus: WorkerStatus | null = null;
   @Input() agentUsage: AgentUsage | null = null;
   @Input({ required: true }) projectCount = 0;
+  @Input() iconSource = 'favicon.svg';
 
   @Output() createProject = new EventEmitter<void>();
   @Output() createTask = new EventEmitter<void>();

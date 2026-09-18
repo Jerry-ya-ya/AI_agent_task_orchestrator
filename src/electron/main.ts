@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell } from 'electron';
+import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OrchestratorRuntime } from '../backend/runtime.js';
@@ -9,6 +10,16 @@ let mainWindow: BrowserWindow | null = null;
 let quittingAfterShutdown = false;
 let shutdownPromise: Promise<void> | null = null;
 const APP_PAGES = new Set(['features', 'taskboard', 'history', 'settings']);
+const APP_ICONS = new Set(['original', 'violet', 'ember', 'frost']);
+const iconDirectory = app.isPackaged
+  ? resolve(currentDirectory, '../../frontend/browser')
+  : resolve(currentDirectory, '../../../src/frontend/public');
+let selectedWindowIcon = 'original';
+
+function iconPath(id: string): string {
+  const name = id === 'original' ? 'icon' : `icon-${id}`;
+  return join(iconDirectory, `${name}.${process.platform === 'win32' ? 'ico' : 'png'}`);
+}
 
 type AppPage = 'features' | 'taskboard' | 'history' | 'settings';
 
@@ -18,6 +29,7 @@ interface WindowPlacement {
 }
 
 Menu.setApplicationMenu(null);
+if (process.platform === 'win32') app.setAppUserModelId('dev.local.ai-agent-task-orchestrator');
 
 ipcMain.handle('window:close', (event) => {
   const browserWindow = BrowserWindow.fromWebContents(event.sender);
@@ -34,6 +46,21 @@ ipcMain.handle('window:minimize', (event) => {
     return false;
   }
   browserWindow.minimize();
+  return true;
+});
+
+ipcMain.handle('window:set-icon', (_event, candidate: unknown) => {
+  if (typeof candidate !== 'string' || !APP_ICONS.has(candidate)) return false;
+  const selectedPath = iconPath(candidate);
+  if (!existsSync(selectedPath)) return false;
+  selectedWindowIcon = candidate;
+  if (process.platform === 'darwin') {
+    app.dock?.setIcon(selectedPath);
+  } else {
+    BrowserWindow.getAllWindows().forEach((browserWindow) => {
+      if (!browserWindow.isDestroyed()) browserWindow.setIcon(selectedPath);
+    });
+  }
   return true;
 });
 
@@ -120,6 +147,7 @@ async function createWindow(
     minWidth: 980,
     minHeight: 680,
     title: 'AI Agent Task Orchestrator',
+    icon: iconPath(selectedWindowIcon),
     frame: false,
     show: false,
     autoHideMenuBar: true,

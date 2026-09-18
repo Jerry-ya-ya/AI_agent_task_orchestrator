@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Agentboard Frost">
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#f9fcff"/>
+      <stop offset="1" stop-color="#dceaf4"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#29647b"/>
+      <stop offset="1" stop-color="#438fc0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#surface)"/>
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="none" stroke="#17304a" stroke-opacity=".16" stroke-width="2"/>
+  <path d="M39 22C30 19 23 24 23 32s7 13 16 10" fill="none" stroke="url(#flow)" stroke-linecap="round" stroke-width="7"/>
+  <path d="M13 32h39" fill="none" stroke="#17283d" stroke-linecap="round" stroke-width="5"/>
+</svg>

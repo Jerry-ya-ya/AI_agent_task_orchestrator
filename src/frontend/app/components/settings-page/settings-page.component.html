@@ -2,7 +2,7 @@
   <header class="settings-page__heading">
     <p class="eyebrow">Personalize your workspace</p>
     <h2 id="settings-title">Settings</h2>
-    <p>Choose a color theme for Agentboard. Your choice is saved on this device and applies to every window.</p>
+    <p>Choose your workspace colors and icon. Your choices are saved on this device and apply to every window.</p>
   </header>
 
   <section class="settings-panel" aria-labelledby="theme-title">
@@ -35,5 +35,32 @@
         <span class="theme-option__check" aria-hidden="true">{{ selectedTheme === theme.id ? '✓' : '' }}</span>
       </button>
     </div>
+  </section>
+
+  <section class="settings-panel settings-panel--icons" aria-labelledby="icon-title">
+    <div class="settings-panel__heading">
+      <div>
+        <h3 id="icon-title">App icon</h3>
+        <p>Choose a variation of the original C-and-crossbar mark.</p>
+      </div>
+      <span class="settings-panel__count">{{ icons.length }} icons</span>
+    </div>
+    <div class="icon-grid" role="group" aria-label="App icon">
+      <button
+        *ngFor="let icon of icons"
+        class="icon-option"
+        type="button"
+        [class.icon-option--selected]="selectedIcon === icon.id"
+        [attr.aria-pressed]="selectedIcon === icon.id"
+        [attr.aria-label]="icon.name + ' icon'"
+        (click)="iconSelected.emit(icon.id)"
+      >
+        <span class="icon-option__preview"><img [src]="icon.source" alt="" aria-hidden="true" /></span>
+        <span class="icon-option__name">{{ icon.name }}</span>
+        <span class="icon-option__description">{{ icon.description }}</span>
+        <span class="icon-option__check" aria-hidden="true">{{ selectedIcon === icon.id ? '✓' : '' }}</span>
+      </button>
+    </div>
+    <p class="settings-panel__footnote">Changes the title-bar, tab and open desktop window icons. The installed shortcut keeps the original icon.</p>
   </section>
 </section>
