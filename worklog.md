@@ -163,3 +163,5 @@
 ## 2026/09/19
 
 - Add a native Electron folder picker for project repository paths.
+
+- Initialize project branch maps from existing Git history and render main-only repositories.

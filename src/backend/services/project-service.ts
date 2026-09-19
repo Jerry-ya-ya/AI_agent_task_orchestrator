@@ -32,6 +32,10 @@ export class ProjectService {
       throw new ConflictError('That Git repository is already registered.');
     }
 
+    // Inspect once while connecting so the first Feature-map render already has
+    // the repository's primary branch, local branches, and commit history ready.
+    await this.git.inspectBranches(repositoryPath);
+
     try {
       return this.projects.create({
         name,

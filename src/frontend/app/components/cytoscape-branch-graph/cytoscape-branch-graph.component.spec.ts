@@ -17,6 +17,24 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(component.zoomSensitivity).toBe(3);
   });
 
+  it('renders a main-only repository history without requiring a Feature task', () => {
+    const component = new CytoscapeBranchGraphComponent();
+    component.map = {
+      project: { id: 1, name: 'Main only', repository_path: 'C:/repo', context: '', created_at: '', updated_at: '' },
+      current_branch: 'main',
+      primary_branch: 'main',
+      primary_commits: [{ sha: 'first', short_sha: 'first', summary: 'Initial commit', committed_at: '2026-09-19T00:00:00.000Z' }],
+      branches: [{ name: 'main', exists: true, is_current: true, is_primary: true, ahead: null, behind: null, fork_commit: null, feature: null, tasks: [] }],
+    };
+    component.lanes = [];
+
+    const model = component.graphModel();
+
+    expect(model.elements).toContainEqual(expect.objectContaining({
+      data: expect.objectContaining({ id: 'primary:first', label: 'Initial commit' }),
+    }));
+  });
+
   it('restores and persists the zoom multiplier separately for each project', () => {
     const storage = memoryStorage({ 'agentboard.featureMap.zoomSensitivity.1': '3' });
     vi.stubGlobal('localStorage', storage);

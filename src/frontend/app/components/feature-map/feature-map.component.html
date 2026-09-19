@@ -6,7 +6,7 @@
   <div class="feature-map__loading" *ngIf="loading && maps.length === 0">Inspecting local repositories…</div>
   <div class="feature-project" *ngIf="selectedMap() as map">
     <header class="feature-project__header"><div><h3>{{ map.project.name }}</h3><code>{{ map.project.repository_path }}</code></div><div class="feature-project__actions"><span>Current: {{ map.current_branch || 'unavailable' }}</span><button class="button button--primary" type="button" (click)="createFeature.emit(map.project.id)">＋ New feature</button></div></header>
-    <div class="branch-network" *ngIf="featureLanes(map).length > 0; else noBranches">
+    <div class="branch-network">
       <div class="branch-order-strip" aria-label="Feature branch display order">
         <div class="branch-order-item" *ngFor="let lane of featureLanes(map); let laneIndex = index" [class.branch-order-item--missing]="!lane.exists" [style.--branch-color]="branchColor(laneIndex)">
           <span class="branch-order-item__color" aria-hidden="true"></span>
@@ -17,7 +17,6 @@
       </div>
       <cytoscape-branch-graph [map]="map" [lanes]="featureLanes(map)" (taskOpened)="taskOpened.emit($event)" (taskCreationRequested)="createTask.emit($event)" (branchResetRequested)="resetBranch.emit($event)" (allBranchesResetRequested)="resetAllBranches.emit($event)" (gitBranchDeleteRequested)="deleteGitBranch.emit($event)" (databaseBranchDeleteRequested)="deleteDatabaseBranch.emit($event)" (legacyGitBranchDeleteRequested)="deleteLegacyGitBranch.emit($event)"></cytoscape-branch-graph>
     </div>
-    <ng-template #noBranches><div class="history-empty"><p>No local branches or configured features found.</p></div></ng-template>
   </div>
   <div class="empty-workspace" *ngIf="!loading && maps.length === 0"><div class="empty-workspace__icon" aria-hidden="true">⑂</div><h2>No projects yet</h2><p>Create a project before defining its first feature branch.</p></div>
 </section>

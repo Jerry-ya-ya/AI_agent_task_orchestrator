@@ -397,7 +397,9 @@ export class AppComponent implements OnInit, OnDestroy {
       this.projects = [...this.projects, created];
       this.closeModal();
       this.showNotice(`Project “${created.name}” created.`);
-      await this.refreshBoard(true);
+      // Prime the repository graph immediately so a project with no tasks still
+      // shows its main history and any pre-existing local branches.
+      await Promise.all([this.refreshBoard(true), this.refreshBranchMap()]);
     } catch (error: unknown) {
       this.setError(this.errorMessage(error));
     } finally {
