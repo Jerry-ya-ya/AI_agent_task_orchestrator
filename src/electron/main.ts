@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type OpenDialogOptions } from 'electron';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,6 +62,23 @@ ipcMain.handle('window:set-icon', (_event, candidate: unknown) => {
     });
   }
   return true;
+});
+
+ipcMain.handle('project:choose-repository', async (event, suggestedPath: unknown): Promise<string | null> => {
+  const browserWindow = BrowserWindow.fromWebContents(event.sender);
+  const defaultPath = typeof suggestedPath === 'string' && suggestedPath.trim().length > 0
+    ? suggestedPath.trim()
+    : undefined;
+  const options: OpenDialogOptions = {
+    title: 'Choose a local Git repository',
+    defaultPath,
+    buttonLabel: 'Use this folder',
+    properties: ['openDirectory', 'createDirectory'],
+  };
+  const result = browserWindow === null
+    ? await dialog.showOpenDialog(options)
+    : await dialog.showOpenDialog(browserWindow, options);
+  return result.canceled ? null : (result.filePaths[0] ?? null);
 });
 
 ipcMain.handle('window:open-page', async (_event, request: unknown) => {

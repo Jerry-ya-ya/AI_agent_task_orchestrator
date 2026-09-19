@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('desktopWindow', {
+  chooseRepository: (suggestedPath: string): Promise<string | null> =>
+    ipcRenderer.invoke('project:choose-repository', suggestedPath),
   minimize: (): Promise<boolean> => ipcRenderer.invoke('window:minimize'),
   openPage: (page: string, screenX: number, screenY: number): Promise<boolean> =>
     ipcRenderer.invoke('window:open-page', { page, screenX, screenY }),

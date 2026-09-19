@@ -1530,6 +1530,23 @@ header-usage {
   padding: 0 11px;
 }
 
+.repository-path-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.repository-path-control input {
+  min-width: 0;
+}
+
+.repository-path-control__browse {
+  height: 40px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
 .form-field textarea {
   min-height: 96px;
   padding: 10px 11px;

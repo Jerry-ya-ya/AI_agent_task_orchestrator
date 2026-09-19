@@ -11,8 +11,27 @@ export class ProjectEditorDialogComponent {
   @Output() closed = new EventEmitter<void>();
   @Output() submitted = new EventEmitter<void>();
 
+  choosingRepository = false;
+
+  get canChooseRepository(): boolean {
+    return globalThis.window?.desktopWindow?.chooseRepository !== undefined;
+  }
+
   submit(form: NgForm): void {
     if (form.invalid || this.saving) { form.control.markAllAsTouched(); return; }
     this.submitted.emit();
+  }
+
+  async chooseRepository(): Promise<void> {
+    const chooser = globalThis.window?.desktopWindow?.chooseRepository;
+    if (chooser === undefined || this.choosingRepository) return;
+
+    this.choosingRepository = true;
+    try {
+      const selectedPath = await chooser(this.draft.repository_path);
+      if (selectedPath !== null) this.draft.repository_path = selectedPath;
+    } finally {
+      this.choosingRepository = false;
+    }
   }
 }

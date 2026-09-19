@@ -159,3 +159,7 @@
 - Create Feature Git branches immediately and materialize missing branches during pointer resets.
 
 - Replace Agentboard's desktop and header icons with a compact C-and-crossbar mark.
+
+## 2026/09/19
+
+- Add a native Electron folder picker for project repository paths.
