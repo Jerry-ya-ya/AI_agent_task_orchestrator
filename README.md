@@ -1,5 +1,7 @@
 # AI Agent Task Orchestrator
 
+**English** | [繁體中文](README.zh-TW.md)
+
 A local-first desktop MVP that groups coding tasks into Features, runs each Feature on one shared Git branch, executes Codex CLI and project verification, then requires review and push confirmation before publishing each task checkpoint.
 
 ## Stack
@@ -59,7 +61,7 @@ pnpm package
 pnpm dist
 ```
 
-The Agentboard mark is in `src/frontend/public/favicon.svg`. On Windows, run `pnpm icons:generate` after changing it to refresh the packaged PNG and ICO desktop icons.
+The original Agentboard mark is in `src/frontend/public/favicon.svg`. Settings offers derived icon variants without changing the original mark. On Windows, run `pnpm icons:generate` after changing icon artwork to refresh the packaged PNG and ICO desktop icons.
 
 Application data is stored under Electron's per-user `userData/data/orchestrator.sqlite`. Browser-only development uses `.data/orchestrator.sqlite` unless `ORCHESTRATOR_DATABASE_PATH` is set.
 
@@ -67,14 +69,15 @@ For a production-UI browser smoke test, set `ORCHESTRATOR_UI_PATH=dist/frontend/
 
 ## Use the MVP
 
-1. Create a Project and enter the absolute path of an existing local Git repository.
+1. Create a Project and enter the absolute path of an existing local Git repository. In the desktop app, use **Browse…** to select the repository folder from the native file picker.
 2. Optionally add project context for Codex.
-3. Open Features, create a Feature for the project, then create one or more Tasks assigned to it.
-4. Leave the desktop app running. The Worker claims one `TODO` task at a time. Tasks within a Feature run in creation order; a Feature waiting for review or push does not block work from another Feature.
+3. The new Project immediately scans its local branch and commit history. Open Features to inspect `main`, existing local branches, and their history even before creating a task.
+4. Create a Feature from the page button or the **+ New feature** node at the bottom of the branch graph, then create one or more Tasks assigned to it.
+5. Leave the desktop app running. The Worker claims one `TODO` task at a time. Tasks within a Feature run in creation order; a Feature waiting for review or push does not block work from another Feature.
    Use the header pause/play control to stop or resume new task claims. Pausing lets the current task finish and prevents the next `TODO` task from starting.
-5. Open task cards to inspect branch, workspace, result, stdout, stderr, and the read-only file summary and code patch captured for every run attempt.
-6. Select an `IN_REVIEW` task to check out its exact commit on a disposable Review branch. Exit Review to restore `main` and return it to `IN_REVIEW`, or pass Review to restore `main` and move it to `PENDING_PUSH`.
-7. Confirm push to cherry-pick only the approved task commit from its shared Feature branch onto `main`, push `main` to `origin`, and move the task checkpoint to `DONE`. Retrying creates a new linked Task ID in `TODO` while preserving the superseded task as history.
+6. Open task cards to inspect branch, workspace, result, stdout, stderr, and the read-only file summary and code patch captured for every run attempt.
+7. Select an `IN_REVIEW` task to check out its exact commit on a disposable Review branch. Exit Review to restore `main` and return it to `IN_REVIEW`, or pass Review to restore `main` and move it to `PENDING_PUSH`.
+8. Confirm push to cherry-pick only the approved task commit from its shared Feature branch onto `main`, push `main` to `origin`, and move the task checkpoint to `DONE`. Retrying creates a new linked Task ID in `TODO` while preserving the superseded task as history.
 
 For a Feature titled `Login API`, the generated branch is:
 

@@ -165,3 +165,5 @@
 - Add a native Electron folder picker for project repository paths.
 
 - Initialize project branch maps from existing Git history and render main-only repositories.
+
+- Add Traditional Chinese documentation with a linked English primary README.

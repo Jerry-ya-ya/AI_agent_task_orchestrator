@@ -71,6 +71,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   }
   @Input({ required: true }) lanes: readonly BranchLane[] = [];
   @Output() taskOpened = new EventEmitter<number>();
+  @Output() featureCreationRequested = new EventEmitter<number>();
   @Output() taskCreationRequested = new EventEmitter<number>();
   @Output() branchResetRequested = new EventEmitter<number>();
   @Output() gitBranchDeleteRequested = new EventEmitter<number>();
@@ -159,6 +160,13 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     const primaryNodeIds = primaryCommits.length === 0
       ? [this.primaryNodeId('start')]
       : primaryCommits.map((commit) => this.primaryNodeId(commit.sha));
+    const primaryLabelId = 'primary:label';
+
+    elements.push(this.node(primaryLabelId, STICKY_BRANCH_LABEL_X, MAIN_Y, {
+      label: this.map.primary_branch ?? 'main',
+      subtitle: 'Primary branch',
+      color: '#46515e',
+    }, 'primary-label'));
 
     if (primaryCommits.length === 0) {
       elements.push(this.node(primaryNodeIds[0]!, primaryStartX, MAIN_Y, {
@@ -184,6 +192,9 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
         }
       });
     }
+    elements.push(this.edge(
+      'primary-label-edge', primaryLabelId, primaryNodeIds[0]!, '#46515e', 'primary-edge primary-label-edge',
+    ));
 
     this.lanes.forEach((lane, laneIndex) => {
       const color = BRANCH_COLORS[laneIndex % BRANCH_COLORS.length]!;
@@ -429,6 +440,14 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       }
     });
 
+    const createFeatureY = FIRST_BRANCH_Y + (this.lanes.length * BRANCH_GAP);
+    elements.push(this.node('feature:create', STICKY_BRANCH_LABEL_X, createFeatureY, {
+      label: '+ New feature',
+      subtitle: 'Create a branch from main',
+      projectId: this.map.project.id,
+      color: '#3977d4',
+    }, 'feature-create-action'));
+
     return {
       elements,
     };
@@ -478,6 +497,10 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     this.graph.on('tap', 'node.task', (event) => {
       const taskId = Number(event.target.data('taskId'));
       if (Number.isInteger(taskId)) this.taskOpened.emit(taskId);
+    });
+    this.graph.on('tap', 'node.feature-create-action', (event) => {
+      const projectId = Number(event.target.data('projectId'));
+      if (Number.isInteger(projectId)) this.featureCreationRequested.emit(projectId);
     });
     this.graph.on('tap', 'node.branch-actions', (event) => {
       const featureId = Number(event.target.data('featureId'));
@@ -529,10 +552,10 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       this.toggleBranchActions(featureId, false);
       this.databaseBranchDeleteRequested.emit(featureId);
     });
-    this.graph.on('mouseover', 'node.task, node.branch-actions, node.branch-action-option', () => {
+    this.graph.on('mouseover', 'node.task, node.branch-actions, node.branch-action-option, node.feature-create-action', () => {
       this.graphHost.nativeElement.style.cursor = 'pointer';
     });
-    this.graph.on('mouseout', 'node.task, node.branch-actions, node.branch-action-option', () => {
+    this.graph.on('mouseout', 'node.task, node.branch-actions, node.branch-action-option, node.feature-create-action', () => {
       this.graphHost.nativeElement.style.cursor = 'grab';
     });
   }
@@ -574,7 +597,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
     const zoom = this.graph.zoom();
     const pan = this.graph.pan();
     const modelX = (STICKY_BRANCH_LABEL_X - pan.x) / zoom;
-    this.graph.nodes('node.branch-label').forEach((label) => {
+    this.graph.nodes('node.branch-label, node.primary-label, node.feature-create-action').forEach((label) => {
       label.position('x', modelX);
     });
   }
@@ -671,6 +694,17 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       { selector: 'node.branch-label', style: {
         shape: 'round-rectangle', width: 142, height: 52, 'background-color': '#f8fafc',
         'border-width': 2, 'text-valign': 'center', 'text-margin-y': 0, 'text-max-width': '126px',
+      } },
+      { selector: 'node.primary-label', style: {
+        shape: 'round-rectangle', width: 142, height: 52, 'background-color': '#46515e',
+        'border-color': '#46515e', color: '#ffffff', 'border-width': 2,
+        'text-valign': 'center', 'text-margin-y': 0, 'text-max-width': '126px',
+      } },
+      { selector: 'node.feature-create-action', style: {
+        shape: 'round-rectangle', width: 142, height: 42, 'background-color': '#f4f8ff',
+        'border-color': '#3977d4', color: '#285faa', 'border-width': 2,
+        'font-size': 10, 'font-weight': 700, 'text-valign': 'center', 'text-margin-y': 0,
+        'text-max-width': '126px',
       } },
       { selector: 'node.current', style: { 'border-width': 5 } },
       { selector: 'node.task', style: { width: 19, height: 19 } },

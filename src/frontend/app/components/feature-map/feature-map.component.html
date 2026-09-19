@@ -15,7 +15,7 @@
           <span class="branch-order-actions"><button type="button" [disabled]="!canMoveBranch(map, lane, -1)" title="Move branch up" [attr.aria-label]="'Move ' + lane.name + ' up'" (click)="moveBranch(map, lane, -1)">↑</button><button type="button" [disabled]="!canMoveBranch(map, lane, 1)" title="Move branch down" [attr.aria-label]="'Move ' + lane.name + ' down'" (click)="moveBranch(map, lane, 1)">↓</button></span>
         </div>
       </div>
-      <cytoscape-branch-graph [map]="map" [lanes]="featureLanes(map)" (taskOpened)="taskOpened.emit($event)" (taskCreationRequested)="createTask.emit($event)" (branchResetRequested)="resetBranch.emit($event)" (allBranchesResetRequested)="resetAllBranches.emit($event)" (gitBranchDeleteRequested)="deleteGitBranch.emit($event)" (databaseBranchDeleteRequested)="deleteDatabaseBranch.emit($event)" (legacyGitBranchDeleteRequested)="deleteLegacyGitBranch.emit($event)"></cytoscape-branch-graph>
+      <cytoscape-branch-graph [map]="map" [lanes]="featureLanes(map)" (taskOpened)="taskOpened.emit($event)" (featureCreationRequested)="createFeature.emit($event)" (taskCreationRequested)="createTask.emit($event)" (branchResetRequested)="resetBranch.emit($event)" (allBranchesResetRequested)="resetAllBranches.emit($event)" (gitBranchDeleteRequested)="deleteGitBranch.emit($event)" (databaseBranchDeleteRequested)="deleteDatabaseBranch.emit($event)" (legacyGitBranchDeleteRequested)="deleteLegacyGitBranch.emit($event)"></cytoscape-branch-graph>
     </div>
   </div>
   <div class="empty-workspace" *ngIf="!loading && maps.length === 0"><div class="empty-workspace__icon" aria-hidden="true">⑂</div><h2>No projects yet</h2><p>Create a project before defining its first feature branch.</p></div>

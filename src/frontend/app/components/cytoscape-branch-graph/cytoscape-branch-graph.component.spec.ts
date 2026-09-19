@@ -33,6 +33,14 @@ describe('CytoscapeBranchGraphComponent', () => {
     expect(model.elements).toContainEqual(expect.objectContaining({
       data: expect.objectContaining({ id: 'primary:first', label: 'Initial commit' }),
     }));
+    expect(model.elements).toContainEqual(expect.objectContaining({
+      data: expect.objectContaining({ id: 'primary:label', label: 'main' }),
+      classes: 'primary-label',
+    }));
+    expect(model.elements).toContainEqual(expect.objectContaining({
+      data: expect.objectContaining({ id: 'feature:create', label: '+ New feature', projectId: 1 }),
+      classes: 'feature-create-action',
+    }));
   });
 
   it('restores and persists the zoom multiplier separately for each project', () => {
@@ -242,7 +250,7 @@ describe('CytoscapeBranchGraphComponent', () => {
       zoom: () => 2,
       pan: () => ({ x: -300, y: -100 }),
       nodes: (selector: string) => {
-        expect(selector).toBe('node.branch-label');
+        expect(selector).toBe('node.branch-label, node.primary-label, node.feature-create-action');
         return { forEach: (callback: (label: (typeof labels)[number]) => void) => labels.forEach(callback) };
       },
     };
