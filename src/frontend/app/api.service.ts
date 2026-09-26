@@ -7,6 +7,7 @@ import {
   AgentUsage,
   HealthResponse,
   Feature,
+  FrontendConnection,
   ProjectBranchMap,
   Project,
   SaveTaskInput,
@@ -73,6 +74,22 @@ export class ApiService {
 
   createProject(input: CreateProjectInput): Observable<Project> {
     return this.http.post<Project>(`${this.baseUrl}/projects`, input);
+  }
+
+  getFrontendConnections(): Observable<FrontendConnection[]> {
+    return this.http.get<FrontendConnection[]>(`${this.baseUrl}/frontend-connections`);
+  }
+
+  createFrontendConnection(input: { name: string; url: string }): Observable<FrontendConnection> {
+    return this.http.post<FrontendConnection>(`${this.baseUrl}/frontend-connections`, input);
+  }
+
+  updateFrontendConnection(connectionId: string, input: { name: string; url: string }): Observable<FrontendConnection> {
+    return this.http.put<FrontendConnection>(`${this.baseUrl}/frontend-connections/${connectionId}`, input);
+  }
+
+  deleteFrontendConnection(connectionId: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/frontend-connections/${connectionId}`);
   }
 
   pauseWorker(): Observable<WorkerStatus> {

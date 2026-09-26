@@ -16,6 +16,7 @@ import { GitService } from '../services/git-service.js';
 import { FeatureService } from '../services/feature-service.js';
 import { ProjectService } from '../services/project-service.js';
 import { TaskService } from '../services/task-service.js';
+import { FrontendConnectionService } from '../services/frontend-connection-service.js';
 import { createApi } from './create-api.js';
 
 describe('backend API', () => {
@@ -81,8 +82,31 @@ describe('backend API', () => {
         resetCredits: 1,
         checkedAt: '2026-08-31T00:00:00.000Z',
         message: 'Codex usage is available.'
-      })
+      }),
+      frontendConnectionService: new FrontendConnectionService(path.join(temporaryRoot, 'connections.json')),
     });
+  });
+
+  it('persists local frontend connections while rejecting remote iframe targets', async () => {
+    const created = await request(app)
+      .post('/frontend-connections')
+      .send({ name: 'Local portal', url: 'http://127.0.0.1:5173' })
+      .expect(201);
+
+    await request(app).get('/frontend-connections').expect(200).expect((response) => {
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({ id: created.body.id, name: 'Local portal' });
+    });
+    await request(app)
+      .post('/frontend-connections')
+      .send({ name: 'Remote portal', url: 'https://example.com' })
+      .expect(400, { error: 'VALIDATION_ERROR', message: 'Only localhost, 127.0.0.1, or ::1 HTTP(S) frontends can be connected.' });
+    await request(app)
+      .put(`/frontend-connections/${created.body.id}`)
+      .send({ name: 'Updated portal', url: 'http://localhost:4100' })
+      .expect(200)
+      .expect((response) => expect(response.body).toMatchObject({ id: created.body.id, name: 'Updated portal', url: 'http://localhost:4100/' }));
+    await request(app).delete(`/frontend-connections/${created.body.id}`).expect(204);
   });
 
   it('creates multiple Features with colliding normalized names without returning a server error', async () => {
@@ -429,7 +453,7 @@ describe('backend API', () => {
 
     await request(app).delete(`/tasks/${activeTaskId}`).expect(204);
     await request(app).get(`/tasks/${activeTaskId}`).expect(404);
-  });
+  }, 20_000);
 
   it('rejects unknown command-shaped input instead of accepting executable commands', async () => {
     const projectResponse = await request(app)

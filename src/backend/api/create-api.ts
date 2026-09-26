@@ -5,6 +5,7 @@ import { MODEL_EFFORTS, TASK_PRIORITIES, TASK_STATUSES, type AgentUsage, type Wo
 import { ProjectService } from '../services/project-service.js';
 import { FeatureService } from '../services/feature-service.js';
 import { TaskService } from '../services/task-service.js';
+import { FrontendConnectionService } from '../services/frontend-connection-service.js';
 
 export interface ApiDependencies {
   projectService: ProjectService;
@@ -13,6 +14,7 @@ export interface ApiDependencies {
   workerStatus: () => WorkerStatus;
   agentUsage: (force?: boolean) => Promise<AgentUsage>;
   cancelTask?: (taskId: number) => Promise<boolean>;
+  frontendConnectionService?: FrontendConnectionService;
   pauseWorker?: () => WorkerStatus;
   resumeWorker?: () => WorkerStatus;
   setQuotaLoopEnabled?: (enabled: boolean) => WorkerStatus;
@@ -53,6 +55,11 @@ const legacyBranchDeleteInput = z.object({
 const reviewRetryInput = z.object({
   prompt: z.string().min(1).max(100_000)
 }).strict();
+const frontendConnectionInput = z.object({
+  name: z.string().min(1).max(120),
+  url: z.string().min(1).max(2_048),
+}).strict();
+const frontendConnectionId = z.string().uuid();
 
 export function createApi(dependencies: ApiDependencies): express.Express {
   const app = express();
@@ -92,6 +99,28 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   app.post('/projects', async (request, response) => {
     const created = await dependencies.projectService.create(projectInput.parse(request.body));
     response.status(201).json(created);
+  });
+
+  app.get('/frontend-connections', async (_request, response) => {
+    response.json(await requireFrontendConnections(dependencies).list());
+  });
+
+  app.post('/frontend-connections', async (request, response) => {
+    response.status(201).json(await requireFrontendConnections(dependencies).create(
+      frontendConnectionInput.parse(request.body),
+    ));
+  });
+
+  app.put('/frontend-connections/:id', async (request, response) => {
+    response.json(await requireFrontendConnections(dependencies).update(
+      frontendConnectionId.parse(request.params.id),
+      frontendConnectionInput.parse(request.body),
+    ));
+  });
+
+  app.delete('/frontend-connections/:id', async (request, response) => {
+    const removed = await requireFrontendConnections(dependencies).remove(frontendConnectionId.parse(request.params.id));
+    response.sendStatus(removed ? 204 : 404);
   });
 
   app.post('/worker/pause', (_request, response) => {
@@ -271,4 +300,11 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   });
 
   return app;
+}
+
+function requireFrontendConnections(dependencies: ApiDependencies): FrontendConnectionService {
+  if (dependencies.frontendConnectionService === undefined) {
+    throw new AppError('Frontend connections are unavailable.', 503, 'UNAVAILABLE');
+  }
+  return dependencies.frontendConnectionService;
 }

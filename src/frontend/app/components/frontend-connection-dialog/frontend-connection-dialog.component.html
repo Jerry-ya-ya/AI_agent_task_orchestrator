@@ -1,0 +1,11 @@
+<div class="modal" (click)="closed.emit()">
+  <section class="modal__surface modal__surface--form" role="dialog" aria-modal="true" aria-labelledby="connection-dialog-title" tabindex="-1" (click)="$event.stopPropagation()">
+    <header class="modal__header"><div><p class="eyebrow">Local frontend</p><h2 id="connection-dialog-title">{{ mode === 'edit' ? 'Edit frontend connection' : 'Connect frontend' }}</h2></div><button class="icon-button" type="button" aria-label="Close connection form" (click)="closed.emit()">×</button></header>
+    <form #connectionForm="ngForm" (ngSubmit)="submit(connectionForm)" novalidate>
+      <div class="form-field"><label for="connection-name">Name</label><input id="connection-name" name="connectionName" type="text" required maxlength="120" autocomplete="off" placeholder="Customer portal" [(ngModel)]="draft.name" #connectionName="ngModel" /><small *ngIf="connectionName.invalid && connectionName.touched" class="field-error">Enter a connection name.</small></div>
+      <div class="form-field"><label for="connection-url">Local frontend URL</label><input id="connection-url" name="connectionUrl" type="url" required maxlength="2048" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:5173" [(ngModel)]="draft.url" #connectionUrl="ngModel" /><small>Only local HTTP(S) frontends on localhost, 127.0.0.1, or ::1 can be embedded.</small><small *ngIf="connectionUrl.invalid && connectionUrl.touched" class="field-error">Enter a valid local frontend URL.</small></div>
+      <div class="form-error" role="alert" *ngIf="apiError">{{ apiError }}</div>
+      <footer class="modal__footer"><button class="button button--quiet" type="button" (click)="closed.emit()">Cancel</button><button class="button button--primary" type="submit" [disabled]="saving">{{ saving ? (mode === 'edit' ? 'Saving…' : 'Connecting…') : (mode === 'edit' ? 'Save connection' : 'Connect frontend') }}</button></footer>
+    </form>
+  </section>
+</div>

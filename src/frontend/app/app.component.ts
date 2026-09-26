@@ -20,6 +20,8 @@ import {
 } from './components/app-navigation/app-navigation.component';
 import { FeatureEditorDialogComponent } from './components/feature-editor-dialog/feature-editor-dialog.component';
 import { FeatureMapComponent } from './components/feature-map/feature-map.component';
+import { FrontendConnectionDialogComponent } from './components/frontend-connection-dialog/frontend-connection-dialog.component';
+import { FrontendConnectionPageComponent } from './components/frontend-connection-page/frontend-connection-page.component';
 import { ProjectEditorDialogComponent } from './components/project-editor-dialog/project-editor-dialog.component';
 import { RetryReviewDialogComponent } from './components/retry-review-dialog/retry-review-dialog.component';
 import { RetryTaskDialogComponent, type RetryTaskRequest } from './components/retry-task-dialog/retry-task-dialog.component';
@@ -33,6 +35,8 @@ import {
   AgentUsage,
   Feature,
   FeatureDraft,
+  FrontendConnection,
+  FrontendConnectionDraft,
   MODEL_EFFORTS,
   Project,
   ProjectDraft,
@@ -73,6 +77,8 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
     AppHeaderComponent,
     AppNavigationComponent,
     FeatureMapComponent,
+    FrontendConnectionDialogComponent,
+    FrontendConnectionPageComponent,
     FeatureEditorDialogComponent,
     TaskBoardComponent,
     TaskHistoryComponent,
@@ -97,6 +103,7 @@ export class AppComponent implements OnInit, OnDestroy {
   projects: Project[] = [];
   features: Feature[] = [];
   branchMaps: ProjectBranchMap[] = [];
+  connections: FrontendConnection[] = [];
   tasks: Task[] = [];
   workerStatus: WorkerStatus | null = null;
   agentUsage: AgentUsage | null = null;
@@ -107,7 +114,7 @@ export class AppComponent implements OnInit, OnDestroy {
   apiError = '';
   notice = '';
   lastUpdated: Date | null = null;
-  activePage: AppPage = 'taskboard';
+  activePage: AppPage | 'frontend' = 'taskboard';
   navigationExpanded = false;
   selectedTheme: ThemeId = readStoredTheme();
   selectedIcon: IconId = readStoredIcon();
@@ -115,6 +122,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   showProjectEditor = false;
   showFeatureEditor = false;
+  showConnectionEditor = false;
   taskEditorMode: TaskEditorMode | null = null;
   editingTaskId: number | null = null;
   selectedTaskId: number | null = null;
@@ -125,6 +133,9 @@ export class AppComponent implements OnInit, OnDestroy {
   projectDraft: ProjectDraft = this.emptyProjectDraft();
   featureDraft: FeatureDraft = this.emptyFeatureDraft();
   taskDraft: TaskDraft = this.emptyTaskDraft();
+  connectionDraft: FrontendConnectionDraft = this.emptyConnectionDraft();
+  selectedConnectionId: string | null = null;
+  editingConnectionId: string | null = null;
 
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
   private usagePollingTimer: ReturnType<typeof setInterval> | null = null;
@@ -258,6 +269,15 @@ export class AppComponent implements OnInit, OnDestroy {
     if (page === 'features') void this.refreshBranchMap();
   }
 
+  selectConnection(connection: FrontendConnection): void {
+    this.selectedConnectionId = connection.id;
+    this.activePage = 'frontend';
+  }
+
+  selectedConnection(): FrontendConnection | null {
+    return this.connections.find((connection) => connection.id === this.selectedConnectionId) ?? null;
+  }
+
   detachPage(request: DetachedPageRequest): void {
     if (window.desktopWindow?.openPage !== undefined) {
       void window.desktopWindow.openPage(request.page, request.screenX, request.screenY);
@@ -363,6 +383,8 @@ export class AppComponent implements OnInit, OnDestroy {
   closeModal(restoreFocus = true): void {
     this.showProjectEditor = false;
     this.showFeatureEditor = false;
+    this.showConnectionEditor = false;
+    this.editingConnectionId = null;
     this.taskEditorMode = null;
     this.editingTaskId = null;
     this.selectedTaskId = null;
@@ -420,6 +442,65 @@ export class AppComponent implements OnInit, OnDestroy {
     }
     this.showFeatureEditor = true;
     this.activateModal();
+  }
+
+  openConnectionEditor(): void {
+    this.clearError();
+    this.editingConnectionId = null;
+    this.connectionDraft = this.emptyConnectionDraft();
+    this.showConnectionEditor = true;
+    this.activateModal();
+  }
+
+  openConnectionSettings(connection: FrontendConnection): void {
+    this.clearError();
+    this.editingConnectionId = connection.id;
+    this.connectionDraft = { name: connection.name, url: connection.url };
+    this.showConnectionEditor = true;
+    this.activateModal();
+  }
+
+  async saveFrontendConnection(): Promise<void> {
+    if (this.saving) return;
+    this.saving = true;
+    this.clearError();
+    try {
+      const input = { name: this.connectionDraft.name.trim(), url: this.connectionDraft.url.trim() };
+      const editingConnectionId = this.editingConnectionId;
+      const connection = editingConnectionId === null
+        ? await firstValueFrom(this.api.createFrontendConnection(input))
+        : await firstValueFrom(this.api.updateFrontendConnection(editingConnectionId, input));
+      this.connections = editingConnectionId === null
+        ? [...this.connections, connection]
+        : this.connections.map((item) => item.id === connection.id ? connection : item);
+      this.selectedConnectionId = connection.id;
+      this.activePage = 'frontend';
+      this.closeModal();
+      this.showNotice(editingConnectionId === null ? `Connected “${connection.name}”.` : `Updated “${connection.name}”.`);
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.saving = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  async removeFrontendConnection(connection: FrontendConnection): Promise<void> {
+    if (!window.confirm(`Remove the connection to “${connection.name}”? Its local frontend will no longer appear in the sidebar.`)) return;
+    this.clearError();
+    try {
+      await firstValueFrom(this.api.deleteFrontendConnection(connection.id));
+      this.connections = this.connections.filter((item) => item.id !== connection.id);
+      if (this.selectedConnectionId === connection.id) {
+        this.selectedConnectionId = null;
+        this.activePage = 'taskboard';
+      }
+      this.showNotice(`Removed “${connection.name}”.`);
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.changeDetector.markForCheck();
+    }
   }
 
   async saveFeature(): Promise<void> {
@@ -986,7 +1067,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private async initializeDashboard(): Promise<void> {
     await this.restoreWorkerDispatchPreference();
-    await Promise.all([this.refreshBoard(false), this.refreshAgentUsage()]);
+    await Promise.all([this.refreshBoard(false), this.refreshAgentUsage(), this.refreshFrontendConnections()]);
   }
 
   private async refreshAgentUsage(force = false): Promise<void> {
@@ -1121,6 +1202,20 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  private async refreshFrontendConnections(): Promise<void> {
+    try {
+      this.connections = await firstValueFrom(this.api.getFrontendConnections());
+      if (this.selectedConnectionId !== null && this.selectedConnection() === null) {
+        this.selectedConnectionId = null;
+        if (this.activePage === 'frontend') this.activePage = 'taskboard';
+      }
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.changeDetector.markForCheck();
+    }
+  }
+
   private async loadTaskDetail(taskId: number, silent: boolean): Promise<void> {
     if (!silent) {
       this.detailLoading = true;
@@ -1150,7 +1245,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private hasOpenModal(): boolean {
-    return this.showProjectEditor || this.showFeatureEditor || this.taskEditorMode !== null ||
+    return this.showProjectEditor || this.showFeatureEditor || this.showConnectionEditor || this.taskEditorMode !== null ||
       this.selectedTaskId !== null || this.retryingTask !== null ||
       this.retryReviewTaskId !== null || this.resolvingCherryPickTask !== null;
   }
@@ -1202,6 +1297,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private emptyFeatureDraft(): FeatureDraft {
     return { project_id: this.projects[0]?.id ?? null, name: '' };
+  }
+
+  private emptyConnectionDraft(): FrontendConnectionDraft {
+    return { name: '', url: 'http://127.0.0.1:5173' };
   }
 
   private setTaskPending(taskId: number, pending: boolean): void {

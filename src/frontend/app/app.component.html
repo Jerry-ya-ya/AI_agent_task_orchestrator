@@ -5,11 +5,15 @@
       [expanded]="navigationExpanded"
       [activePage]="activePage"
       [historyCount]="historyTaskCount()"
+      [connections]="connections"
+      [activeConnectionId]="selectedConnectionId"
       (expandedChange)="setNavigationExpanded($event)"
       (pageSelected)="selectPage($event)"
+      (connectionSelected)="selectConnection($event)"
+      (connectionCreateRequested)="openConnectionEditor()"
       (pageDetached)="detachPage($event)"
     />
-    <main class="page-content" [class.page-content--taskboard]="activePage === 'taskboard'" [class.page-content--features]="activePage === 'features'" [class.page-content--history]="activePage === 'history'" [class.page-content--settings]="activePage === 'settings'" [ngSwitch]="activePage">
+    <main class="page-content" [class.page-content--taskboard]="activePage === 'taskboard'" [class.page-content--features]="activePage === 'features'" [class.page-content--history]="activePage === 'history'" [class.page-content--settings]="activePage === 'settings'" [class.page-content--frontend]="activePage === 'frontend'" [ngSwitch]="activePage">
       <ng-container *ngSwitchCase="'taskboard'">
         <section class="board-heading" aria-labelledby="board-title">
           <div><div class="board-title-row"><h2 id="board-title">Taskboard</h2><span class="task-total">{{ tasks.length }} {{ tasks.length === 1 ? 'task' : 'tasks' }}</span></div><p>The worker moves one task at a time. Completed work waits in Review until you approve it.</p></div>
@@ -32,6 +36,9 @@
       <ng-container *ngSwitchCase="'settings'">
         <settings-page [selectedTheme]="selectedTheme" [selectedIcon]="selectedIcon" (themeSelected)="selectTheme($event)" (iconSelected)="selectIcon($event)" />
       </ng-container>
+      <ng-container *ngSwitchCase="'frontend'">
+        <frontend-connection-page *ngIf="selectedConnection() as connection" [connection]="connection" (settingsRequested)="openConnectionSettings($event)" (removeRequested)="removeFrontendConnection($event)" />
+      </ng-container>
     </main>
   </div>
 </div>
@@ -41,6 +48,7 @@
 <resolve-cherry-pick-dialog *ngIf="resolvingCherryPickTask as task" [task]="task" [modelEfforts]="modelEfforts" [pending]="isTaskPending(task.id)" [apiError]="apiError" (closed)="closeModal()" (submitted)="resolveCherryPickConflict($event)" />
 <div class="toast" role="status" aria-live="polite" *ngIf="notice">{{ notice }}</div>
 <project-editor-dialog *ngIf="showProjectEditor" [draft]="projectDraft" [saving]="saving" [apiError]="apiError" (closed)="closeModal()" (submitted)="saveProject()" />
+<frontend-connection-dialog *ngIf="showConnectionEditor" [draft]="connectionDraft" [mode]="editingConnectionId === null ? 'create' : 'edit'" [saving]="saving" [apiError]="apiError" (closed)="closeModal()" (submitted)="saveFrontendConnection()" />
 <feature-editor-dialog *ngIf="showFeatureEditor" [draft]="featureDraft" [projects]="projects" [saving]="saving" [apiError]="apiError" (closed)="closeModal()" (submitted)="saveFeature()" />
 <task-editor-dialog *ngIf="taskEditorMode as mode" [mode]="mode" [draft]="taskDraft" [projects]="projects" [features]="features" [priorities]="priorities" [modelEfforts]="modelEfforts" [saving]="saving" [apiError]="apiError" (closed)="closeModal()" (submitted)="saveTask()" />
 <task-detail-dialog *ngIf="selectedTaskId !== null" [task]="taskForDetail()" [detail]="selectedTaskDetail" [projects]="projects" [columns]="columns" [loading]="detailLoading" [pending]="isTaskPending(taskForDetail()?.id ?? -1)" [apiError]="apiError" (closed)="closeModal()" (editRequested)="openEditTask($event)" (deleteRequested)="deleteTask($event)" (reviewStarted)="startTaskReview($event)" (reviewExited)="exitTaskReview($event)" (approveRequested)="approveTask($event)" (branchRemovalRequested)="removeTaskBranch($event)" (pushRequested)="pushTask($event)" (cherryPickResolutionRequested)="openResolveCherryPick($event)" (retryRequested)="openRetryTask($event)" (rejectRequested)="rejectTask($event)" />

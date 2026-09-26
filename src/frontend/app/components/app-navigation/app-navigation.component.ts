@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import type { FrontendConnection } from '../../models';
 
 export type AppPage = 'features' | 'taskboard' | 'history' | 'settings';
 
@@ -19,12 +20,16 @@ const DETACH_DISTANCE = 48;
 })
 export class AppNavigationComponent {
   @Input({ required: true }) expanded = false;
-  @Input({ required: true }) activePage: AppPage = 'taskboard';
+  @Input({ required: true }) activePage: AppPage | 'frontend' = 'taskboard';
   @Input({ required: true }) historyCount = 0;
+  @Input({ required: true }) connections: readonly FrontendConnection[] = [];
+  @Input() activeConnectionId: string | null = null;
 
   @Output() expandedChange = new EventEmitter<boolean>();
   @Output() pageSelected = new EventEmitter<AppPage>();
   @Output() pageDetached = new EventEmitter<DetachedPageRequest>();
+  @Output() connectionSelected = new EventEmitter<FrontendConnection>();
+  @Output() connectionCreateRequested = new EventEmitter<void>();
 
   draggingPage: AppPage | null = null;
   private dragPointerId: number | null = null;

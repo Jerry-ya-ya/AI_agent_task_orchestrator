@@ -111,6 +111,48 @@
 
 .navigation-link--settings { margin-top: auto; }
 
+.navigation-connections {
+  display: flex;
+  gap: 5px;
+  flex-direction: column;
+}
+
+.navigation-connections__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 8px 0 12px;
+  color: #8994a1;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.navigation-connections__heading button {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #cbd2da;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.navigation-connections__heading button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+}
+
+.navigation-link--connection-add {
+  color: #c8d3e0;
+}
+
 .navigation-toggle svg,
 .navigation-link svg {
   width: 20px;
@@ -545,6 +587,103 @@ header-usage {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior-y: contain;
+}
+
+.page-content--frontend {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+frontend-connection-page {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.frontend-page {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.frontend-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 28px 16px;
+  border-bottom: 1px solid #e2e6ea;
+  background: #fff;
+}
+
+.frontend-page__header h2 {
+  margin: 0 0 5px;
+  color: #29313b;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.frontend-page__header code {
+  color: #6f7a86;
+  font-size: 11px;
+}
+
+.frontend-page__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.frontend-page__settings {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #d4d8df;
+  border-radius: 8px;
+  background: #fff;
+  color: #4f5965;
+}
+
+.frontend-page__settings:hover {
+  background: #f4f6f8;
+  color: #1f2730;
+}
+
+.frontend-page__settings svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.55;
+}
+
+.frontend-page__notice {
+  margin: 0;
+  padding: 8px 28px;
+  border-bottom: 1px solid #e7ebef;
+  background: #f8fafc;
+  color: #697582;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.frontend-page__frame {
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  border: 0;
+  background: #fff;
 }
 
 .page-content--taskboard > task-board {

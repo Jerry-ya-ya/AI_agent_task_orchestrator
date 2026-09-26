@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { CodexAgentExecutor } from './agents/codex-agent-executor.js';
@@ -18,6 +18,7 @@ import { FeatureService } from './services/feature-service.js';
 import { ProjectService } from './services/project-service.js';
 import { TaskService } from './services/task-service.js';
 import { TestService } from './services/test-service.js';
+import { FrontendConnectionService } from './services/frontend-connection-service.js';
 import { TaskWorker } from './worker/task-worker.js';
 
 export interface RuntimeOptions {
@@ -28,6 +29,7 @@ export interface RuntimeOptions {
   agent?: AgentExecutor;
   gitService?: GitService;
   testService?: TestService;
+  frontendConnectionsPath?: string;
 }
 
 export class OrchestratorRuntime {
@@ -36,6 +38,7 @@ export class OrchestratorRuntime {
   public readonly projectService: ProjectService;
   public readonly taskService: TaskService;
   public readonly featureService: FeatureService;
+  public readonly frontendConnectionService: FrontendConnectionService;
   private readonly server: Server;
   private readonly port: number;
   private started = false;
@@ -57,6 +60,9 @@ export class OrchestratorRuntime {
     this.projectService = new ProjectService(projects, git);
     this.taskService = new TaskService(tasks, projects, runs, git, features);
     this.featureService = new FeatureService(features, projects, tasks, git);
+    this.frontendConnectionService = new FrontendConnectionService(
+      options.frontendConnectionsPath ?? join(dirname(options.databasePath), 'connections.json'),
+    );
     tasks.recoverInterrupted();
     this.worker = new TaskWorker(tasks, runs, git, agent, tests, {
       pollIntervalMs: options.pollIntervalMs,
@@ -72,7 +78,8 @@ export class OrchestratorRuntime {
       resumeWorker: () => this.worker.resume(),
       setQuotaLoopEnabled: (enabled) => this.worker.setQuotaLoopEnabled(enabled),
       agentUsage: (force) => agentUsage.read(force),
-      cancelTask: (taskId) => this.worker.cancelTask(taskId)
+      cancelTask: (taskId) => this.worker.cancelTask(taskId),
+      frontendConnectionService: this.frontendConnectionService,
     });
     if (options.uiPath !== undefined && existsSync(options.uiPath)) {
       api.use(express.static(options.uiPath));

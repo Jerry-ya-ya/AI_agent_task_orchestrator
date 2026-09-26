@@ -31,6 +31,19 @@ export interface Project {
   updated_at: string;
 }
 
+export interface FrontendConnection {
+  id: string;
+  name: string;
+  url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateFrontendConnectionInput {
+  name: string;
+  url: string;
+}
+
 export interface Feature {
   id: number;
   project_id: number;

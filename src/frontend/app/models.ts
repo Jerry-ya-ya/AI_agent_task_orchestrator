@@ -47,6 +47,19 @@ export interface Feature {
   updated_at: string;
 }
 
+export interface FrontendConnection {
+  id: string;
+  name: string;
+  url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FrontendConnectionDraft {
+  name: string;
+  url: string;
+}
+
 export interface BranchTaskHistory {
   id: number;
   title: string;

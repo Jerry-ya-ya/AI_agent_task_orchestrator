@@ -1,0 +1,8 @@
+<section class="frontend-page" aria-labelledby="frontend-page-title">
+  <header class="frontend-page__header">
+    <div><p class="eyebrow">Connected local frontend</p><h2 id="frontend-page-title">{{ connection.name }}</h2><code>{{ connection.url }}</code></div>
+    <div class="frontend-page__actions"><button class="frontend-page__settings" type="button" title="Edit frontend connection" aria-label="Edit frontend connection" (click)="settingsRequested.emit(connection)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.1 13.6 1.2.9-2 3.4-1.4-.6a7.8 7.8 0 0 1-1.8 1l-.2 1.5H11l-.3-1.5a7.7 7.7 0 0 1-1.8-1l-1.4.6-2-3.4 1.2-.9a7.1 7.1 0 0 1 0-2.1l-1.2-.9 2-3.4 1.4.6a7.8 7.8 0 0 1 1.8-1L11 4.3h4l.2 1.5a7.7 7.7 0 0 1 1.8 1l1.4-.6 2 3.4-1.2.9a7.1 7.1 0 0 1 0 2.1Z"/></svg></button><button class="button button--quiet" type="button" (click)="reload()">Reload</button><button class="button button--danger-quiet" type="button" (click)="removeRequested.emit(connection)">Remove</button></div>
+  </header>
+  <p class="frontend-page__notice">The target must allow iframe embedding. If it sends an <code>X-Frame-Options</code> or restrictive <code>frame-ancestors</code> policy, the browser will block it.</p>
+  <iframe #frontendFrame class="frontend-page__frame" title="{{ connection.name }} frontend" referrerpolicy="no-referrer"></iframe>
+</section>

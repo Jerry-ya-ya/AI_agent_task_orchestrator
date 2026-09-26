@@ -167,3 +167,7 @@
 - Initialize project branch maps from existing Git history and render main-only repositories.
 
 - Add Traditional Chinese documentation with a linked English primary README.
+
+## 2026/09/27
+
+- Add local frontend connections with loopback-only iframe embedding and CSP support.
