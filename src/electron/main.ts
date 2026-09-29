@@ -9,7 +9,7 @@ let runtime: OrchestratorRuntime | null = null;
 let mainWindow: BrowserWindow | null = null;
 let quittingAfterShutdown = false;
 let shutdownPromise: Promise<void> | null = null;
-const APP_PAGES = new Set(['features', 'taskboard', 'history', 'settings']);
+const APP_PAGES = new Set(['features', 'taskboard', 'history', 'settings', 'frontend']);
 const APP_ICONS = new Set(['original', 'violet', 'ember', 'frost']);
 const iconDirectory = app.isPackaged
   ? resolve(currentDirectory, '../../frontend/browser')
@@ -21,7 +21,7 @@ function iconPath(id: string): string {
   return join(iconDirectory, `${name}.${process.platform === 'win32' ? 'ico' : 'png'}`);
 }
 
-type AppPage = 'features' | 'taskboard' | 'history' | 'settings';
+type AppPage = 'features' | 'taskboard' | 'history' | 'settings' | 'frontend';
 
 interface WindowPlacement {
   x: number;
@@ -88,10 +88,14 @@ ipcMain.handle('window:open-page', async (_event, request: unknown) => {
   if (typeof candidate['screenX'] !== 'number' || !Number.isFinite(candidate['screenX'])
     || typeof candidate['screenY'] !== 'number' || !Number.isFinite(candidate['screenY'])) return false;
 
-  await createWindow(runtime.baseUrl, candidate['page'] as AppPage, {
+  const page = candidate['page'] as AppPage;
+  const connectionId = typeof candidate['connectionId'] === 'string' ? candidate['connectionId'] : undefined;
+  if ((page === 'frontend' && !isConnectionId(connectionId)) || (page !== 'frontend' && connectionId !== undefined)) return false;
+
+  await createWindow(runtime.baseUrl, page, {
     x: Math.round(candidate['screenX']),
     y: Math.round(candidate['screenY']),
-  });
+  }, connectionId);
   return true;
 });
 
@@ -153,6 +157,7 @@ async function createWindow(
   apiUrl: string,
   initialPage: AppPage = 'taskboard',
   placement?: WindowPlacement,
+  connectionId?: string,
 ): Promise<void> {
   const width = 1180;
   const height = 780;
@@ -204,16 +209,23 @@ async function createWindow(
     const url = new URL(developmentUrl);
     url.searchParams.set('apiBaseUrl', apiUrl);
     url.searchParams.set('page', initialPage);
+    if (connectionId !== undefined) url.searchParams.set('connectionId', connectionId);
     await browserWindow.loadURL(url.toString());
   } else {
     const url = new URL(apiUrl);
     url.searchParams.set('page', initialPage);
+    if (connectionId !== undefined) url.searchParams.set('connectionId', connectionId);
     await browserWindow.loadURL(url.toString());
   }
   if (!browserWindow.isDestroyed() && !browserWindow.isVisible()) {
     browserWindow.show();
     browserWindow.focus();
   }
+}
+
+function isConnectionId(value: string | undefined): value is string {
+  return value !== undefined
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
 }
 
 function detachedWindowBounds(placement: WindowPlacement, width: number, height: number): WindowPlacement {

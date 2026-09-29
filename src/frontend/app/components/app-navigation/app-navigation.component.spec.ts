@@ -44,6 +44,35 @@ describe('AppNavigationComponent', () => {
     expect(preventDefault).toHaveBeenCalledOnce();
     expect(selected).not.toHaveBeenCalled();
   });
+
+  it('detaches a connected frontend while preserving its connection identity', () => {
+    const component = new AppNavigationComponent();
+    const detached = vi.spyOn(component.pageDetached, 'emit');
+    const releasePointerCapture = vi.fn();
+    const state = component as unknown as {
+      dragPointerId: number;
+      dragConnectionId: string;
+      navigationBounds: DOMRect;
+    };
+    component.draggingPage = 'frontend';
+    component.draggingConnectionId = 'b1ec6492-c477-4752-b02a-5f14d514b234';
+    state.dragPointerId = 7;
+    state.dragConnectionId = 'b1ec6492-c477-4752-b02a-5f14d514b234';
+    state.navigationBounds = { left: 0, right: 64, top: 0, bottom: 700 } as DOMRect;
+
+    component.continuePageDrag(
+      pointerEvent({ clientX: 112, releasePointerCapture }),
+      'frontend',
+      'b1ec6492-c477-4752-b02a-5f14d514b234',
+    );
+
+    expect(detached).toHaveBeenCalledWith({
+      page: 'frontend',
+      connectionId: 'b1ec6492-c477-4752-b02a-5f14d514b234',
+      screenX: 312,
+      screenY: 240,
+    });
+  });
 });
 
 function pointerEvent(options: {

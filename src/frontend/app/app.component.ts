@@ -152,9 +152,13 @@ export class AppComponent implements OnInit, OnDestroy {
     private readonly changeDetector: ChangeDetectorRef,
   ) {
     this.apiBaseUrl = api.baseUrl;
-    const requestedPage = new URLSearchParams(globalThis.location?.search ?? '').get('page');
+    const locationParameters = new URLSearchParams(globalThis.location?.search ?? '');
+    const requestedPage = locationParameters.get('page');
     if (requestedPage === 'features' || requestedPage === 'taskboard' || requestedPage === 'history' || requestedPage === 'settings') {
       this.activePage = requestedPage;
+    } else if (requestedPage === 'frontend' && isConnectionId(locationParameters.get('connectionId'))) {
+      this.activePage = 'frontend';
+      this.selectedConnectionId = locationParameters.get('connectionId');
     }
     applyTheme(this.selectedTheme);
     this.applySelectedIcon();
@@ -280,11 +284,12 @@ export class AppComponent implements OnInit, OnDestroy {
 
   detachPage(request: DetachedPageRequest): void {
     if (window.desktopWindow?.openPage !== undefined) {
-      void window.desktopWindow.openPage(request.page, request.screenX, request.screenY);
+      void window.desktopWindow.openPage(request);
       return;
     }
     const url = new URL(window.location.href);
     url.searchParams.set('page', request.page);
+    if (request.connectionId !== undefined) url.searchParams.set('connectionId', request.connectionId);
     window.open(url.toString(), '_blank', 'noopener');
   }
 
@@ -1354,4 +1359,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
     return error instanceof Error ? error.message : 'Something went wrong.';
   }
+}
+
+function isConnectionId(value: string | null): value is string {
+  return value !== null
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
 }

@@ -171,3 +171,7 @@
 ## 2026/09/27
 
 - Add local frontend connections with loopback-only iframe embedding and CSP support.
+
+## 2026/09/29
+
+- Enable dragging connected frontend pages into dedicated Electron windows.

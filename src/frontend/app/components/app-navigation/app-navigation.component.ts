@@ -3,9 +3,11 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import type { FrontendConnection } from '../../models';
 
 export type AppPage = 'features' | 'taskboard' | 'history' | 'settings';
+type DetachablePage = AppPage | 'frontend';
 
 export interface DetachedPageRequest {
-  page: AppPage;
+  page: DetachablePage;
+  connectionId?: string;
   screenX: number;
   screenY: number;
 }
@@ -31,32 +33,45 @@ export class AppNavigationComponent {
   @Output() connectionSelected = new EventEmitter<FrontendConnection>();
   @Output() connectionCreateRequested = new EventEmitter<void>();
 
-  draggingPage: AppPage | null = null;
+  draggingPage: DetachablePage | null = null;
+  draggingConnectionId: string | null = null;
   private dragPointerId: number | null = null;
+  private dragConnectionId: string | null = null;
   private navigationBounds: DOMRect | null = null;
-  private suppressClickPage: AppPage | null = null;
+  private suppressClickPage: DetachablePage | null = null;
+  private suppressClickConnectionId: string | null = null;
 
   selectPage(event: MouseEvent, page: AppPage): void {
-    if (this.suppressClickPage === page) {
+    if (this.consumeSuppressedClick(page)) {
       event.preventDefault();
-      this.suppressClickPage = null;
       return;
     }
     this.pageSelected.emit(page);
   }
 
-  beginPageDrag(event: PointerEvent, page: AppPage): void {
+  selectConnection(event: MouseEvent, connection: FrontendConnection): void {
+    if (this.consumeSuppressedClick('frontend', connection.id)) {
+      event.preventDefault();
+      return;
+    }
+    this.connectionSelected.emit(connection);
+  }
+
+  beginPageDrag(event: PointerEvent, page: DetachablePage, connectionId: string | null = null): void {
     if (event.button !== 0) return;
     const navigation = (event.currentTarget as HTMLElement | null)?.closest('.app-navigation');
     if (!(navigation instanceof HTMLElement)) return;
     this.draggingPage = page;
+    this.draggingConnectionId = connectionId;
     this.dragPointerId = event.pointerId;
+    this.dragConnectionId = connectionId;
     this.navigationBounds = navigation.getBoundingClientRect();
     (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
   }
 
-  continuePageDrag(event: PointerEvent, page: AppPage): void {
-    if (this.draggingPage !== page || this.dragPointerId !== event.pointerId || this.navigationBounds === null) return;
+  continuePageDrag(event: PointerEvent, page: DetachablePage, connectionId: string | null = null): void {
+    if (this.draggingPage !== page || this.dragConnectionId !== connectionId
+      || this.dragPointerId !== event.pointerId || this.navigationBounds === null) return;
     const horizontalDistance = Math.max(
       this.navigationBounds.left - event.clientX,
       event.clientX - this.navigationBounds.right,
@@ -71,7 +86,13 @@ export class AppNavigationComponent {
 
     event.preventDefault();
     this.suppressClickPage = page;
-    this.pageDetached.emit({ page, screenX: event.screenX, screenY: event.screenY });
+    this.suppressClickConnectionId = connectionId;
+    this.pageDetached.emit({
+      page,
+      ...(connectionId === null ? {} : { connectionId }),
+      screenX: event.screenX,
+      screenY: event.screenY,
+    });
     this.finishPageDrag(event);
   }
 
@@ -80,7 +101,16 @@ export class AppNavigationComponent {
       (event.currentTarget as HTMLElement | null)?.releasePointerCapture?.(this.dragPointerId);
     }
     this.draggingPage = null;
+    this.draggingConnectionId = null;
     this.dragPointerId = null;
+    this.dragConnectionId = null;
     this.navigationBounds = null;
+  }
+
+  private consumeSuppressedClick(page: DetachablePage, connectionId: string | null = null): boolean {
+    if (this.suppressClickPage !== page || this.suppressClickConnectionId !== connectionId) return false;
+    this.suppressClickPage = null;
+    this.suppressClickConnectionId = null;
+    return true;
   }
 }
