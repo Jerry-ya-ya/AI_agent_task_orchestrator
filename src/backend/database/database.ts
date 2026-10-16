@@ -43,10 +43,8 @@ const SCHEMA = `
       CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','REVIEWING','PENDING_PUSH','CHERRY_PICK_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
     priority TEXT NOT NULL DEFAULT 'MEDIUM'
       CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
-    model_id TEXT NOT NULL DEFAULT 'gpt-6-luna'
-      CHECK (model_id IN ('gpt-6-luna','gpt-6.1-sol','gpt-6-astra')),
-    model_effort TEXT NOT NULL DEFAULT 'medium'
-      CHECK (model_effort IN ('low','medium','high','xhigh','max')),
+    model_id TEXT NOT NULL DEFAULT 'gpt-6.1-sol',
+    model_effort TEXT NOT NULL DEFAULT 'low',
     agent_mode TEXT NOT NULL DEFAULT 'implementation'
       CHECK (agent_mode IN ('implementation','cherry_pick_resolution')),
     retry_prompt TEXT,
@@ -137,14 +135,12 @@ export class OrchestratorDatabase {
     }
     if (!taskColumns.some((column) => column['name'] === 'model_effort')) {
       this.connection.exec(`
-        ALTER TABLE tasks ADD COLUMN model_effort TEXT NOT NULL DEFAULT 'medium'
-          CHECK (model_effort IN ('low','medium','high','xhigh'));
+        ALTER TABLE tasks ADD COLUMN model_effort TEXT NOT NULL DEFAULT 'low';
       `);
     }
     if (!taskColumns.some((column) => column['name'] === 'model_id')) {
       this.connection.exec(`
-        ALTER TABLE tasks ADD COLUMN model_id TEXT NOT NULL DEFAULT 'gpt-6-luna'
-          CHECK (model_id IN ('gpt-6-luna','gpt-6.1-sol','gpt-6-astra'));
+        ALTER TABLE tasks ADD COLUMN model_id TEXT NOT NULL DEFAULT 'gpt-6.1-sol';
       `);
     }
     if (!taskColumns.some((column) => column['name'] === 'retry_prompt')) {
@@ -170,9 +166,12 @@ export class OrchestratorDatabase {
     const needsPublishingMigration = !taskDefinition?.sql?.includes('PENDING_BRANCH_REMOVAL')
       || !taskDefinition?.sql?.includes('REJECTED');
     const needsTaskForeignKeyRepair = this.hasStaleTaskForeignKey();
+    const hasRestrictedModelCatalog = taskDefinition?.sql?.includes('CHECK (model_id IN') ?? false;
+    const hasRestrictedEffortCatalog = taskDefinition?.sql?.includes('CHECK (model_effort IN') ?? false;
     if (needsPublishingMigration || !taskDefinition?.sql?.includes('CHERRY_PICK_CONFLICT')
-      || !taskDefinition?.sql?.includes('REVIEWING') || !taskDefinition?.sql?.includes("'max'")
-      || !taskDefinition?.sql?.includes('model_id') || needsTaskForeignKeyRepair) {
+      || !taskDefinition?.sql?.includes('REVIEWING')
+      || !taskDefinition?.sql?.includes('model_id') || needsTaskForeignKeyRepair
+      || hasRestrictedModelCatalog || hasRestrictedEffortCatalog) {
       this.rebuildTasksForPublishing(hadPendingPush, needsPublishingMigration);
     }
 
@@ -263,10 +262,8 @@ export class OrchestratorDatabase {
             CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','REVIEWING','PENDING_PUSH','CHERRY_PICK_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
           priority TEXT NOT NULL DEFAULT 'MEDIUM'
             CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
-          model_id TEXT NOT NULL DEFAULT 'gpt-6-luna'
-            CHECK (model_id IN ('gpt-6-luna','gpt-6.1-sol','gpt-6-astra')),
-          model_effort TEXT NOT NULL DEFAULT 'medium'
-            CHECK (model_effort IN ('low','medium','high','xhigh','max')),
+          model_id TEXT NOT NULL DEFAULT 'gpt-6.1-sol',
+          model_effort TEXT NOT NULL DEFAULT 'low',
           agent_mode TEXT NOT NULL DEFAULT 'implementation'
             CHECK (agent_mode IN ('implementation','cherry_pick_resolution')),
           retry_prompt TEXT,

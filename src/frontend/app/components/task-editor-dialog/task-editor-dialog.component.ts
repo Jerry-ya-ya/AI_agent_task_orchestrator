@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule, NgForm } from '@angular/forms';
-import type { Feature, ModelEffort, ModelId, Project, TaskDraft, TaskPriority } from '../../models';
+import type { AgentModel, Feature, ModelEffort, Project, TaskDraft, TaskPriority } from '../../models';
 
 @Component({ selector: 'task-editor-dialog', standalone: true, imports: [CommonModule, FormsModule], templateUrl: './task-editor-dialog.component.html' })
 export class TaskEditorDialogComponent {
@@ -10,8 +10,7 @@ export class TaskEditorDialogComponent {
   @Input({ required: true }) projects: readonly Project[] = [];
   @Input({ required: true }) features: readonly Feature[] = [];
   @Input({ required: true }) priorities: readonly TaskPriority[] = [];
-  @Input({ required: true }) modelIds: readonly ModelId[] = [];
-  @Input({ required: true }) modelEfforts: readonly ModelEffort[] = [];
+  @Input({ required: true }) models: readonly AgentModel[] = [];
   @Input({ required: true }) saving = false;
   @Input() apiError = '';
   @Output() closed = new EventEmitter<void>();
@@ -23,23 +22,28 @@ export class TaskEditorDialogComponent {
   }
 
   modelEffortLabel(effort: ModelEffort): string {
-    const labels: Record<ModelEffort, string> = {
+    const labels: Record<string, string> = {
       low: 'Low · Light',
       medium: 'Medium · Balanced',
       high: 'High',
       xhigh: 'Extra high',
       max: 'Max · Ultra',
+      ultra: 'Ultra · Delegation',
     };
-    return labels[effort];
+    return labels[effort] ?? effort;
   }
 
-  modelLabel(modelId: ModelId): string {
-    const labels: Record<ModelId, string> = {
-      'gpt-6-luna': 'GPT-6 Luna',
-      'gpt-6.1-sol': 'GPT-6.1 Sol',
-      'gpt-6-astra': 'GPT-6 Astra',
-    };
-    return labels[modelId];
+  availableEfforts(): readonly ModelEffort[] {
+    return this.models.find((model) => model.id === this.draft.model_id)
+      ?.supportedReasoningEfforts.map((effort) => effort.id) ?? [];
+  }
+
+  modelChanged(): void {
+    const model = this.models.find((candidate) => candidate.id === this.draft.model_id);
+    if (model === undefined) return;
+    if (!model.supportedReasoningEfforts.some((effort) => effort.id === this.draft.model_effort)) {
+      this.draft.model_effort = model.defaultReasoningEffort;
+    }
   }
 
   projectFeatures(): Feature[] {

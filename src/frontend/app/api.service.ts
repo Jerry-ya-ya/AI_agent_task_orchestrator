@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import {
   CreateProjectInput,
+  AgentModel,
   AgentUsage,
   HealthResponse,
   Feature,
@@ -67,6 +68,10 @@ export class ApiService {
 
   getAgentUsage(force = false): Observable<AgentUsage> {
     return this.http.get<AgentUsage>(`${this.baseUrl}/agent/usage${force ? '?refresh=1' : ''}`);
+  }
+
+  getAgentModels(force = false): Observable<AgentModel[]> {
+    return this.http.get<AgentModel[]>(`${this.baseUrl}/agent/models${force ? '?refresh=1' : ''}`);
   }
 
   getProjects(): Observable<Project[]> {

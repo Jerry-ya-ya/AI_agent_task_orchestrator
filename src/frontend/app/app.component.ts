@@ -33,12 +33,13 @@ import { TaskEditorDialogComponent } from './components/task-editor-dialog/task-
 import { TaskHistoryComponent } from './components/task-history/task-history.component';
 import {
   AgentUsage,
+  AgentModel,
+  DEFAULT_MODEL_ID,
   Feature,
   FeatureDraft,
   FrontendConnection,
   FrontendConnectionDraft,
-  MODEL_EFFORTS,
-  MODEL_IDS,
+  FALLBACK_AGENT_MODELS,
   Project,
   ProjectDraft,
   ProjectBranchMap,
@@ -98,8 +99,6 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
 export class AppComponent implements OnInit, OnDestroy {
   readonly columns = STATUS_COLUMNS;
   readonly priorities = TASK_PRIORITIES;
-  readonly modelEfforts = MODEL_EFFORTS;
-  readonly modelIds = MODEL_IDS;
   readonly apiBaseUrl: string;
 
   projects: Project[] = [];
@@ -109,6 +108,7 @@ export class AppComponent implements OnInit, OnDestroy {
   tasks: Task[] = [];
   workerStatus: WorkerStatus | null = null;
   agentUsage: AgentUsage | null = null;
+  agentModels: AgentModel[] = FALLBACK_AGENT_MODELS;
   connected = false;
   loading = true;
   saving = false;
@@ -1077,7 +1077,23 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private async initializeDashboard(): Promise<void> {
     await this.restoreWorkerDispatchPreference();
-    await Promise.all([this.refreshBoard(false), this.refreshAgentUsage(), this.refreshFrontendConnections()]);
+    await Promise.all([
+      this.refreshBoard(false),
+      this.refreshAgentUsage(),
+      this.refreshAgentModels(),
+      this.refreshFrontendConnections(),
+    ]);
+  }
+
+  private async refreshAgentModels(): Promise<void> {
+    try {
+      const models = await firstValueFrom(this.api.getAgentModels());
+      if (models.length > 0) this.agentModels = models;
+    } catch {
+      // Keep the bundled catalog available when Codex cannot refresh its model list.
+    } finally {
+      this.changeDetector.markForCheck();
+    }
   }
 
   private async refreshAgentUsage(force = false): Promise<void> {
@@ -1301,8 +1317,8 @@ export class AppComponent implements OnInit, OnDestroy {
       title: '',
       description: '',
       priority: 'MEDIUM',
-      model_id: 'gpt-6-luna',
-      model_effort: 'medium',
+      model_id: this.agentModels.find((model) => model.isDefault)?.id ?? DEFAULT_MODEL_ID,
+      model_effort: this.agentModels.find((model) => model.isDefault)?.defaultReasoningEffort ?? 'low',
     };
   }
 

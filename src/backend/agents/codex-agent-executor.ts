@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { AgentAvailability, AgentExecutionResult, ProcessResult } from '../domain/types.js';
+import { DEFAULT_MODEL_ID, type AgentAvailability, type AgentExecutionResult, type ProcessResult } from '../domain/types.js';
 import {
   ProcessRunner,
   type ProcessRunnerLike
@@ -91,7 +91,7 @@ export class CodexAgentExecutor implements AgentExecutor {
         // Prompt content is deliberately supplied on stdin via the final `-`.
         args: [
           '--model',
-          task.model_id ?? 'gpt-6-luna',
+          task.model_id ?? DEFAULT_MODEL_ID,
           '--sandbox',
           'workspace-write',
           '--ask-for-approval',

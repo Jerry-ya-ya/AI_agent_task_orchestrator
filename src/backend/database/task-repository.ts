@@ -1,3 +1,4 @@
+import { DEFAULT_MODEL_ID } from '../domain/types.js';
 import type {
   ClaimedTask,
   CreateTaskInput,
@@ -119,8 +120,8 @@ export class TaskRepository {
       input.title,
       input.description ?? '',
       input.priority ?? 'MEDIUM',
-      input.model_id ?? 'gpt-6-luna',
-      input.model_effort ?? 'medium',
+      input.model_id ?? DEFAULT_MODEL_ID,
+      input.model_effort ?? 'low',
       feature?.['branch_name'] ?? null,
       feature?.['base_branch'] ?? null,
       now,

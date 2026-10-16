@@ -18,12 +18,25 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
-export const MODEL_IDS = ['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra'] as const;
-export type ModelId = (typeof MODEL_IDS)[number];
-
-export const MODEL_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
-export type ModelEffort = (typeof MODEL_EFFORTS)[number];
+export const DEFAULT_MODEL_ID = 'gpt-6.1-sol';
+export const MODEL_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
+export type ModelId = string;
+export type ModelEffort = string;
 export type AgentMode = 'implementation' | 'cherry_pick_resolution';
+
+export interface AgentModelEffort {
+  id: ModelEffort;
+  description: string;
+}
+
+export interface AgentModel {
+  id: ModelId;
+  displayName: string;
+  description: string;
+  isDefault: boolean;
+  defaultReasoningEffort: ModelEffort;
+  supportedReasoningEfforts: AgentModelEffort[];
+}
 
 export interface Project {
   id: number;

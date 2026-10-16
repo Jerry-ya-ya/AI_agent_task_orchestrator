@@ -1,7 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z, ZodError } from 'zod';
 import { AppError } from '../domain/errors.js';
-import { MODEL_EFFORTS, MODEL_IDS, TASK_PRIORITIES, TASK_STATUSES, type AgentUsage, type WorkerStatus } from '../domain/types.js';
+import { TASK_PRIORITIES, TASK_STATUSES, type AgentModel, type AgentUsage, type WorkerStatus } from '../domain/types.js';
 import { ProjectService } from '../services/project-service.js';
 import { FeatureService } from '../services/feature-service.js';
 import { TaskService } from '../services/task-service.js';
@@ -13,6 +13,7 @@ export interface ApiDependencies {
   featureService?: FeatureService;
   workerStatus: () => WorkerStatus;
   agentUsage: (force?: boolean) => Promise<AgentUsage>;
+  agentModels?: (force?: boolean) => Promise<AgentModel[]>;
   cancelTask?: (taskId: number) => Promise<boolean>;
   frontendConnectionService?: FrontendConnectionService;
   pauseWorker?: () => WorkerStatus;
@@ -21,6 +22,8 @@ export interface ApiDependencies {
 }
 
 const idSchema = z.coerce.number().int().positive();
+const modelIdSchema = z.string().trim().min(1).max(128).regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/u);
+const modelEffortSchema = z.string().trim().min(1).max(32).regex(/^[a-z][a-z0-9_-]*$/u);
 const projectInput = z.object({
   name: z.string().min(1).max(200),
   repository_path: z.string().min(1).max(4_096),
@@ -32,8 +35,8 @@ const taskInput = z.object({
   title: z.string().min(1).max(500),
   description: z.string().max(100_000).optional(),
   priority: z.enum(TASK_PRIORITIES).optional(),
-  model_id: z.enum(MODEL_IDS).optional(),
-  model_effort: z.enum(MODEL_EFFORTS).optional()
+  model_id: modelIdSchema.optional(),
+  model_effort: modelEffortSchema.optional()
 }).strict();
 const taskUpdate = z.object({
   project_id: z.number().int().positive().optional(),
@@ -41,8 +44,8 @@ const taskUpdate = z.object({
   title: z.string().min(1).max(500).optional(),
   description: z.string().max(100_000).optional(),
   priority: z.enum(TASK_PRIORITIES).optional(),
-  model_id: z.enum(MODEL_IDS).optional(),
-  model_effort: z.enum(MODEL_EFFORTS).optional()
+  model_id: modelIdSchema.optional(),
+  model_effort: modelEffortSchema.optional()
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one field is required.');
 const featureInput = z.object({
   project_id: z.number().int().positive(),
@@ -92,6 +95,12 @@ export function createApi(dependencies: ApiDependencies): express.Express {
 
   app.get('/agent/usage', async (request, response) => {
     response.json(await dependencies.agentUsage(request.query['refresh'] === '1'));
+  });
+
+  app.get('/agent/models', async (request, response) => {
+    response.json(dependencies.agentModels === undefined
+      ? []
+      : await dependencies.agentModels(request.query['refresh'] === '1'));
   });
 
   app.get('/projects', (_request, response) => {
@@ -222,8 +231,8 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   app.post('/tasks/:id/retry', async (request, response) => {
     const input = z.object({
       prompt: z.string().max(100_000).optional(),
-      model_id: z.enum(MODEL_IDS).optional(),
-      model_effort: z.enum(MODEL_EFFORTS).optional()
+      model_id: modelIdSchema.optional(),
+      model_effort: modelEffortSchema.optional()
     })
       .strict()
       .parse(request.body ?? {});
@@ -262,7 +271,7 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   });
 
   app.post('/tasks/:id/resolve-cherry-pick', (request, response) => {
-    const input = z.object({ model_id: z.enum(MODEL_IDS).optional(), model_effort: z.enum(MODEL_EFFORTS) }).strict().parse(request.body);
+    const input = z.object({ model_id: modelIdSchema.optional(), model_effort: modelEffortSchema }).strict().parse(request.body);
     response.json(dependencies.taskService.resolveCherryPickConflict(
       idSchema.parse(request.params.id),
       input.model_id,

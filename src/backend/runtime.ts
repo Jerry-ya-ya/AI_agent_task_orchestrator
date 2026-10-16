@@ -5,6 +5,7 @@ import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { CodexAgentExecutor } from './agents/codex-agent-executor.js';
 import { CodexUsageService } from './agents/codex-usage-service.js';
+import { CodexModelService } from './agents/codex-model-service.js';
 import type { AgentExecutor } from './agents/agent-executor.js';
 import { createApi } from './api/create-api.js';
 import { OrchestratorDatabase } from './database/database.js';
@@ -53,6 +54,7 @@ export class OrchestratorRuntime {
     const tests = options.testService ?? new TestService(processRunner);
     const agent = options.agent ?? new CodexAgentExecutor(processRunner);
     const agentUsage = new CodexUsageService();
+    const agentModels = new CodexModelService();
     const projects = new ProjectRepository(this.database);
     const features = new FeatureRepository(this.database);
     const runs = new TaskRunRepository(this.database);
@@ -78,6 +80,7 @@ export class OrchestratorRuntime {
       resumeWorker: () => this.worker.resume(),
       setQuotaLoopEnabled: (enabled) => this.worker.setQuotaLoopEnabled(enabled),
       agentUsage: (force) => agentUsage.read(force),
+      agentModels: (force) => agentModels.list(force),
       cancelTask: (taskId) => this.worker.cancelTask(taskId),
       frontendConnectionService: this.frontendConnectionService,
     });

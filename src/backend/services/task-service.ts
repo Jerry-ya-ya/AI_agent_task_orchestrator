@@ -1,4 +1,5 @@
 import { ConflictError, NotFoundError, ValidationError } from '../domain/errors.js';
+import { DEFAULT_MODEL_ID } from '../domain/types.js';
 import type {
   CreateTaskInput,
   Task,
@@ -71,8 +72,8 @@ export class TaskService {
       title,
       description: input.description?.trim() ?? '',
       priority: input.priority ?? 'MEDIUM',
-      model_id: input.model_id ?? 'gpt-6-luna',
-      model_effort: input.model_effort ?? 'medium'
+      model_id: input.model_id ?? DEFAULT_MODEL_ID,
+      model_effort: input.model_effort ?? 'low'
     });
   }
 

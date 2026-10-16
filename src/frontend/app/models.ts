@@ -14,14 +14,40 @@ export const TASK_STATUSES = [
 ] as const;
 
 export const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
-export const MODEL_IDS = ['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra'] as const;
-export const MODEL_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export const DEFAULT_MODEL_ID = 'gpt-6.1-sol';
+export const MODEL_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
-export type ModelId = (typeof MODEL_IDS)[number];
-export type ModelEffort = (typeof MODEL_EFFORTS)[number];
+export type ModelId = string;
+export type ModelEffort = string;
 export type AgentMode = 'implementation' | 'cherry_pick_resolution';
+
+export interface AgentModelEffort {
+  id: ModelEffort;
+  description: string;
+}
+
+export interface AgentModel {
+  id: ModelId;
+  displayName: string;
+  description: string;
+  isDefault: boolean;
+  defaultReasoningEffort: ModelEffort;
+  supportedReasoningEfforts: AgentModelEffort[];
+}
+
+const STANDARD_EFFORTS: AgentModelEffort[] = MODEL_EFFORTS.map((id) => ({ id, description: '' }));
+const LUNA_EFFORTS = STANDARD_EFFORTS.filter((effort) => effort.id !== 'ultra');
+export const FALLBACK_AGENT_MODELS: AgentModel[] = [
+  { id: 'gpt-6.1-sol', displayName: 'GPT-6.1-Sol', description: 'Latest workhorse model for coding and everyday work.', isDefault: true, defaultReasoningEffort: 'low', supportedReasoningEfforts: STANDARD_EFFORTS },
+  { id: 'gpt-6-astra', displayName: 'GPT-6-Astra', description: 'Frontier intelligence for the most demanding work.', isDefault: false, defaultReasoningEffort: 'low', supportedReasoningEfforts: STANDARD_EFFORTS },
+  { id: 'gpt-6-sol', displayName: 'GPT-6-Sol', description: 'Previous generation workhorse model.', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: STANDARD_EFFORTS },
+  { id: 'gpt-6-luna', displayName: 'GPT-6-Luna', description: 'Fast and affordable model for easier tasks.', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: LUNA_EFFORTS },
+  { id: 'gpt-5.6-sol', displayName: 'GPT-5.6-Sol', description: 'Older generation workhorse model.', isDefault: false, defaultReasoningEffort: 'low', supportedReasoningEfforts: STANDARD_EFFORTS },
+  { id: 'gpt-5.6-terra', displayName: 'GPT-5.6-Terra', description: 'Older balanced model for straightforward work.', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: STANDARD_EFFORTS },
+  { id: 'gpt-5.6-luna', displayName: 'GPT-5.6-Luna', description: 'Older fast and efficient model.', isDefault: false, defaultReasoningEffort: 'medium', supportedReasoningEfforts: LUNA_EFFORTS },
+];
 
 export interface StatusColumn {
   status: TaskStatus;
