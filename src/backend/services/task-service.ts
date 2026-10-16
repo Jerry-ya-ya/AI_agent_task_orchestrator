@@ -71,6 +71,7 @@ export class TaskService {
       title,
       description: input.description?.trim() ?? '',
       priority: input.priority ?? 'MEDIUM',
+      model_id: input.model_id ?? 'gpt-6-luna',
       model_effort: input.model_effort ?? 'medium'
     });
   }
@@ -123,7 +124,12 @@ export class TaskService {
       await this.leaveReviewCheckout(existing);
     }
     const prompt = input.prompt?.trim() || null;
-    const updated = this.tasks.createRetry(existing, input.model_effort ?? existing.model_effort, prompt);
+    const updated = this.tasks.createRetry(
+      existing,
+      input.model_id ?? existing.model_id,
+      input.model_effort ?? existing.model_effort,
+      prompt,
+    );
     if (updated === null) {
       throw new ConflictError('Task state changed while its retry task was being created.');
     }
@@ -360,12 +366,12 @@ export class TaskService {
     await this.git.endTaskReview(task, project.repository_path);
   }
 
-  public resolveCherryPickConflict(id: number, modelEffort: ModelEffort): Task {
+  public resolveCherryPickConflict(id: number, modelId: Task['model_id'] | undefined, modelEffort: ModelEffort): Task {
     const task = this.requireTask(id);
     if (task.feature_id === null || task.feature_id === undefined || task.branch_name === null) {
       throw new ConflictError('Only a Feature task with a managed branch can resolve a cherry-pick conflict.');
     }
-    const queued = this.tasks.queueCherryPickResolution(id, modelEffort);
+    const queued = this.tasks.queueCherryPickResolution(id, modelId ?? task.model_id, modelEffort);
     if (queued === null) {
       throw new ConflictError('Only CHERRY_PICK_CONFLICT tasks can be queued for conflict resolution.');
     }

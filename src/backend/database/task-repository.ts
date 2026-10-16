@@ -109,16 +109,17 @@ export class TaskRepository {
       .get(input.feature_id);
     const result = this.database.connection.prepare(`
       INSERT INTO tasks (
-        project_id, feature_id, title, description, status, priority, model_effort, retry_prompt,
+        project_id, feature_id, title, description, status, priority, model_id, model_effort, retry_prompt,
         branch_name, worktree_path, base_branch, commit_summary, source_task_id, is_rejected,
         is_paused, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, NULL, ?, NULL, ?, NULL, NULL, 0, 0, ?, ?)
+      ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, ?, NULL, ?, NULL, ?, NULL, NULL, 0, 0, ?, ?)
     `).run(
       input.project_id,
       input.feature_id ?? null,
       input.title,
       input.description ?? '',
       input.priority ?? 'MEDIUM',
+      input.model_id ?? 'gpt-6-luna',
       input.model_effort ?? 'medium',
       feature?.['branch_name'] ?? null,
       feature?.['base_branch'] ?? null,
@@ -133,13 +134,13 @@ export class TaskRepository {
       const now = this.clock();
       const result = this.database.connection.prepare(`
         INSERT INTO tasks (
-          project_id, feature_id, title, description, status, priority, model_effort, retry_prompt,
+          project_id, feature_id, title, description, status, priority, model_id, model_effort, retry_prompt,
           branch_name, worktree_path, base_branch, commit_summary,
           source_task_id, is_rejected, is_paused, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, NULL, ?, ?, ?, NULL, ?, 0, 0, ?, ?)
+        ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, ?, NULL, ?, ?, ?, NULL, ?, 0, 0, ?, ?)
       `).run(
         source.project_id, source.feature_id ?? null, source.title, prompt, source.priority,
-        source.model_effort, source.branch_name, source.worktree_path,
+        source.model_id, source.model_effort, source.branch_name, source.worktree_path,
         source.base_branch, source.id, now, now
       );
       this.database.connection.prepare(`
@@ -150,7 +151,7 @@ export class TaskRepository {
     });
   }
 
-  public createRetry(source: Task, modelEffort: Task['model_effort'], prompt: string | null): Task | null {
+  public createRetry(source: Task, modelId: Task['model_id'], modelEffort: Task['model_effort'], prompt: string | null): Task | null {
     return this.database.transaction(() => {
       const now = this.clock();
       const superseded = this.database.connection.prepare(`
@@ -162,16 +163,17 @@ export class TaskRepository {
 
       const result = this.database.connection.prepare(`
         INSERT INTO tasks (
-          project_id, feature_id, title, description, status, priority, model_effort, agent_mode,
+          project_id, feature_id, title, description, status, priority, model_id, model_effort, agent_mode,
           retry_prompt, branch_name, worktree_path, base_branch, commit_summary, publish_commit_sha,
           source_task_id, is_rejected, is_paused, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, 'implementation', ?, ?, ?, ?, NULL, NULL, ?, 0, 0, ?, ?)
+        ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, ?, ?, 'implementation', ?, ?, ?, ?, NULL, NULL, ?, 0, 0, ?, ?)
       `).run(
         source.project_id,
         source.feature_id ?? null,
         source.title,
         source.description,
         source.priority,
+        modelId,
         modelEffort,
         prompt,
         source.branch_name,
@@ -185,13 +187,13 @@ export class TaskRepository {
     });
   }
 
-  public queueCherryPickResolution(id: number, modelEffort: Task['model_effort']): Task | null {
+  public queueCherryPickResolution(id: number, modelId: Task['model_id'], modelEffort: Task['model_effort']): Task | null {
     const result = this.database.connection.prepare(`
       UPDATE tasks
-      SET status = 'TODO', model_effort = ?, agent_mode = 'cherry_pick_resolution',
+      SET status = 'TODO', model_id = ?, model_effort = ?, agent_mode = 'cherry_pick_resolution',
           retry_prompt = NULL, is_paused = 0, updated_at = ?
       WHERE id = ? AND status = 'CHERRY_PICK_CONFLICT'
-    `).run(modelEffort, this.clock(), id);
+    `).run(modelId, modelEffort, this.clock(), id);
     return result.changes > 0 ? this.findById(id) : null;
   }
 
@@ -237,6 +239,10 @@ export class TaskRepository {
     if (input.priority !== undefined) {
       fields.push('priority = ?');
       parameters.push(input.priority);
+    }
+    if (input.model_id !== undefined) {
+      fields.push('model_id = ?');
+      parameters.push(input.model_id);
     }
     if (input.model_effort !== undefined) {
       fields.push('model_effort = ?');

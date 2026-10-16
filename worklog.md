@@ -175,3 +175,7 @@
 ## 2026/09/29
 
 - Enable dragging connected frontend pages into dedicated Electron windows.
+
+## 2026/10/16
+
+- Persist per-task Codex model and reasoning selections across execution, retries, and conflict resolution.

@@ -38,6 +38,7 @@ import {
   FrontendConnection,
   FrontendConnectionDraft,
   MODEL_EFFORTS,
+  MODEL_IDS,
   Project,
   ProjectDraft,
   ProjectBranchMap,
@@ -98,6 +99,7 @@ export class AppComponent implements OnInit, OnDestroy {
   readonly columns = STATUS_COLUMNS;
   readonly priorities = TASK_PRIORITIES;
   readonly modelEfforts = MODEL_EFFORTS;
+  readonly modelIds = MODEL_IDS;
   readonly apiBaseUrl: string;
 
   projects: Project[] = [];
@@ -370,6 +372,7 @@ export class AppComponent implements OnInit, OnDestroy {
       title: task.title,
       description: task.description,
       priority: task.priority,
+      model_id: task.model_id,
       model_effort: task.model_effort,
     };
     this.taskEditorMode = 'edit';
@@ -538,13 +541,13 @@ export class AppComponent implements OnInit, OnDestroy {
     this.activateModal();
   }
 
-  async resolveCherryPickConflict(modelEffort: Task['model_effort']): Promise<void> {
+  async resolveCherryPickConflict(selection: { modelId: Task['model_id']; modelEffort: Task['model_effort'] }): Promise<void> {
     const task = this.resolvingCherryPickTask;
     if (task === null || this.isTaskPending(task.id)) return;
     this.setTaskPending(task.id, true);
     this.clearError();
     try {
-      await firstValueFrom(this.api.resolveCherryPickConflict(task.id, modelEffort));
+      await firstValueFrom(this.api.resolveCherryPickConflict(task.id, selection.modelId, selection.modelEffort));
       this.showNotice(`“${task.title}” queued for Codex conflict resolution.`);
       this.closeModal();
       await this.refreshBoard(false);
@@ -724,6 +727,7 @@ export class AppComponent implements OnInit, OnDestroy {
       title: this.taskDraft.title.trim(),
       description: this.taskDraft.description.trim(),
       priority: this.taskDraft.priority,
+      model_id: this.taskDraft.model_id,
       model_effort: this.taskDraft.model_effort,
     };
 
@@ -910,6 +914,7 @@ export class AppComponent implements OnInit, OnDestroy {
       const retry = await firstValueFrom(this.api.retryTask(
         task.id,
         request.prompt,
+        request.modelId,
         request.modelEffort
       ));
       this.showNotice(`Retry task #${retry.id} created from #${task.id} and queued in Todo.`);
@@ -1296,6 +1301,7 @@ export class AppComponent implements OnInit, OnDestroy {
       title: '',
       description: '',
       priority: 'MEDIUM',
+      model_id: 'gpt-6-luna',
       model_effort: 'medium',
     };
   }

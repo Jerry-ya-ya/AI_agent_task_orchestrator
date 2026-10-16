@@ -90,6 +90,8 @@ export class CodexAgentExecutor implements AgentExecutor {
         // --ask-for-approval is a global option and must precede `exec` on Codex.
         // Prompt content is deliberately supplied on stdin via the final `-`.
         args: [
+          '--model',
+          task.model_id ?? 'gpt-6-luna',
           '--sandbox',
           'workspace-write',
           '--ask-for-approval',

@@ -43,8 +43,10 @@ const SCHEMA = `
       CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','REVIEWING','PENDING_PUSH','CHERRY_PICK_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
     priority TEXT NOT NULL DEFAULT 'MEDIUM'
       CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
+    model_id TEXT NOT NULL DEFAULT 'gpt-6-luna'
+      CHECK (model_id IN ('gpt-6-luna','gpt-6.1-sol','gpt-6-astra')),
     model_effort TEXT NOT NULL DEFAULT 'medium'
-      CHECK (model_effort IN ('low','medium','high','xhigh')),
+      CHECK (model_effort IN ('low','medium','high','xhigh','max')),
     agent_mode TEXT NOT NULL DEFAULT 'implementation'
       CHECK (agent_mode IN ('implementation','cherry_pick_resolution')),
     retry_prompt TEXT,
@@ -139,6 +141,12 @@ export class OrchestratorDatabase {
           CHECK (model_effort IN ('low','medium','high','xhigh'));
       `);
     }
+    if (!taskColumns.some((column) => column['name'] === 'model_id')) {
+      this.connection.exec(`
+        ALTER TABLE tasks ADD COLUMN model_id TEXT NOT NULL DEFAULT 'gpt-6-luna'
+          CHECK (model_id IN ('gpt-6-luna','gpt-6.1-sol','gpt-6-astra'));
+      `);
+    }
     if (!taskColumns.some((column) => column['name'] === 'retry_prompt')) {
       this.connection.exec('ALTER TABLE tasks ADD COLUMN retry_prompt TEXT;');
     }
@@ -162,7 +170,8 @@ export class OrchestratorDatabase {
     const needsPublishingMigration = !taskDefinition?.sql?.includes('PENDING_BRANCH_REMOVAL')
       || !taskDefinition?.sql?.includes('REJECTED');
     if (needsPublishingMigration || !taskDefinition?.sql?.includes('CHERRY_PICK_CONFLICT')
-      || !taskDefinition?.sql?.includes('REVIEWING')) {
+      || !taskDefinition?.sql?.includes('REVIEWING') || !taskDefinition?.sql?.includes("'max'")
+      || !taskDefinition?.sql?.includes('model_id')) {
       this.rebuildTasksForPublishing(hadPendingPush, needsPublishingMigration);
     }
 
@@ -209,10 +218,14 @@ export class OrchestratorDatabase {
     const migratedDoneStatus = migrateLegacyDone
       ? (hadPendingPush ? 'PENDING_BRANCH_REMOVAL' : 'PENDING_PUSH')
       : 'DONE';
+    const hasFeaturePublications = this.connection.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'feature_publications'",
+    ).get() !== undefined;
     this.connection.exec('PRAGMA foreign_keys = OFF;');
     try {
       this.connection.exec(`
         BEGIN IMMEDIATE;
+        ${hasFeaturePublications ? 'ALTER TABLE feature_publications RENAME TO feature_publications_before_publishing;' : ''}
         DROP INDEX IF EXISTS idx_tasks_claim;
         DROP INDEX IF EXISTS idx_tasks_claimable;
         DROP INDEX IF EXISTS idx_task_runs_task_started;
@@ -229,8 +242,10 @@ export class OrchestratorDatabase {
             CHECK (status IN ('TODO','CLAIMED','IN_PROGRESS','TESTING','IN_REVIEW','REVIEWING','PENDING_PUSH','CHERRY_PICK_CONFLICT','PENDING_BRANCH_REMOVAL','DONE','REJECTED','FAILED')),
           priority TEXT NOT NULL DEFAULT 'MEDIUM'
             CHECK (priority IN ('LOW','MEDIUM','HIGH','URGENT')),
+          model_id TEXT NOT NULL DEFAULT 'gpt-6-luna'
+            CHECK (model_id IN ('gpt-6-luna','gpt-6.1-sol','gpt-6-astra')),
           model_effort TEXT NOT NULL DEFAULT 'medium'
-            CHECK (model_effort IN ('low','medium','high','xhigh')),
+            CHECK (model_effort IN ('low','medium','high','xhigh','max')),
           agent_mode TEXT NOT NULL DEFAULT 'implementation'
             CHECK (agent_mode IN ('implementation','cherry_pick_resolution')),
           retry_prompt TEXT,
@@ -247,7 +262,7 @@ export class OrchestratorDatabase {
         );
 
         INSERT INTO tasks (
-          id, project_id, feature_id, title, description, status, priority, model_effort, agent_mode, retry_prompt,
+          id, project_id, feature_id, title, description, status, priority, model_id, model_effort, agent_mode, retry_prompt,
           branch_name, worktree_path, base_branch, commit_summary, publish_commit_sha, source_task_id,
           is_rejected, is_paused, created_at, updated_at
         )
@@ -258,7 +273,7 @@ export class OrchestratorDatabase {
             WHEN status = 'DONE' AND branch_name IS NOT NULL THEN '${migratedDoneStatus}'
             ELSE status
           END,
-          priority, model_effort,
+          priority, model_id, model_effort,
           CASE WHEN agent_mode = 'rebase_resolution' THEN 'cherry_pick_resolution' ELSE agent_mode END,
           retry_prompt, branch_name, worktree_path, base_branch, commit_summary, publish_commit_sha,
           source_task_id, is_rejected, is_paused, created_at, updated_at
@@ -282,6 +297,16 @@ export class OrchestratorDatabase {
         )
         SELECT id, task_id, started_at, finished_at, exit_code, stdout, stderr, result_summary
         FROM task_runs_before_publishing;
+
+        ${hasFeaturePublications ? `
+          CREATE TABLE feature_publications (
+            task_id INTEGER PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+            main_commit_sha TEXT NOT NULL
+          );
+          INSERT INTO feature_publications (task_id, main_commit_sha)
+          SELECT task_id, main_commit_sha FROM feature_publications_before_publishing;
+          DROP TABLE feature_publications_before_publishing;
+        ` : ''}
 
         DROP TABLE task_runs_before_publishing;
         DROP TABLE tasks_before_publishing;

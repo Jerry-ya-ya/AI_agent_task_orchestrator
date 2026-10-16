@@ -18,7 +18,10 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
-export const MODEL_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const;
+export const MODEL_IDS = ['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra'] as const;
+export type ModelId = (typeof MODEL_IDS)[number];
+
+export const MODEL_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ModelEffort = (typeof MODEL_EFFORTS)[number];
 export type AgentMode = 'implementation' | 'cherry_pick_resolution';
 
@@ -63,6 +66,7 @@ export interface Task {
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
+  model_id: ModelId;
   model_effort: ModelEffort;
   agent_mode: AgentMode;
   retry_prompt: string | null;
@@ -118,6 +122,7 @@ export interface CreateTaskInput {
   title: string;
   description?: string;
   priority?: TaskPriority;
+  model_id?: ModelId;
   model_effort?: ModelEffort;
 }
 
@@ -127,11 +132,13 @@ export interface UpdateTaskInput {
   title?: string;
   description?: string;
   priority?: TaskPriority;
+  model_id?: ModelId;
   model_effort?: ModelEffort;
 }
 
 export interface RetryTaskInput {
   prompt?: string;
+  model_id?: ModelId;
   model_effort?: ModelEffort;
 }
 

@@ -1,7 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z, ZodError } from 'zod';
 import { AppError } from '../domain/errors.js';
-import { MODEL_EFFORTS, TASK_PRIORITIES, TASK_STATUSES, type AgentUsage, type WorkerStatus } from '../domain/types.js';
+import { MODEL_EFFORTS, MODEL_IDS, TASK_PRIORITIES, TASK_STATUSES, type AgentUsage, type WorkerStatus } from '../domain/types.js';
 import { ProjectService } from '../services/project-service.js';
 import { FeatureService } from '../services/feature-service.js';
 import { TaskService } from '../services/task-service.js';
@@ -32,6 +32,7 @@ const taskInput = z.object({
   title: z.string().min(1).max(500),
   description: z.string().max(100_000).optional(),
   priority: z.enum(TASK_PRIORITIES).optional(),
+  model_id: z.enum(MODEL_IDS).optional(),
   model_effort: z.enum(MODEL_EFFORTS).optional()
 }).strict();
 const taskUpdate = z.object({
@@ -40,6 +41,7 @@ const taskUpdate = z.object({
   title: z.string().min(1).max(500).optional(),
   description: z.string().max(100_000).optional(),
   priority: z.enum(TASK_PRIORITIES).optional(),
+  model_id: z.enum(MODEL_IDS).optional(),
   model_effort: z.enum(MODEL_EFFORTS).optional()
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one field is required.');
 const featureInput = z.object({
@@ -220,6 +222,7 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   app.post('/tasks/:id/retry', async (request, response) => {
     const input = z.object({
       prompt: z.string().max(100_000).optional(),
+      model_id: z.enum(MODEL_IDS).optional(),
       model_effort: z.enum(MODEL_EFFORTS).optional()
     })
       .strict()
@@ -259,9 +262,10 @@ export function createApi(dependencies: ApiDependencies): express.Express {
   });
 
   app.post('/tasks/:id/resolve-cherry-pick', (request, response) => {
-    const input = z.object({ model_effort: z.enum(MODEL_EFFORTS) }).strict().parse(request.body);
+    const input = z.object({ model_id: z.enum(MODEL_IDS).optional(), model_effort: z.enum(MODEL_EFFORTS) }).strict().parse(request.body);
     response.json(dependencies.taskService.resolveCherryPickConflict(
       idSchema.parse(request.params.id),
+      input.model_id,
       input.model_effort,
     ));
   });

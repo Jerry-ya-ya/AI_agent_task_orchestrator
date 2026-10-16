@@ -12,6 +12,7 @@ import {
   Project,
   SaveTaskInput,
   ModelEffort,
+  ModelId,
   Task,
   TaskDetail,
   TaskRun,
@@ -189,8 +190,9 @@ export class ApiService {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/push`, {});
   }
 
-  resolveCherryPickConflict(taskId: number, modelEffort: ModelEffort): Observable<Task> {
+  resolveCherryPickConflict(taskId: number, modelId: ModelId, modelEffort: ModelEffort): Observable<Task> {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/resolve-cherry-pick`, {
+      model_id: modelId,
       model_effort: modelEffort,
     });
   }
@@ -199,9 +201,10 @@ export class ApiService {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/remove-branch`, {});
   }
 
-  retryTask(taskId: number, prompt: string, modelEffort: ModelEffort): Observable<Task> {
+  retryTask(taskId: number, prompt: string, modelId: ModelId, modelEffort: ModelEffort): Observable<Task> {
     return this.http.post<Task>(`${this.baseUrl}/tasks/${taskId}/retry`, {
       prompt: prompt.trim() || undefined,
+      model_id: modelId,
       model_effort: modelEffort
     });
   }
