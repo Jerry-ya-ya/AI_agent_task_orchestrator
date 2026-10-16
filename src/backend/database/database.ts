@@ -169,9 +169,10 @@ export class OrchestratorDatabase {
     const hadPendingPush = taskDefinition?.sql?.includes('PENDING_PUSH') ?? false;
     const needsPublishingMigration = !taskDefinition?.sql?.includes('PENDING_BRANCH_REMOVAL')
       || !taskDefinition?.sql?.includes('REJECTED');
+    const needsTaskForeignKeyRepair = this.hasStaleTaskForeignKey();
     if (needsPublishingMigration || !taskDefinition?.sql?.includes('CHERRY_PICK_CONFLICT')
       || !taskDefinition?.sql?.includes('REVIEWING') || !taskDefinition?.sql?.includes("'max'")
-      || !taskDefinition?.sql?.includes('model_id')) {
+      || !taskDefinition?.sql?.includes('model_id') || needsTaskForeignKeyRepair) {
       this.rebuildTasksForPublishing(hadPendingPush, needsPublishingMigration);
     }
 
@@ -218,21 +219,41 @@ export class OrchestratorDatabase {
     const migratedDoneStatus = migrateLegacyDone
       ? (hadPendingPush ? 'PENDING_BRANCH_REMOVAL' : 'PENDING_PUSH')
       : 'DONE';
-    const hasFeaturePublications = this.connection.prepare(
-      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'feature_publications'",
-    ).get() !== undefined;
+    const hasFeaturePublications = this.tableExists('feature_publications');
+    const taskRunColumns = this.connection.prepare('PRAGMA table_info(task_runs)').all();
+    const hasFileDiff = taskRunColumns.some((column) => column['name'] === 'file_diff');
+    const hasCodeDiff = taskRunColumns.some((column) => column['name'] === 'code_diff');
+    const fileDiffExpression = hasFileDiff ? 'file_diff' : "''";
+    const codeDiffExpression = hasCodeDiff ? 'code_diff' : "''";
     this.connection.exec('PRAGMA foreign_keys = OFF;');
     try {
       this.connection.exec(`
         BEGIN IMMEDIATE;
-        ${hasFeaturePublications ? 'ALTER TABLE feature_publications RENAME TO feature_publications_before_publishing;' : ''}
         DROP INDEX IF EXISTS idx_tasks_claim;
         DROP INDEX IF EXISTS idx_tasks_claimable;
         DROP INDEX IF EXISTS idx_task_runs_task_started;
-        ALTER TABLE task_runs RENAME TO task_runs_before_publishing;
-        ALTER TABLE tasks RENAME TO tasks_before_publishing;
+        DROP INDEX IF EXISTS idx_features_project;
 
-        CREATE TABLE tasks (
+        CREATE TABLE features_after_publishing (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+          name TEXT NOT NULL,
+          branch_name TEXT NOT NULL,
+          base_branch TEXT NOT NULL,
+          pointer_reset_task_id INTEGER,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(project_id, name),
+          UNIQUE(project_id, branch_name)
+        );
+
+        INSERT INTO features_after_publishing (
+          id, project_id, name, branch_name, base_branch, pointer_reset_task_id, created_at, updated_at
+        )
+        SELECT id, project_id, name, branch_name, base_branch, pointer_reset_task_id, created_at, updated_at
+        FROM features;
+
+        CREATE TABLE tasks_after_publishing (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
           feature_id INTEGER REFERENCES features(id) ON DELETE SET NULL,
@@ -254,14 +275,14 @@ export class OrchestratorDatabase {
           base_branch TEXT,
           commit_summary TEXT,
           publish_commit_sha TEXT,
-          source_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+          source_task_id INTEGER REFERENCES tasks_after_publishing(id) ON DELETE SET NULL,
           is_rejected INTEGER NOT NULL DEFAULT 0 CHECK (is_rejected IN (0, 1)),
           is_paused INTEGER NOT NULL DEFAULT 0 CHECK (is_paused IN (0, 1)),
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
 
-        INSERT INTO tasks (
+        INSERT INTO tasks_after_publishing (
           id, project_id, feature_id, title, description, status, priority, model_id, model_effort, agent_mode, retry_prompt,
           branch_name, worktree_path, base_branch, commit_summary, publish_commit_sha, source_task_id,
           is_rejected, is_paused, created_at, updated_at
@@ -277,11 +298,11 @@ export class OrchestratorDatabase {
           CASE WHEN agent_mode = 'rebase_resolution' THEN 'cherry_pick_resolution' ELSE agent_mode END,
           retry_prompt, branch_name, worktree_path, base_branch, commit_summary, publish_commit_sha,
           source_task_id, is_rejected, is_paused, created_at, updated_at
-        FROM tasks_before_publishing;
+        FROM tasks;
 
-        CREATE TABLE task_runs (
+        CREATE TABLE task_runs_after_publishing (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          task_id INTEGER NOT NULL REFERENCES tasks_after_publishing(id) ON DELETE CASCADE,
           started_at TEXT NOT NULL,
           finished_at TEXT,
           exit_code INTEGER,
@@ -292,24 +313,30 @@ export class OrchestratorDatabase {
           code_diff TEXT NOT NULL DEFAULT ''
         );
 
-        INSERT INTO task_runs (
-          id, task_id, started_at, finished_at, exit_code, stdout, stderr, result_summary
+        INSERT INTO task_runs_after_publishing (
+          id, task_id, started_at, finished_at, exit_code, stdout, stderr, result_summary, file_diff, code_diff
         )
-        SELECT id, task_id, started_at, finished_at, exit_code, stdout, stderr, result_summary
-        FROM task_runs_before_publishing;
+        SELECT id, task_id, started_at, finished_at, exit_code, stdout, stderr, result_summary,
+          ${fileDiffExpression}, ${codeDiffExpression}
+        FROM task_runs;
 
         ${hasFeaturePublications ? `
-          CREATE TABLE feature_publications (
-            task_id INTEGER PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+          CREATE TABLE feature_publications_after_publishing (
+            task_id INTEGER PRIMARY KEY REFERENCES tasks_after_publishing(id) ON DELETE CASCADE,
             main_commit_sha TEXT NOT NULL
           );
-          INSERT INTO feature_publications (task_id, main_commit_sha)
-          SELECT task_id, main_commit_sha FROM feature_publications_before_publishing;
-          DROP TABLE feature_publications_before_publishing;
+          INSERT INTO feature_publications_after_publishing (task_id, main_commit_sha)
+          SELECT task_id, main_commit_sha FROM feature_publications;
         ` : ''}
 
-        DROP TABLE task_runs_before_publishing;
-        DROP TABLE tasks_before_publishing;
+        ${hasFeaturePublications ? 'DROP TABLE feature_publications;' : ''}
+        DROP TABLE task_runs;
+        DROP TABLE tasks;
+        DROP TABLE features;
+        ALTER TABLE features_after_publishing RENAME TO features;
+        ALTER TABLE tasks_after_publishing RENAME TO tasks;
+        ALTER TABLE task_runs_after_publishing RENAME TO task_runs;
+        ${hasFeaturePublications ? 'ALTER TABLE feature_publications_after_publishing RENAME TO feature_publications;' : ''}
         COMMIT;
       `);
     } catch (error) {
@@ -328,7 +355,31 @@ export class OrchestratorDatabase {
         ON tasks(status, priority, created_at, id);
       CREATE INDEX IF NOT EXISTS idx_task_runs_task_started
         ON task_runs(task_id, started_at DESC, id DESC);
+      CREATE INDEX IF NOT EXISTS idx_features_project
+        ON features(project_id, created_at, id);
     `);
+  }
+
+  private hasStaleTaskForeignKey(): boolean {
+    const tables = this.connection.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+    ).all() as Array<{ name: string }>;
+    return tables.some(({ name }) => {
+      const escapedName = name.replaceAll('"', '""');
+      const foreignKeys = this.connection.prepare(`PRAGMA foreign_key_list("${escapedName}")`).all();
+      return foreignKeys.some((foreignKey) => {
+        const referencedTable = foreignKey['table'];
+        return typeof referencedTable === 'string'
+          && referencedTable.startsWith('tasks_')
+          && referencedTable !== 'tasks';
+      });
+    });
+  }
+
+  private tableExists(tableName: string): boolean {
+    return this.connection.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+    ).get(tableName) !== undefined;
   }
 
   public transaction<T>(operation: () => T): T {

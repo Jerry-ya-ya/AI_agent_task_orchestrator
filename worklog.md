@@ -179,3 +179,5 @@
 ## 2026/10/16
 
 - Persist per-task Codex model and reasoning selections across execution, retries, and conflict resolution.
+
+- Repair stale task foreign keys during database migrations while preserving Feature and task history.
