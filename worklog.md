@@ -183,3 +183,7 @@
 - Repair stale task foreign keys during database migrations while preserving Feature and task history.
 
 - Load the complete Codex model catalog dynamically with model-specific reasoning options.
+
+## 2026/10/17
+
+- Prevent Electron header drag regions from blocking interactions in task modals.

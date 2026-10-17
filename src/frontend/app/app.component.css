@@ -223,6 +223,13 @@
   -webkit-app-region: no-drag;
 }
 
+/* Electron evaluates native drag hit regions separately from normal stacking.
+   Disable the header drag surface while a modal is open so it cannot intercept
+   form controls that visually overlap the responsive 120–164px header. */
+body.modal-open .topbar {
+  -webkit-app-region: no-drag;
+}
+
 .brand-block,
 .topbar-actions,
 .board-title-row,
@@ -1547,6 +1554,13 @@ frontend-connection-page {
   place-items: center;
   background: rgba(11, 15, 20, 0.66);
   backdrop-filter: blur(2px);
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
+
+.modal,
+.modal * {
+  -webkit-app-region: no-drag;
 }
 
 .modal__surface {
