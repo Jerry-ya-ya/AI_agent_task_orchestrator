@@ -6,7 +6,7 @@ declare global {
       chooseRepository?(suggestedPath: string): Promise<string | null>;
       minimize?(): Promise<boolean>;
       openPage?(request: {
-        page: 'features' | 'taskboard' | 'history' | 'settings' | 'frontend';
+        page: 'features' | 'taskboard' | 'history' | 'worklog' | 'settings' | 'frontend';
         connectionId?: string;
         screenX: number;
         screenY: number;

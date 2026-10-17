@@ -9,7 +9,7 @@ let runtime: OrchestratorRuntime | null = null;
 let mainWindow: BrowserWindow | null = null;
 let quittingAfterShutdown = false;
 let shutdownPromise: Promise<void> | null = null;
-const APP_PAGES = new Set(['features', 'taskboard', 'history', 'settings', 'frontend']);
+const APP_PAGES = new Set(['features', 'taskboard', 'history', 'worklog', 'settings', 'frontend']);
 const APP_ICONS = new Set(['original', 'violet', 'ember', 'frost']);
 const iconDirectory = app.isPackaged
   ? resolve(currentDirectory, '../../frontend/browser')
@@ -21,7 +21,7 @@ function iconPath(id: string): string {
   return join(iconDirectory, `${name}.${process.platform === 'win32' ? 'ico' : 'png'}`);
 }
 
-type AppPage = 'features' | 'taskboard' | 'history' | 'settings' | 'frontend';
+type AppPage = 'features' | 'taskboard' | 'history' | 'worklog' | 'settings' | 'frontend';
 
 interface WindowPlacement {
   x: number;
@@ -117,6 +117,7 @@ if (!app.requestSingleInstanceLock()) {
       const uiPath = resolve(currentDirectory, '../../frontend/browser');
       runtime = new OrchestratorRuntime({
         databasePath: join(app.getPath('userData'), 'data', 'orchestrator.sqlite'),
+        worklogPath: join(app.getAppPath(), 'worklog.md'),
         uiPath,
         // Keep the packaged renderer origin stable so its localStorage persists across launches.
         port: process.env['ORCHESTRATOR_DEV_URL'] === undefined ? 4317 : 0

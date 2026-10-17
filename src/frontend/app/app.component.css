@@ -590,6 +590,12 @@ header-usage {
   overscroll-behavior-y: contain;
 }
 
+.page-content--worklog {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
 .page-content--settings {
   overflow-x: hidden;
   overflow-y: auto;

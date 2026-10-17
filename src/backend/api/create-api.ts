@@ -16,6 +16,7 @@ export interface ApiDependencies {
   agentModels?: (force?: boolean) => Promise<AgentModel[]>;
   cancelTask?: (taskId: number) => Promise<boolean>;
   frontendConnectionService?: FrontendConnectionService;
+  worklog?: () => Promise<{ content: string }>;
   pauseWorker?: () => WorkerStatus;
   resumeWorker?: () => WorkerStatus;
   setQuotaLoopEnabled?: (enabled: boolean) => WorkerStatus;
@@ -101,6 +102,10 @@ export function createApi(dependencies: ApiDependencies): express.Express {
     response.json(dependencies.agentModels === undefined
       ? []
       : await dependencies.agentModels(request.query['refresh'] === '1'));
+  });
+
+  app.get('/worklog', async (_request, response) => {
+    response.json(dependencies.worklog === undefined ? { content: '' } : await dependencies.worklog());
   });
 
   app.get('/projects', (_request, response) => {

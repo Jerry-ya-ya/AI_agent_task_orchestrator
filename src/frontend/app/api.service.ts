@@ -17,6 +17,7 @@ import {
   Task,
   TaskDetail,
   TaskRun,
+  WorklogResponse,
   WorkerStatus,
 } from './models';
 
@@ -76,6 +77,10 @@ export class ApiService {
 
   getProjects(): Observable<Project[]> {
     return this.http.get<Project[]>(`${this.baseUrl}/projects`);
+  }
+
+  getWorklog(): Observable<WorklogResponse> {
+    return this.http.get<WorklogResponse>(`${this.baseUrl}/worklog`);
   }
 
   createProject(input: CreateProjectInput): Observable<Project> {

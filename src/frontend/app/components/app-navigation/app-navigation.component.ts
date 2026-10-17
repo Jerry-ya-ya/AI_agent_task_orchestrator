@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import type { FrontendConnection } from '../../models';
 
-export type AppPage = 'features' | 'taskboard' | 'history' | 'settings';
+export type AppPage = 'features' | 'taskboard' | 'history' | 'worklog' | 'settings';
 type DetachablePage = AppPage | 'frontend';
 
 export interface DetachedPageRequest {

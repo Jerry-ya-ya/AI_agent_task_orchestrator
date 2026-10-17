@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { CodexAgentExecutor } from './agents/codex-agent-executor.js';
@@ -20,6 +20,7 @@ import { ProjectService } from './services/project-service.js';
 import { TaskService } from './services/task-service.js';
 import { TestService } from './services/test-service.js';
 import { FrontendConnectionService } from './services/frontend-connection-service.js';
+import { WorklogService } from './services/worklog-service.js';
 import { TaskWorker } from './worker/task-worker.js';
 
 export interface RuntimeOptions {
@@ -31,6 +32,7 @@ export interface RuntimeOptions {
   gitService?: GitService;
   testService?: TestService;
   frontendConnectionsPath?: string;
+  worklogPath?: string;
 }
 
 export class OrchestratorRuntime {
@@ -65,6 +67,7 @@ export class OrchestratorRuntime {
     this.frontendConnectionService = new FrontendConnectionService(
       options.frontendConnectionsPath ?? join(dirname(options.databasePath), 'connections.json'),
     );
+    const worklogService = new WorklogService(options.worklogPath ?? resolve('worklog.md'));
     tasks.recoverInterrupted();
     this.worker = new TaskWorker(tasks, runs, git, agent, tests, {
       pollIntervalMs: options.pollIntervalMs,
@@ -83,6 +86,7 @@ export class OrchestratorRuntime {
       agentModels: (force) => agentModels.list(force),
       cancelTask: (taskId) => this.worker.cancelTask(taskId),
       frontendConnectionService: this.frontendConnectionService,
+      worklog: () => worklogService.read(),
     });
     if (options.uiPath !== undefined && existsSync(options.uiPath)) {
       api.use(express.static(options.uiPath));

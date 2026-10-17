@@ -1,0 +1,22 @@
+<section class="worklog-page" aria-labelledby="worklog-title">
+  <header class="worklog-page__heading">
+    <div>
+      <p class="eyebrow">Release notes</p>
+      <h2 id="worklog-title">Update log</h2>
+      <p>Changes recorded in worklog.md, newest first.</p>
+    </div>
+  </header>
+
+  <div class="worklog-loading" *ngIf="loading" role="status">Loading update log…</div>
+  <div class="worklog-timeline" *ngIf="!loading && sections.length > 0; else emptyWorklog">
+    <article class="worklog-section" *ngFor="let section of sections; trackBy: trackSection">
+      <time class="worklog-section__date" [attr.datetime]="section.date.replaceAll('/', '-')">{{ section.date }}</time>
+      <ul>
+        <li *ngFor="let entry of section.entries; trackBy: trackEntry">{{ entry }}</li>
+      </ul>
+    </article>
+  </div>
+  <ng-template #emptyWorklog>
+    <div class="worklog-empty" *ngIf="!loading"><span aria-hidden="true">↓</span><p>No worklog entries found.</p></div>
+  </ng-template>
+</section>

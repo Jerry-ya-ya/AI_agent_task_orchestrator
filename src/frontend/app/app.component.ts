@@ -31,6 +31,7 @@ import { TaskBoardComponent } from './components/task-board/task-board.component
 import { TaskDetailDialogComponent } from './components/task-detail-dialog/task-detail-dialog.component';
 import { TaskEditorDialogComponent } from './components/task-editor-dialog/task-editor-dialog.component';
 import { TaskHistoryComponent } from './components/task-history/task-history.component';
+import { WorklogPageComponent } from './components/worklog-page/worklog-page.component';
 import {
   AgentUsage,
   AgentModel,
@@ -84,6 +85,7 @@ const STATUS_COLUMNS: readonly StatusColumn[] = [
     FeatureEditorDialogComponent,
     TaskBoardComponent,
     TaskHistoryComponent,
+    WorklogPageComponent,
     ProjectEditorDialogComponent,
     TaskEditorDialogComponent,
     RetryTaskDialogComponent,
@@ -115,6 +117,8 @@ export class AppComponent implements OnInit, OnDestroy {
   detailLoading = false;
   apiError = '';
   notice = '';
+  worklogContent = '';
+  worklogLoading = false;
   lastUpdated: Date | null = null;
   activePage: AppPage | 'frontend' = 'taskboard';
   navigationExpanded = false;
@@ -145,6 +149,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private refreshInFlight = false;
   private healthRefreshInFlight = false;
   private usageRefreshInFlight = false;
+  private worklogRefreshInFlight = false;
   branchMapRefreshInFlight = false;
   pendingTaskIds = new Set<number>();
   private restoreFocusTo: HTMLElement | null = null;
@@ -156,7 +161,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.apiBaseUrl = api.baseUrl;
     const locationParameters = new URLSearchParams(globalThis.location?.search ?? '');
     const requestedPage = locationParameters.get('page');
-    if (requestedPage === 'features' || requestedPage === 'taskboard' || requestedPage === 'history' || requestedPage === 'settings') {
+    if (requestedPage === 'features' || requestedPage === 'taskboard' || requestedPage === 'history' || requestedPage === 'worklog' || requestedPage === 'settings') {
       this.activePage = requestedPage;
     } else if (requestedPage === 'frontend' && isConnectionId(locationParameters.get('connectionId'))) {
       this.activePage = 'frontend';
@@ -273,6 +278,7 @@ export class AppComponent implements OnInit, OnDestroy {
   selectPage(page: AppPage): void {
     this.activePage = page;
     if (page === 'features') void this.refreshBranchMap();
+    if (page === 'worklog') void this.refreshWorklog();
   }
 
   selectConnection(connection: FrontendConnection): void {
@@ -1082,7 +1088,23 @@ export class AppComponent implements OnInit, OnDestroy {
       this.refreshAgentUsage(),
       this.refreshAgentModels(),
       this.refreshFrontendConnections(),
+      this.refreshWorklog(),
     ]);
+  }
+
+  private async refreshWorklog(): Promise<void> {
+    if (this.worklogRefreshInFlight) return;
+    this.worklogRefreshInFlight = true;
+    this.worklogLoading = true;
+    try {
+      this.worklogContent = (await firstValueFrom(this.api.getWorklog())).content;
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.worklogLoading = false;
+      this.worklogRefreshInFlight = false;
+      this.changeDetector.markForCheck();
+    }
   }
 
   private async refreshAgentModels(): Promise<void> {

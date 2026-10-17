@@ -74,6 +74,25 @@
       <span class="navigation-label">Task history</span>
       <span class="navigation-count" *ngIf="historyCount > 0">{{ historyCount }}</span>
     </button>
+    <button
+      class="navigation-link"
+      type="button"
+      [class.navigation-link--active]="activePage === 'worklog'"
+      [class.navigation-link--dragging]="draggingPage === 'worklog'"
+      [attr.aria-current]="activePage === 'worklog' ? 'page' : null"
+      title="Update log"
+      (click)="selectPage($event, 'worklog')"
+      (pointerdown)="beginPageDrag($event, 'worklog')"
+      (pointermove)="continuePageDrag($event, 'worklog')"
+      (pointerup)="finishPageDrag($event)"
+      (pointercancel)="finishPageDrag($event)"
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />
+        <path d="m17 14-2 2 2 2" />
+      </svg>
+      <span class="navigation-label">Update log</span>
+    </button>
     <div class="navigation-connections" *ngIf="connections.length > 0 || expanded">
       <div class="navigation-connections__heading" *ngIf="expanded"><span>Frontends</span><button type="button" title="Connect local frontend" aria-label="Connect local frontend" (click)="connectionCreateRequested.emit()">＋</button></div>
       <button

@@ -186,6 +186,10 @@ export interface HealthResponse {
   worker: WorkerStatus;
 }
 
+export interface WorklogResponse {
+  content: string;
+}
+
 export interface AgentUsageWindow {
   remainingPercent: number;
   usedPercent: number;

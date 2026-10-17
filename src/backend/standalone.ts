@@ -7,6 +7,7 @@ const configuredUiPath = process.env['ORCHESTRATOR_UI_PATH'];
 const runtime = new OrchestratorRuntime({
   databasePath,
   port,
+  worklogPath: resolve('worklog.md'),
   uiPath: configuredUiPath === undefined ? undefined : resolve(configuredUiPath)
 });
 

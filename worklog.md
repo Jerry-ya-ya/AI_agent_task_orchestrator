@@ -187,3 +187,5 @@
 ## 2026/10/17
 
 - Prevent Electron header drag regions from blocking interactions in task modals.
+
+- Add a detachable update log page that securely displays packaged worklog entries newest first.

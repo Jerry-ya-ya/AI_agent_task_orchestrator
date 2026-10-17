@@ -60,6 +60,7 @@
     },
     "files": [
       "dist/**/*",
+      "worklog.md",
       "package.json"
     ],
     "win": {
