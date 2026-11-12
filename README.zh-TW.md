@@ -8,21 +8,21 @@
 
 ## 技術組成
 
-- Angular 22 standalone UI
-- Tauri 2 桌面殼層
+- Rust 原生桌面介面（egui 與 eframe）
+- Angular 22 瀏覽器版及選用的 Tauri 2 桌面版
 - Node.js／TypeScript／Express 後端
 - 使用 Node 內建 `node:sqlite` 的 SQLite
 - 單一、循序執行的背景 Worker
 - 可替換的 `AgentExecutor` 介面，目前由 Codex CLI 實作
 
-桌面 API 只監聽動態選取的 `127.0.0.1` 連接埠，並要求當次啟動的存取權杖。WebView 透過有限的原生介面控制視窗和選擇資料夾。Codex CLI 自行管理登入狀態。
+桌面 API 只監聽動態選取的 `127.0.0.1` 連接埠，並要求當次啟動的存取權杖。Rust 直接繪製桌面介面，並呼叫系統資料夾選擇器。只有已連線的網頁預覽使用瀏覽器引擎。Codex CLI 自行管理登入狀態。
 
 更完整的架構、資料模型、狀態機與安全界線請見 [architecture.md](docs/architecture.md)。
 
 ## 需求
 
 - 桌面開發與打包需要 Node.js 26 以上
-- Rust stable 與 [Tauri 系統需求](https://v2.tauri.app/start/prerequisites/)。Windows 請安裝 Microsoft C++ Build Tools 的 **使用 C++ 的桌面開發** 工作負載，並使用 Rust MSVC 工具鏈。
+- Rust stable。Windows 請安裝 Microsoft C++ Build Tools 的 **使用 C++ 的桌面開發** 工作負載，並使用 Rust MSVC 工具鏈。本機網頁預覽使用 WebView2。
 - pnpm 11 以上
 - Git
 - 已安裝並以自身登入狀態完成認證的 Codex CLI
@@ -42,7 +42,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` 會建置獨立的後端執行檔，在 `127.0.0.1:4300` 啟動 Angular，並開啟 Tauri 視窗。Angular 修改會自動重新載入。修改後端後請重新執行 `pnpm dev`。
+`pnpm dev` 會建置獨立的後端執行檔並開啟原生 Rust 視窗。修改 Rust 或後端程式後請重新執行。原本的 Angular/Tauri 版可用 `pnpm desktop:tauri` 啟動。
 
 若只需要一般瀏覽器的開發環境：
 
@@ -57,7 +57,7 @@ pnpm package
 pnpm start
 ```
 
-建立平台安裝檔：
+建立目前平台的可攜式壓縮檔：
 
 ```powershell
 pnpm dist
@@ -65,9 +65,11 @@ pnpm dist
 
 原始 Agentboard 圖示位於 `src/frontend/public/favicon.svg`。設定頁可選擇圖示變體。Windows 上若修改圖示素材，請執行 `pnpm icons:generate` 以更新 PNG、ICO 和 ICNS。
 
-Windows、macOS 與 Linux 分別使用 NSIS、DMG 與 AppImage。請在目標平台用相符架構的 Node.js 建置。安裝包包含 Node.js 後端執行環境與更新日誌。
+`pnpm package` 會把原生程式、Node.js 後端與更新日誌放到 `dist/native`。`pnpm dist` 也會將這三個檔案打包成壓縮檔。Angular/Tauri 版安裝程式仍可用 `pnpm dist:tauri` 產生。[Tauri 系統需求](https://v2.tauri.app/start/prerequisites/)
 
-應用程式資料儲存在 Tauri 應用程式資料目錄下的 `data/orchestrator.sqlite`。首次啟動時會匯入既有 Electron 資料庫及前端連線設定。原本儲存在 Electron WebView 的主題、圖示和自動派工等偏好會從預設值開始。純瀏覽器開發模式預設使用 `.data/orchestrator.sqlite`，可透過 `ORCHESTRATOR_DATABASE_PATH` 指定路徑。
+Rust 和 Tauri 共用桌面資料庫及已儲存的前端連線，同一個資料目錄一次只允許一個後端開啟。原生介面的主題、圖示及派工偏好以獨立檔案保存，首次開啟使用預設值。原生開發可用 `ORCHESTRATOR_DESKTOP_DATA_DIR` 指定隔離資料目錄。純瀏覽器開發模式預設使用 `.data/orchestrator.sqlite`，可透過 `ORCHESTRATOR_DATABASE_PATH` 指定路徑。
+
+Windows 與 macOS 可在原生主視窗或獨立預覽視窗查看本機前端。Linux 的原生版使用系統瀏覽器開啟連線。
 
 ## 使用方式
 

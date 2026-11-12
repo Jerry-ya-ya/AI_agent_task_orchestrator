@@ -10,18 +10,22 @@
   "scripts": {
     "dev": "pnpm desktop:dev",
     "dev:web": "concurrently --kill-others-on-fail \"cross-env ORCHESTRATOR_PORT=4317 tsx src/backend/standalone.ts\" \"ng serve --host 127.0.0.1 --port 4300\"",
-    "desktop:dev": "tauri dev",
+    "desktop:dev": "pnpm build:sidecar && node scripts/native-desktop.mjs dev",
+    "desktop:tauri": "tauri dev",
     "dev:frontend": "ng serve --host 127.0.0.1 --port 4300",
     "build": "pnpm build:frontend && pnpm build:backend",
     "build:frontend": "ng build",
     "build:backend": "tsc -p tsconfig.backend.json",
     "build:sidecar": "pnpm build:backend && node scripts/build-sidecar.mjs",
-    "start": "node scripts/start-desktop.mjs",
+    "start": "node scripts/native-desktop.mjs start",
+    "start:tauri": "node scripts/start-desktop.mjs",
     "icons:generate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-app-icon.ps1",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "tauri build --no-bundle",
-    "dist": "tauri build"
+    "package": "pnpm build:sidecar && node scripts/native-desktop.mjs package",
+    "dist": "pnpm build:sidecar && node scripts/native-desktop.mjs dist",
+    "package:tauri": "tauri build --no-bundle",
+    "dist:tauri": "tauri build"
   },
   "dependencies": {
     "@angular/common": "22.1.4",

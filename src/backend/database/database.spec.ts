@@ -207,7 +207,7 @@ describe('OrchestratorDatabase schema', () => {
       .toMatchObject({
         status: 'PENDING_PUSH',
         commit_summary: 'feat: finish the legacy task.',
-        model_effort: 'medium'
+        model_effort: 'low'
       });
     database.close();
     database = undefined;

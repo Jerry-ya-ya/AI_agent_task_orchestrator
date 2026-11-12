@@ -6,21 +6,21 @@ A local-first desktop MVP that groups coding tasks into Features, runs each Feat
 
 ## Stack
 
-- Angular 22 standalone UI
-- Tauri 2 desktop shell
+- Native Rust desktop UI with egui and eframe
+- Angular 22 browser UI and optional Tauri 2 desktop build
 - Node.js/TypeScript + Express backend
 - SQLite via Node's built-in `node:sqlite`
 - One sequential background Worker
 - Codex CLI behind a replaceable `AgentExecutor` interface
 
-The desktop API listens on a dynamically selected `127.0.0.1` port and requires a per-launch token. The webview uses a limited native bridge for window controls and the folder picker. Codex CLI manages its own login.
+The desktop API listens on a dynamically selected `127.0.0.1` port and requires a per-launch token. The Rust client draws the desktop interface and uses the OS folder picker. Only connected web projects are rendered by a browser engine. Codex CLI manages its own login.
 
 See [docs/architecture.md](docs/architecture.md) for the architecture, schema, state machine, process boundaries, and MVP decisions.
 
 ## Prerequisites
 
 - Node.js 26 or newer for desktop development and packaging
-- Rust (stable) and the [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/). On Windows, install Microsoft C++ Build Tools with the **Desktop development with C++** workload and use the MSVC Rust toolchain.
+- Rust (stable). On Windows, install Microsoft C++ Build Tools with the **Desktop development with C++** workload and use the MSVC Rust toolchain. WebView2 is used to preview local web projects.
 - pnpm 11 or newer
 - Git
 - Codex CLI installed and authenticated with its own login state
@@ -40,7 +40,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` builds the backend sidecar, starts Angular on `127.0.0.1:4300`, and opens the Tauri window. Angular changes reload in place. Restart `pnpm dev` after changing the backend.
+`pnpm dev` builds the backend sidecar and opens the native Rust desktop window. Restart it after changing Rust or backend code. Use `pnpm desktop:tauri` to run the previous Angular/Tauri client.
 
 For a browser-only development session:
 
@@ -55,17 +55,19 @@ pnpm package
 pnpm start
 ```
 
-Create a platform installer with:
+Create a portable archive for the current platform with:
 
 ```powershell
 pnpm dist
 ```
 
-The default installer formats are NSIS on Windows, DMG on macOS, and AppImage on Linux. Build on the target platform with a matching Node.js architecture. The installer includes the Node.js backend runtime and worklog.
+`pnpm package` writes the native app, bundled Node.js backend, and worklog to `dist/native`. `pnpm dist` also archives those three files. Use `pnpm dist:tauri` for the Angular/Tauri installer and see the [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 After editing the Agentboard icon artwork, run `pnpm icons:generate` on Windows to refresh the PNG, ICO and ICNS assets.
 
-Application data is stored in the Tauri app data directory under `data/orchestrator.sqlite`. On first launch, the app imports the previous Electron database and saved frontend connections if they exist. Browser-only development uses `.data/orchestrator.sqlite` unless `ORCHESTRATOR_DATABASE_PATH` is set. Preferences stored in the Electron webview, such as theme, icon selection, and worker dispatch, start with their defaults in the new webview.
+The Rust and Tauri clients use the same desktop database and frontend connection records, with one backend allowed per data directory. Native theme, icon, and worker preferences use a separate settings file and start with defaults. Set `ORCHESTRATOR_DESKTOP_DATA_DIR` to use an isolated directory for native development. Browser-only development uses `.data/orchestrator.sqlite` unless `ORCHESTRATOR_DATABASE_PATH` is set.
+
+Local frontend previews can open inside the native window or in a detached preview on Windows and macOS. On Linux the native client opens the connected page in the system browser.
 
 For a production-UI browser smoke test, set `ORCHESTRATOR_UI_PATH=dist/frontend/browser` when launching `src/backend/standalone.ts`; the backend then serves Angular from the same loopback origin.
 

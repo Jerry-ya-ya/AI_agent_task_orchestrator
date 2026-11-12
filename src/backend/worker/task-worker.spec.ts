@@ -111,7 +111,9 @@ describe('TaskWorker', () => {
   it('lets Codex resolve a controlled Feature cherry-pick conflict before testing', async () => {
     const task = createTask('Resolve cherry-pick conflicts');
     expect(tasks.transition(task.id, 'TODO', 'CHERRY_PICK_CONFLICT')).not.toBeNull();
-    expect(tasks.queueCherryPickResolution(task.id, 'high')).toMatchObject({ agent_mode: 'cherry_pick_resolution' });
+    expect(tasks.queueCherryPickResolution(task.id, task.model_id, 'high')).toMatchObject({
+      agent_mode: 'cherry_pick_resolution', model_id: task.model_id, model_effort: 'high',
+    });
     const prepareBranch = vi.fn(async (): Promise<PreparedBranch> => ({
       branchName: 'feature/conflicted', workspacePath: project.repository_path, originalBranch: 'main',
       startingCommitSha: 'starting-commit-sha',

@@ -167,7 +167,7 @@ export class TaskRepository {
           project_id, feature_id, title, description, status, priority, model_id, model_effort, agent_mode,
           retry_prompt, branch_name, worktree_path, base_branch, commit_summary, publish_commit_sha,
           source_task_id, is_rejected, is_paused, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, ?, ?, 'implementation', ?, ?, ?, ?, NULL, NULL, ?, 0, 0, ?, ?)
+        ) VALUES (?, ?, ?, ?, 'TODO', ?, ?, ?, 'implementation', ?, ?, ?, ?, NULL, NULL, ?, 0, 0, ?, ?)
       `).run(
         source.project_id,
         source.feature_id ?? null,

@@ -1,0 +1,19 @@
+[package]
+name = "agentboard-native"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono = "0.4"
+dirs = "6"
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "accesskit", "x11", "wayland"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+open = "5"
+rfd = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "3", default-features = false, features = ["json"] }
+url = "2"
+
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+wry = "0.57"

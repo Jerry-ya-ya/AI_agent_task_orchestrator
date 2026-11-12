@@ -32,6 +32,8 @@ describe('CodexAgentExecutor', () => {
     expect(runner.lastOptions?.command).toBe('codex');
     expect(runner.lastOptions?.cwd).toBe(path.resolve(workspace));
     expect(runner.lastOptions?.args).toEqual([
+      '--model',
+      'gpt-6-astra',
       '--sandbox',
       'workspace-write',
       '--ask-for-approval',
@@ -199,6 +201,7 @@ function exampleTask(): Task {
     description: 'Create the endpoint and tests.',
     status: 'IN_PROGRESS',
     priority: 'HIGH',
+    model_id: 'gpt-6-astra',
     model_effort: 'medium',
     agent_mode: 'implementation',
     retry_prompt: null,

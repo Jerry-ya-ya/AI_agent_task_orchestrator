@@ -67,7 +67,8 @@ describe('TaskService state rules', () => {
       description: 'Implement full-text search',
       status: 'TODO',
       priority: 'MEDIUM',
-      model_effort: 'medium',
+      model_id: 'gpt-6.1-sol',
+      model_effort: 'low',
       branch_name: null,
       worktree_path: null,
       base_branch: null,
@@ -359,8 +360,9 @@ describe('TaskService state rules', () => {
 
     await expect(service.push(task.id)).rejects.toBeInstanceOf(CherryPickConflictError);
     expect(tasks.findById(task.id)?.status).toBe('CHERRY_PICK_CONFLICT');
-    expect(service.resolveCherryPickConflict(task.id, 'xhigh')).toMatchObject({
-      status: 'TODO', model_effort: 'xhigh', agent_mode: 'cherry_pick_resolution', branch_name: 'feature/conflicted',
+    expect(service.resolveCherryPickConflict(task.id, 'gpt-6-astra', 'xhigh')).toMatchObject({
+      status: 'TODO', model_id: 'gpt-6-astra', model_effort: 'xhigh',
+      agent_mode: 'cherry_pick_resolution', branch_name: 'feature/conflicted',
     });
   });
 

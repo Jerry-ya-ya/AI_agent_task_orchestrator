@@ -253,7 +253,7 @@ fn main() {
             set_window_icon
         ])
         .setup(|app| {
-            match Backend::start(app.handle()) {
+            match backend::start(app.handle()) {
                 Ok((backend, connection)) => {
                     app.manage(Mutex::new(Some(backend)));
                     app.manage(connection);

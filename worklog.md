@@ -189,3 +189,7 @@
 - Prevent Electron header drag regions from blocking interactions in task modals.
 
 - Add a detachable update log page that securely displays packaged worklog entries newest first.
+
+## 2026/11/12
+
+- Migrate the desktop app from Electron to Tauri 2 with native window controls, a bundled authenticated Node.js backend, first-launch SQLite and connection migration, updated installers, and an explicit tslib dependency for Angular builds.
