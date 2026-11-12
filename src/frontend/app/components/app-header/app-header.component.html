@@ -1,4 +1,4 @@
-<header class="topbar">
+<header class="topbar" (mousedown)="dragWindow($event)">
   <div class="brand-block">
     <img class="brand-mark" [src]="iconSource" alt="" aria-hidden="true" draggable="false" />
     <div><p class="eyebrow">Local task orchestration</p><h1>Agentboard</h1></div>

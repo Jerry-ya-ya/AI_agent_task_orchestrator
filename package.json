@@ -4,24 +4,24 @@
   "private": true,
   "type": "module",
   "description": "Local-first desktop task orchestrator for Codex CLI",
-  "main": "dist/main/electron/main.js",
   "engines": {
     "node": ">=22.5.0"
   },
   "scripts": {
     "dev": "pnpm desktop:dev",
     "dev:web": "concurrently --kill-others-on-fail \"cross-env ORCHESTRATOR_PORT=4317 tsx src/backend/standalone.ts\" \"ng serve --host 127.0.0.1 --port 4300\"",
-    "desktop:dev": "pnpm build:main && concurrently --kill-others \"ng serve --host 127.0.0.1 --port 4300\" \"tsc -p tsconfig.electron.json --watch --preserveWatchOutput\" \"node scripts/electron-dev-watch.mjs\"",
-    "build": "pnpm build:frontend && pnpm build:main",
+    "desktop:dev": "tauri dev",
+    "dev:frontend": "ng serve --host 127.0.0.1 --port 4300",
+    "build": "pnpm build:frontend && pnpm build:backend",
     "build:frontend": "ng build",
-    "build:main": "tsc -p tsconfig.electron.json",
-    "start": "electron .",
+    "build:backend": "tsc -p tsconfig.backend.json",
+    "build:sidecar": "pnpm build:backend && node scripts/build-sidecar.mjs",
+    "start": "node scripts/start-desktop.mjs",
     "icons:generate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-app-icon.ps1",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke:electron-runtime": "cross-env ELECTRON_RUN_AS_NODE=1 electron scripts/electron-runtime-smoke.mjs",
-    "package": "pnpm build && electron-builder --dir",
-    "dist": "pnpm build && electron-builder"
+    "package": "tauri build --no-bundle",
+    "dist": "tauri build"
   },
   "dependencies": {
     "@angular/common": "22.1.4",
@@ -29,9 +29,11 @@
     "@angular/core": "22.1.4",
     "@angular/forms": "22.1.4",
     "@angular/platform-browser": "22.1.4",
+    "@tauri-apps/api": "2.12.4",
     "cytoscape": "3.34.3",
     "express": "5.2.1",
     "rxjs": "7.8.2",
+    "tslib": "2.8.1",
     "zod": "4.5.2",
     "zone.js": "0.16.2"
   },
@@ -39,41 +41,16 @@
     "@angular/build": "22.1.6",
     "@angular/cli": "22.1.6",
     "@angular/compiler-cli": "22.1.4",
+    "@tauri-apps/cli": "2.12.4",
     "@types/express": "5.0.6",
     "@types/node": "26.4.0",
     "@types/supertest": "6.0.3",
     "concurrently": "10.0.5",
     "cross-env": "10.1.0",
-    "electron": "44.0.0",
-    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
     "supertest": "7.2.2",
     "tsx": "4.23.12",
     "typescript": "6.0.3",
-    "vitest": "4.1.11",
-    "wait-on": "9.1.0"
-  },
-  "build": {
-    "appId": "dev.local.ai-agent-task-orchestrator",
-    "productName": "AI Agent Task Orchestrator",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "worklog.md",
-      "package.json"
-    ],
-    "win": {
-      "icon": "src/frontend/public/icon.ico",
-      "target": "nsis"
-    },
-    "mac": {
-      "icon": "src/frontend/public/icon.png",
-      "target": "dmg"
-    },
-    "linux": {
-      "icon": "src/frontend/public/icon.png",
-      "target": "AppImage"
-    }
+    "vitest": "4.1.11"
   }
 }

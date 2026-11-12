@@ -9,19 +9,20 @@
 ## 技術組成
 
 - Angular 22 standalone UI
-- Electron 44 桌面殼層
+- Tauri 2 桌面殼層
 - Node.js／TypeScript／Express 後端
 - 使用 Node 內建 `node:sqlite` 的 SQLite
 - 單一、循序執行的背景 Worker
 - 可替換的 `AgentExecutor` 介面，目前由 Codex CLI 實作
 
-API 只會監聽動態選取的 `127.0.0.1` 連接埠。前端無法執行任意 shell 指令；Electron 不啟用 Node integration；應用程式不會保存 OpenAI 憑證。
+桌面 API 只監聽動態選取的 `127.0.0.1` 連接埠，並要求當次啟動的存取權杖。WebView 透過有限的原生介面控制視窗和選擇資料夾。Codex CLI 自行管理登入狀態。
 
 更完整的架構、資料模型、狀態機與安全界線請見 [architecture.md](docs/architecture.md)。
 
 ## 需求
 
-- Node.js 22.5 以上（建議 Node 24）
+- 桌面開發與打包需要 Node.js 26 以上
+- Rust stable 與 [Tauri 系統需求](https://v2.tauri.app/start/prerequisites/)。Windows 請安裝 Microsoft C++ Build Tools 的 **使用 C++ 的桌面開發** 工作負載，並使用 Rust MSVC 工具鏈。
 - pnpm 11 以上
 - Git
 - 已安裝並以自身登入狀態完成認證的 Codex CLI
@@ -41,7 +42,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` 會建置 Electron 主程序、在 `127.0.0.1:4300` 啟動 Angular、並由 Electron 內部啟動後端、SQLite 與 Worker，最後開啟桌面視窗。
+`pnpm dev` 會建置獨立的後端執行檔，在 `127.0.0.1:4300` 啟動 Angular，並開啟 Tauri 視窗。Angular 修改會自動重新載入。修改後端後請重新執行 `pnpm dev`。
 
 若只需要一般瀏覽器的開發環境：
 
@@ -52,20 +53,21 @@ pnpm dev:web
 Production build 並在本機啟動桌面程式：
 
 ```powershell
-pnpm build
+pnpm package
 pnpm start
 ```
 
-建立未封裝發行版本或平台安裝檔：
+建立平台安裝檔：
 
 ```powershell
-pnpm package
 pnpm dist
 ```
 
-原始 Agentboard 圖示位於 `src/frontend/public/favicon.svg`。設定頁可選擇由原始圖示延伸的變體，而不會更動原始版本。Windows 上若修改圖示素材，請執行 `pnpm icons:generate` 以更新包裝用的 PNG 與 ICO。
+原始 Agentboard 圖示位於 `src/frontend/public/favicon.svg`。設定頁可選擇圖示變體。Windows 上若修改圖示素材，請執行 `pnpm icons:generate` 以更新 PNG、ICO 和 ICNS。
 
-應用程式資料儲存在 Electron 每位使用者的 `userData/data/orchestrator.sqlite`。純瀏覽器開發模式預設使用 `.data/orchestrator.sqlite`，除非設定 `ORCHESTRATOR_DATABASE_PATH`。
+Windows、macOS 與 Linux 分別使用 NSIS、DMG 與 AppImage。請在目標平台用相符架構的 Node.js 建置。安裝包包含 Node.js 後端執行環境與更新日誌。
+
+應用程式資料儲存在 Tauri 應用程式資料目錄下的 `data/orchestrator.sqlite`。首次啟動時會匯入既有 Electron 資料庫及前端連線設定。原本儲存在 Electron WebView 的主題、圖示和自動派工等偏好會從預設值開始。純瀏覽器開發模式預設使用 `.data/orchestrator.sqlite`，可透過 `ORCHESTRATOR_DATABASE_PATH` 指定路徑。
 
 ## 使用方式
 
@@ -96,8 +98,7 @@ feature/login-api
 
 ```powershell
 pnpm test                   # 後端、單元與整合測試（使用 fake agents）
-pnpm build                  # Angular production build + Electron／後端 TypeScript build
-pnpm smoke:electron-runtime # 確認 Electron 包含所需的 node:sqlite runtime
+pnpm build                  # Angular production build + 後端 TypeScript build
 pnpm desktop:dev            # 完整桌面開發流程
 pnpm dev:web                # 一般瀏覽器中的 API 與 Angular
 ```

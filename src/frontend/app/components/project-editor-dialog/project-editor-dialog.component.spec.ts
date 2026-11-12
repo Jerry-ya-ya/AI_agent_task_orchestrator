@@ -7,7 +7,7 @@ import { ProjectEditorDialogComponent } from './project-editor-dialog.component'
 afterEach(() => vi.unstubAllGlobals());
 
 describe('ProjectEditorDialogComponent', () => {
-  it('uses the Electron folder chooser and copies its selected path into the project draft', async () => {
+  it('uses the native folder chooser and copies its selected path into the project draft', async () => {
     const chooseRepository = vi.fn().mockResolvedValue('C:\\Projects\\chosen-repository');
     vi.stubGlobal('window', { desktopWindow: { chooseRepository } });
     const component = new ProjectEditorDialogComponent();

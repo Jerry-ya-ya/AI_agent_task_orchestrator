@@ -10,7 +10,6 @@ import { HeaderUsageComponent } from '../header-usage/header-usage.component';
   templateUrl: './app-header.component.html',
   styles: `
     button {
-      -webkit-app-region: no-drag;
       pointer-events: auto;
     }
   `
@@ -29,6 +28,12 @@ export class AppHeaderComponent {
   @Output() quotaLoopToggled = new EventEmitter<void>();
   @Output() minimizeApplication = new EventEmitter<void>();
   @Output() closeApplication = new EventEmitter<void>();
+
+  dragWindow(event: MouseEvent): void {
+    if (event.button !== 0 || !(event.target instanceof Element)
+      || event.target.closest('.topbar-actions') || document.body.classList.contains('modal-open')) return;
+    void window.desktopWindow?.startDragging?.(event.detail === 2);
+  }
 
   workerStateLabel(): string {
     if (!this.connected) return 'Worker unknown';

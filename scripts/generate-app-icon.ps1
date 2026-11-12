@@ -113,3 +113,9 @@ foreach ($palette in $variants) {
   }
   Write-Output "Generated $pngPath and $icoPath"
 }
+
+$tauriIconOutput = Join-Path $PSScriptRoot '..\dist\tauri-icons'
+$tauriIcon = Join-Path $PSScriptRoot '..\src-tauri\icons\icon.icns'
+pnpm exec tauri icon (Join-Path $iconDirectory 'icon.png') --output $tauriIconOutput
+if ($LASTEXITCODE -ne 0) { throw 'Tauri icon generation failed.' }
+Copy-Item -LiteralPath (Join-Path $tauriIconOutput 'icon.icns') -Destination $tauriIcon

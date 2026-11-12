@@ -8,6 +8,7 @@ import { TaskService } from '../services/task-service.js';
 import { FrontendConnectionService } from '../services/frontend-connection-service.js';
 
 export interface ApiDependencies {
+  desktopToken?: string;
   projectService: ProjectService;
   taskService: TaskService;
   featureService?: FeatureService;
@@ -70,25 +71,30 @@ const frontendConnectionId = z.string().uuid();
 export function createApi(dependencies: ApiDependencies): express.Express {
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '1mb' }));
   app.use((request, response, next) => {
     const origin = request.headers.origin;
     if (
       origin === 'null' ||
       origin === 'http://127.0.0.1:4300' ||
-      origin === 'http://localhost:4300'
+      origin === 'http://localhost:4300' ||
+      (dependencies.desktopToken !== undefined && (origin === 'http://tauri.localhost' || origin === 'tauri://localhost'))
     ) {
       response.setHeader('Access-Control-Allow-Origin', origin);
       response.setHeader('Vary', 'Origin');
-      response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       response.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     }
     if (request.method === 'OPTIONS') {
       response.sendStatus(204);
       return;
     }
+    if (dependencies.desktopToken !== undefined && request.get('Authorization') !== `Bearer ${dependencies.desktopToken}`) {
+      response.sendStatus(401);
+      return;
+    }
     next();
   });
+  app.use(express.json({ limit: '1mb' }));
 
   app.get('/health', (_request, response) => {
     response.json({ ok: true, worker: dependencies.workerStatus() });

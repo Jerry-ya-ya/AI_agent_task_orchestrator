@@ -33,6 +33,7 @@ export interface RuntimeOptions {
   testService?: TestService;
   frontendConnectionsPath?: string;
   worklogPath?: string;
+  desktopToken?: string;
 }
 
 export class OrchestratorRuntime {
@@ -75,6 +76,7 @@ export class OrchestratorRuntime {
     });
 
     const api = createApi({
+      desktopToken: options.desktopToken,
       projectService: this.projectService,
       taskService: this.taskService,
       featureService: this.featureService,

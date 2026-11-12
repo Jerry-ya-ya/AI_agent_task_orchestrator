@@ -7,19 +7,20 @@ A local-first desktop MVP that groups coding tasks into Features, runs each Feat
 ## Stack
 
 - Angular 22 standalone UI
-- Electron 44 desktop shell
+- Tauri 2 desktop shell
 - Node.js/TypeScript + Express backend
 - SQLite via Node's built-in `node:sqlite`
 - One sequential background Worker
 - Codex CLI behind a replaceable `AgentExecutor` interface
 
-The API listens only on a dynamically selected `127.0.0.1` port. The renderer cannot execute arbitrary shell commands, Electron has no Node integration, and the app never stores OpenAI credentials.
+The desktop API listens on a dynamically selected `127.0.0.1` port and requires a per-launch token. The webview uses a limited native bridge for window controls and the folder picker. Codex CLI manages its own login.
 
 See [docs/architecture.md](docs/architecture.md) for the architecture, schema, state machine, process boundaries, and MVP decisions.
 
 ## Prerequisites
 
-- Node.js 22.5 or newer (Node 24 recommended)
+- Node.js 26 or newer for desktop development and packaging
+- Rust (stable) and the [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/). On Windows, install Microsoft C++ Build Tools with the **Desktop development with C++** workload and use the MSVC Rust toolchain.
 - pnpm 11 or newer
 - Git
 - Codex CLI installed and authenticated with its own login state
@@ -39,7 +40,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` builds the Electron main process, starts Angular on `127.0.0.1:4300`, starts the backend/SQLite/Worker inside Electron, and opens the desktop window.
+`pnpm dev` builds the backend sidecar, starts Angular on `127.0.0.1:4300`, and opens the Tauri window. Angular changes reload in place. Restart `pnpm dev` after changing the backend.
 
 For a browser-only development session:
 
@@ -50,20 +51,21 @@ pnpm dev:web
 For a production build and local desktop launch:
 
 ```powershell
-pnpm build
+pnpm package
 pnpm start
 ```
 
-Create an unpacked distributable or platform installer with:
+Create a platform installer with:
 
 ```powershell
-pnpm package
 pnpm dist
 ```
 
-The original Agentboard mark is in `src/frontend/public/favicon.svg`. Settings offers derived icon variants without changing the original mark. On Windows, run `pnpm icons:generate` after changing icon artwork to refresh the packaged PNG and ICO desktop icons.
+The default installer formats are NSIS on Windows, DMG on macOS, and AppImage on Linux. Build on the target platform with a matching Node.js architecture. The installer includes the Node.js backend runtime and worklog.
 
-Application data is stored under Electron's per-user `userData/data/orchestrator.sqlite`. Browser-only development uses `.data/orchestrator.sqlite` unless `ORCHESTRATOR_DATABASE_PATH` is set.
+After editing the Agentboard icon artwork, run `pnpm icons:generate` on Windows to refresh the PNG, ICO and ICNS assets.
+
+Application data is stored in the Tauri app data directory under `data/orchestrator.sqlite`. On first launch, the app imports the previous Electron database and saved frontend connections if they exist. Browser-only development uses `.data/orchestrator.sqlite` unless `ORCHESTRATOR_DATABASE_PATH` is set. Preferences stored in the Electron webview, such as theme, icon selection, and worker dispatch, start with their defaults in the new webview.
 
 For a production-UI browser smoke test, set `ORCHESTRATOR_UI_PATH=dist/frontend/browser` when launching `src/backend/standalone.ts`; the backend then serves Angular from the same loopback origin.
 
@@ -97,8 +99,7 @@ If neither a recognized test nor build command is available, the task enters `IN
 
 ```powershell
 pnpm test          # backend/unit/integration tests with fake agents
-pnpm build         # Angular production build + Electron/backend TypeScript build
-pnpm smoke:electron-runtime # verify Electron includes the required node:sqlite runtime
+pnpm build         # Angular production build + backend TypeScript build
 pnpm desktop:dev   # complete desktop development flow
 pnpm dev:web       # API and Angular in a normal browser
 ```

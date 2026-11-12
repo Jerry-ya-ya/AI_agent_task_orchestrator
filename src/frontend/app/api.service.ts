@@ -59,7 +59,7 @@ export function resolveApiBaseUrl(locationRef: Location = window.location): stri
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  readonly baseUrl = resolveApiBaseUrl();
+  readonly baseUrl = window.desktopWindow?.apiBaseUrl ?? resolveApiBaseUrl();
 
   constructor(private readonly http: HttpClient) {}
 

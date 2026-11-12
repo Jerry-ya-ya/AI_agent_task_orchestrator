@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AI Agent Task Orchestrator",
+  "version": "0.1.0",
+  "identifier": "dev.local.ai-agent-task-orchestrator",
+  "build": {
+    "beforeDevCommand": "pnpm build:sidecar && pnpm dev:frontend",
+    "devUrl": "http://127.0.0.1:4300",
+    "beforeBuildCommand": "pnpm build:frontend && pnpm build:sidecar",
+    "frontendDist": "../dist/frontend/browser"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; frame-src 'self' http://127.0.0.1:* http://localhost:* http://[::1]:* https://127.0.0.1:* https://localhost:* https://[::1]:*; object-src 'none'; base-uri 'self'; form-action 'self'",
+      "devCsp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "externalBin": ["binaries/orchestrator-backend"],
+    "resources": {
+      "../worklog.md": "worklog.md"
+    },
+    "icon": [
+      "../src/frontend/public/icon.png",
+      "../src/frontend/public/icon.ico",
+      "icons/icon.icns"
+    ]
+  }
+}

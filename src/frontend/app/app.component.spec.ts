@@ -219,7 +219,7 @@ describe('AppComponent initialization', () => {
     expect(refreshBoard).toHaveBeenCalledWith(false);
   });
 
-  it('minimizes the Electron window from the title-bar control', () => {
+  it('minimizes the desktop window from the title-bar control', () => {
     const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
     const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
     const component = new AppComponent(api, changeDetector);
@@ -231,7 +231,7 @@ describe('AppComponent initialization', () => {
     expect(minimize).toHaveBeenCalledOnce();
   });
 
-  it('closes the Electron window from the title-bar close control', () => {
+  it('closes the desktop window from the title-bar close control', () => {
     const api = { baseUrl: 'http://127.0.0.1:4317' } as unknown as ApiService;
     const changeDetector = { markForCheck: vi.fn() } as unknown as ChangeDetectorRef;
     const component = new AppComponent(api, changeDetector);

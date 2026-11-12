@@ -10,3 +10,6 @@ coverage/
 
 # Task worktrees live inside each managed repository and are intentionally local.
 .worktrees/
+src-tauri/binaries/
+src-tauri/gen/
+src-tauri/target/

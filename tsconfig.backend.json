@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "./dist/main",
+    "outDir": "./dist/backend",
     "rootDir": "./src",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -14,9 +14,7 @@
     "sourceMap": true
   },
   "include": [
-    "src/backend/**/*.ts",
-    "src/electron/**/*.ts",
-    "src/electron/**/*.cts"
+    "src/backend/**/*.ts"
   ],
   "exclude": [
     "src/**/*.spec.ts"

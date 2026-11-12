@@ -8,7 +8,7 @@ export interface CodexCommandResolverOptions {
 
 /**
  * Resolves installations that are visible to an interactive PowerShell session
- * but absent from the smaller PATH inherited by an Electron app launched from
+ * but absent from the smaller PATH inherited by a desktop app launched from
  * Explorer. Other platforms keep using normal PATH lookup.
  */
 export async function resolveCodexCommand(
