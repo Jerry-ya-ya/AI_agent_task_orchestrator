@@ -102,12 +102,47 @@ pub struct Usage {
     pub message: String,
 }
 
+impl Usage {
+    pub fn window(&self, duration_mins: u32) -> Option<&UsageWindow> {
+        if !self.available {
+            return None;
+        }
+        [&self.primary, &self.secondary]
+            .into_iter()
+            .flatten()
+            .find(|window| window.window_duration_mins == Some(duration_mins))
+    }
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageWindow {
     pub remaining_percent: f32,
     pub window_duration_mins: Option<u32>,
     pub resets_at: Option<i64>,
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::*;
+
+    #[test]
+    fn quota_windows_are_selected_by_duration_regardless_of_order() {
+        let mut usage: Usage = serde_json::from_value(serde_json::json!({
+            "available": true,
+            "primary": { "windowDurationMins": 10080, "remainingPercent": 71 },
+            "secondary": { "windowDurationMins": 300, "remainingPercent": 28 },
+            "checkedAt": "",
+            "message": ""
+        }))
+        .unwrap();
+        assert_eq!(usage.window(300).unwrap().remaining_percent, 28.0);
+        assert_eq!(usage.window(10080).unwrap().remaining_percent, 71.0);
+        usage.secondary = None;
+        assert!(usage.window(300).is_none());
+        usage.available = false;
+        assert!(usage.window(10080).is_none());
+    }
 }
 
 #[derive(Clone, Deserialize)]

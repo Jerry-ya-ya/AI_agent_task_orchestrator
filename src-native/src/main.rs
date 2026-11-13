@@ -4,6 +4,7 @@ mod api;
 mod app;
 mod dialogs;
 mod graph;
+mod memory;
 mod model;
 mod pages;
 mod preview;

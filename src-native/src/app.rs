@@ -2,6 +2,7 @@ use crate::{
     api::{Api, Board, Data, Job, Load, Mutation, Reply},
     dialogs::Dialog,
     graph::GraphView,
+    memory::{self, format_memory, MemoryUsage},
     model::*,
     preview::Preview,
     sidecar::BackendConnection,
@@ -19,6 +20,8 @@ pub const BG: Color32 = Color32::from_rgb(14, 19, 29);
 pub const PANEL: Color32 = Color32::from_rgb(22, 29, 42);
 pub const CARD: Color32 = Color32::from_rgb(29, 38, 53);
 pub const MUTED: Color32 = Color32::from_rgb(156, 172, 195);
+const EXPAND_NAVIGATION_ICON: egui::ImageSource<'static> =
+    egui::include_image!("../icons/expand.svg");
 pub const THEMES: [(&str, Color32); 5] = [
     ("Midnight", Color32::from_rgb(111, 156, 255)),
     ("Ocean", Color32::from_rgb(71, 209, 200)),
@@ -57,6 +60,18 @@ pub enum Page {
 }
 
 impl Page {
+    fn navigation_icon(&self) -> egui::ImageSource<'static> {
+        match self {
+            Self::Board => egui::include_image!("../icons/taskboard.svg"),
+            Self::Features => egui::include_image!("../icons/features.svg"),
+            Self::History => egui::include_image!("../icons/history.svg"),
+            Self::Worklog => egui::include_image!("../icons/worklog.svg"),
+            Self::Connections => egui::include_image!("../icons/connections.svg"),
+            Self::Settings => egui::include_image!("../icons/settings.svg"),
+            Self::Frontend(_) => egui::include_image!("../icons/frontend.svg"),
+        }
+    }
+
     fn name(&self) -> &'static str {
         match self {
             Self::Board => "Taskboard",
@@ -89,6 +104,9 @@ pub struct Agentboard {
     pub models: Vec<Model>,
     pub branches: Vec<BranchMap>,
     usage: Option<Usage>,
+    memory: Option<MemoryUsage>,
+    memory_samples: std::sync::mpsc::Receiver<Option<MemoryUsage>>,
+    usage_menu_open: bool,
     pub worklog: Option<String>,
     page: Page,
     detached: Vec<(u64, Page)>,
@@ -127,6 +145,7 @@ impl Agentboard {
         preferences.theme = preferences.theme.min(THEMES.len() - 1);
         preferences.icon = preferences.icon.min(ICONS.len() - 1);
         install_fonts(&cc.egui_ctx);
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         theme(&cc.egui_ctx, preferences.theme);
         cc.egui_ctx
             .send_viewport_cmd(egui::ViewportCommand::Icon(Some(icon(preferences.icon))));
@@ -152,6 +171,9 @@ impl Agentboard {
             models: fallback_models(),
             branches: Vec::new(),
             usage: None,
+            memory: None,
+            memory_samples: memory::monitor(cc.egui_ctx.clone()),
+            usage_menu_open: false,
             worklog: None,
             page: Page::Board,
             detached: Vec::new(),
@@ -382,12 +404,7 @@ impl Agentboard {
                         egui::Label::new(RichText::new("Agentboard").size(19.0).strong())
                             .sense(egui::Sense::click_and_drag()),
                     );
-                    if title.double_clicked() {
-                        ui.ctx()
-                            .send_viewport_cmd(egui::ViewportCommand::Maximized(!is_maximized(ui)));
-                    } else if title.drag_started() {
-                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-                    }
+                    handle_title_bar_drag(&title);
                     ui.add_space(9.0);
                     ui.colored_label(
                         if self.connected {
@@ -409,7 +426,9 @@ impl Agentboard {
                     };
                     ui.label(RichText::new(status).color(MUTED))
                         .on_hover_text(&worker.message);
-                    self.usage(ui);
+                    let codex_open = self.usage(ui);
+                    self.usage_menu_open = self.memory_usage(ui) || codex_open;
+                    let header_height = ui.min_rect().height().max(29.0);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         for (label, tip, command) in [
                             ("×", "Close", egui::ViewportCommand::Close),
@@ -495,38 +514,53 @@ impl Agentboard {
                                 },
                             ));
                         }
+                        if !self.usage_menu_open
+                            && self.dialog.is_none()
+                            && ui.available_width() > 0.0
+                        {
+                            let (_, drag_area) = ui.allocate_exact_size(
+                                Vec2::new(ui.available_width(), header_height),
+                                egui::Sense::click_and_drag(),
+                            );
+                            handle_title_bar_drag(&drag_area);
+                        }
                     });
                 })
             });
     }
 
-    fn usage(&mut self, ui: &mut egui::Ui) {
+    fn usage(&mut self, ui: &mut egui::Ui) -> bool {
+        const FIVE_HOURS: u32 = 5 * 60;
+        const ONE_WEEK: u32 = 7 * 24 * 60;
         let label = self
             .usage
             .as_ref()
-            .and_then(|usage| usage.primary.as_ref())
+            .and_then(|usage| usage.window(FIVE_HOURS))
             .map_or_else(
-                || "Codex usage".into(),
-                |window| format!("Codex {:.0}%", window.remaining_percent),
+                || "Codex 5h —".into(),
+                |window| format!("Codex 5h {:.0}%", window.remaining_percent),
             );
         ui.menu_button(label, |ui| {
-            if let Some(usage) = &self.usage {
-                ui.strong(usage.plan_type.as_deref().unwrap_or("Codex usage"));
-                for (name, window) in [("Primary", &usage.primary), ("Secondary", &usage.secondary)]
-                {
-                    if let Some(window) = window {
-                        ui.label(format!(
-                            "{name} · {} min",
-                            window.window_duration_mins.unwrap_or_default()
-                        ));
-                        ui.add(
-                            egui::ProgressBar::new(window.remaining_percent / 100.0)
-                                .text(format!("{:.0}% remaining", window.remaining_percent)),
-                        );
-                        if let Some(reset) = window.resets_at {
-                            ui.label(format!("Resets {}", timestamp(reset)));
-                        }
+            ui.set_min_width(220.0);
+            ui.strong("Codex remaining");
+            for (name, duration) in [("Five hours", FIVE_HOURS), ("One week", ONE_WEEK)] {
+                let window = self.usage.as_ref().and_then(|usage| usage.window(duration));
+                if let Some(window) = window {
+                    ui.label(name);
+                    ui.add(
+                        egui::ProgressBar::new(window.remaining_percent / 100.0)
+                            .text(format!("{:.0}% remaining", window.remaining_percent)),
+                    );
+                    if let Some(reset) = window.resets_at {
+                        ui.label(format!("Resets {}", timestamp(reset)));
                     }
+                } else {
+                    ui.label(format!("{name}: —"));
+                }
+            }
+            if let Some(usage) = &self.usage {
+                if let Some(plan) = &usage.plan_type {
+                    ui.label(format!("Plan: {plan}"));
                 }
                 if let Some(credits) = usage.reset_credits {
                     ui.label(format!("Reset credits: {credits}"));
@@ -544,7 +578,42 @@ impl Agentboard {
             if ui.button("Refresh usage").clicked() {
                 self.load(Load::Usage, true);
             }
-        });
+        })
+        .inner
+        .is_some()
+    }
+
+    fn memory_usage(&self, ui: &mut egui::Ui) -> bool {
+        let label = self
+            .memory
+            .as_ref()
+            .filter(|usage| usage.webviewer.is_some())
+            .map_or_else(
+                || "RAM —".into(),
+                |usage| format!("RAM {}", format_memory(usage.total())),
+            );
+        ui.menu_button(label, |ui| {
+            ui.set_min_width(185.0);
+            ui.strong("Memory usage");
+            egui::Grid::new("memory-usage")
+                .num_columns(2)
+                .show(ui, |ui| {
+                    let rows = [
+                        ("Crust", self.memory.as_ref().map(|usage| usage.crust)),
+                        (
+                            "WebViewer",
+                            self.memory.as_ref().and_then(|usage| usage.webviewer),
+                        ),
+                    ];
+                    for (label, bytes) in rows {
+                        ui.label(label);
+                        ui.label(bytes.map_or_else(|| "—".into(), format_memory));
+                        ui.end_row();
+                    }
+                });
+        })
+        .inner
+        .is_some()
     }
 
     fn sidebar(&mut self, ui: &mut egui::Ui) {
@@ -553,49 +622,55 @@ impl Agentboard {
             .exact_size(if compact { 57.0 } else { 195.0 })
             .frame(egui::Frame::new().fill(PANEL).inner_margin(10))
             .show(ui, |ui| {
-                if ui
-                    .button(if compact { "»" } else { "«  Collapse" })
-                    .clicked()
-                {
+                let toggle = if compact {
+                    egui::Button::image(navigation_image(
+                        EXPAND_NAVIGATION_ICON,
+                        "Expand navigation",
+                    ))
+                } else {
+                    egui::Button::new("«  Collapse")
+                };
+                let toggle_response = if compact {
+                    ui.add_sized([ui.available_width(), 36.0], toggle)
+                        .on_hover_text("Expand navigation")
+                } else {
+                    ui.add(toggle)
+                };
+                if toggle_response.clicked() {
                     self.preferences.compact = !compact;
                     self.save_preferences();
                 }
                 ui.add_space(11.0);
-                for (symbol, page) in [
-                    ("TB", Page::Board),
-                    ("FE", Page::Features),
-                    ("HI", Page::History),
-                    ("LOG", Page::Worklog),
-                    ("WEB", Page::Connections),
-                    ("SET", Page::Settings),
+                for page in [
+                    Page::Board,
+                    Page::Features,
+                    Page::History,
+                    Page::Worklog,
+                    Page::Connections,
+                    Page::Settings,
                 ] {
-                    self.nav_item(ui, symbol, page, None);
+                    self.nav_item(ui, page, None);
                 }
                 ui.add_space(8.0);
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for connection in self.board.connections.clone() {
-                        self.nav_item(
-                            ui,
-                            "WEB",
-                            Page::Frontend(connection.id),
-                            Some(&connection.name),
-                        );
+                        self.nav_item(ui, Page::Frontend(connection.id), Some(&connection.name));
                     }
                 });
             });
     }
 
-    fn nav_item(&mut self, ui: &mut egui::Ui, symbol: &str, page: Page, custom: Option<&str>) {
+    fn nav_item(&mut self, ui: &mut egui::Ui, page: Page, custom: Option<&str>) {
         let title = custom.unwrap_or(page.name());
-        let label = if self.preferences.compact {
-            symbol
+        let button = if self.preferences.compact {
+            egui::Button::image(navigation_image(page.navigation_icon(), title))
         } else {
-            title
+            egui::Button::new(RichText::new(title).size(13.0))
         };
         let response = ui
             .add_sized(
                 [ui.available_width(), 36.0],
-                egui::Button::new(RichText::new(label).size(13.0))
+                button
                     .frame_when_inactive(page == self.page)
                     .selected(page == self.page)
                     .sense(egui::Sense::click_and_drag()),
@@ -652,6 +727,9 @@ impl Agentboard {
 
 impl eframe::App for Agentboard {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Ok(sample) = self.memory_samples.try_recv() {
+            self.memory = sample;
+        }
         self.receive();
         if self.last_board.elapsed() >= Duration::from_secs(3) {
             self.last_board = Instant::now();
@@ -681,7 +759,11 @@ impl eframe::App for Agentboard {
             .dialog
             .as_ref()
             .is_some_and(|(owner, _)| *owner == ui.ctx().viewport_id());
-        if let Some((url, rect)) = self.preview_slot.take().filter(|_| !root_modal) {
+        if let Some((url, rect)) = self
+            .preview_slot
+            .take()
+            .filter(|_| !root_modal && !self.usage_menu_open)
+        {
             if let Err(error) = self.preview.show(frame, &url, rect) {
                 self.error = Some(error);
             }
@@ -732,11 +814,115 @@ fn content_panel(ui: &mut egui::Ui, content: impl FnOnce(&mut egui::Ui)) {
         .show(ui, content);
 }
 
+fn navigation_image(source: egui::ImageSource<'static>, label: &str) -> egui::Image<'static> {
+    egui::Image::new(source)
+        .fit_to_exact_size(Vec2::splat(20.0))
+        .alt_text(label)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collapsed_navigation_icons_render_as_visible_svg_images() {
+        let pages = [
+            Page::Board,
+            Page::Features,
+            Page::History,
+            Page::Worklog,
+            Page::Connections,
+            Page::Settings,
+            Page::Frontend("preview".into()),
+        ];
+        for icon in pages
+            .iter()
+            .map(Page::navigation_icon)
+            .chain([EXPAND_NAVIGATION_ICON])
+        {
+            let egui::ImageSource::Bytes { uri, bytes } = icon else {
+                panic!("Navigation icons must be embedded");
+            };
+            let image = egui_extras::image::load_svg_bytes(&bytes, &Default::default())
+                .unwrap_or_else(|error| panic!("{uri}: {error}"));
+            assert!(image.pixels.iter().any(|pixel| pixel.a() > 0), "{uri}");
+        }
+    }
+}
+
 fn window_id(id: u64) -> egui::ViewportId {
     egui::ViewportId::from_hash_of(("detached", id))
 }
 fn is_maximized(ui: &egui::Ui) -> bool {
     ui.input(|input| input.viewport().maximized.unwrap_or(false))
+}
+
+fn handle_title_bar_drag(response: &egui::Response) {
+    if response.double_clicked_by(egui::PointerButton::Primary) {
+        let maximized = response
+            .ctx
+            .input(|input| input.viewport().maximized.unwrap_or(false));
+        response
+            .ctx
+            .send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
+    } else {
+        drag_title_bar(response);
+    }
+}
+
+#[cfg(windows)]
+fn drag_title_bar(response: &egui::Response) {
+    use windows_sys::Win32::{Foundation::POINT, UI::WindowsAndMessaging::GetCursorPos};
+
+    let primary = egui::PointerButton::Primary;
+    if response
+        .ctx
+        .input(|input| input.viewport().maximized == Some(true))
+    {
+        if response.drag_started_by(primary) {
+            response
+                .ctx
+                .send_viewport_cmd(egui::ViewportCommand::StartDrag);
+        }
+    } else {
+        let ctx = &response.ctx;
+        let grab_id = response.id.with("title-bar-grab");
+        if response.is_pointer_button_down_on() {
+            if let Some(grab_point) = ctx.input(|input| input.pointer.press_origin()) {
+                ctx.data_mut(|data| data.insert_temp(grab_id, grab_point));
+            }
+        }
+        let finished = response.drag_stopped_by(primary);
+        if !response.dragged_by(primary) && !finished {
+            return;
+        }
+        let Some(grab_point) = ctx.data_mut(|data| {
+            if finished {
+                data.remove_temp::<egui::Pos2>(grab_id)
+            } else {
+                data.get_temp(grab_id)
+            }
+        }) else {
+            return;
+        };
+        let mut cursor = POINT { x: 0, y: 0 };
+        // GetCursorPos writes the absolute cursor position into this valid POINT.
+        if unsafe { GetCursorPos(&mut cursor) } != 0 {
+            let scale = ctx.pixels_per_point();
+            let position =
+                egui::pos2(cursor.x as f32 / scale, cursor.y as f32 / scale) - grab_point.to_vec2();
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(position));
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn drag_title_bar(response: &egui::Response) {
+    if response.drag_started_by(egui::PointerButton::Primary) {
+        response
+            .ctx
+            .send_viewport_cmd(egui::ViewportCommand::StartDrag);
+    }
 }
 
 pub fn icon(index: usize) -> std::sync::Arc<egui::IconData> {
