@@ -195,3 +195,7 @@
 - Migrate the desktop app from Electron to Tauri 2 with native window controls, a bundled authenticated Node.js backend, first-launch SQLite and connection migration, updated installers, and an explicit tslib dependency for Angular builds.
 
 - Make the native Rust desktop client the default with task workflows, interactive Git graphs, detachable previews, and portable packaging, coordinate shared SQLite access with Tauri, and fix task retry SQL while updating model and conflict-resolution tests.
+
+## 2026/11/13
+
+- Add SVG icons to collapsed Rust navigation, show Crust and WebViewer memory alongside five-hour and weekly Codex quotas, and enable window dragging from the toolbar.

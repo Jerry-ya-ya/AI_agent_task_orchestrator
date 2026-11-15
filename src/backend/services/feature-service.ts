@@ -27,14 +27,27 @@ export class FeatureService {
     const name = input.name.trim();
     if (name.length === 0) throw new ValidationError('Feature name is required.');
     const snapshot = await this.git.inspectBranches(project.repository_path);
+    const configuredFeatures = this.features.list(project.id);
+    if (configuredFeatures.some((feature) => feature.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      throw new ConflictError(`Feature ${name} is already configured for this project.`);
+    }
+    if (input.branch_name !== undefined) {
+      const branchName = input.branch_name;
+      if (!branchName.startsWith('feature/') || branchName === snapshot.primaryBranch) {
+        throw new ValidationError('Select an existing local feature/ branch.');
+      }
+      if (!snapshot.localBranches.includes(branchName)) {
+        throw new NotFoundError(`Local branch ${branchName} was not found.`);
+      }
+      if (!snapshot.localBranches.includes('main')) {
+        throw new ConflictError('The project needs a local main branch before registering a Feature.');
+      }
+      return this.features.create({ project_id: project.id, name }, branchName, 'main');
+    }
     if (snapshot.currentBranch !== 'main') {
       throw new ConflictError(
         `Repository must be on main before configuring a Feature; it is on ${snapshot.currentBranch}.`,
       );
-    }
-    const configuredFeatures = this.features.list(project.id);
-    if (configuredFeatures.some((feature) => feature.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
-      throw new ConflictError(`Feature ${name} is already configured for this project.`);
     }
     const branchName = createAvailableFeatureBranch(
       name,

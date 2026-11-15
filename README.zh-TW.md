@@ -44,7 +44,7 @@ pnpm dev
 
 `pnpm dev` 會建置獨立的後端執行檔並開啟原生 Rust 視窗。修改 Rust 或後端程式後請重新執行。原本的 Angular/Tauri 版可用 `pnpm desktop:tauri` 啟動。
 
-若只需要一般瀏覽器的開發環境：
+若要讓瀏覽器與原生桌面版共用資料庫，請保持桌面版開啟，並在另一個終端機執行：
 
 ```powershell
 pnpm dev:web
@@ -67,7 +67,7 @@ pnpm dist
 
 `pnpm package` 會把原生程式、Node.js 後端與更新日誌放到 `dist/native`。`pnpm dist` 也會將這三個檔案打包成壓縮檔。Angular/Tauri 版安裝程式仍可用 `pnpm dist:tauri` 產生。[Tauri 系統需求](https://v2.tauri.app/start/prerequisites/)
 
-Rust 和 Tauri 共用桌面資料庫及已儲存的前端連線，同一個資料目錄一次只允許一個後端開啟。原生介面的主題、圖示及派工偏好以獨立檔案保存，首次開啟使用預設值。原生開發可用 `ORCHESTRATOR_DESKTOP_DATA_DIR` 指定隔離資料目錄。純瀏覽器開發模式預設使用 `.data/orchestrator.sqlite`，可透過 `ORCHESTRATOR_DATABASE_PATH` 指定路徑。
+Rust 和 Tauri 共用桌面資料庫及已儲存的前端連線，同一個資料目錄一次只允許一個後端開啟。原生介面的主題、圖示及派工偏好以獨立檔案保存，首次開啟使用預設值。原生開發可用 `ORCHESTRATOR_DESKTOP_DATA_DIR` 指定隔離資料目錄。執行 `pnpm dev:web` 時請保持原生 Rust 桌面版開啟。`pnpm dev` 和 `pnpm start` 預設使用原本瀏覽器的 `.data/orchestrator.sqlite`，瀏覽器會連到同一個後端並共用工作程序。可在桌面啟動命令設定 `ORCHESTRATOR_DATABASE_PATH` 改用其他資料庫，或在兩個終端機設定相同的 `ORCHESTRATOR_DESKTOP_DATA_DIR` 來隔離桌面環境。原桌面資料庫仍位於應用程式資料目錄。`pnpm dev:web:isolated` 預設使用 `.data/isolated.sqlite`。
 
 Windows 與 macOS 可在原生主視窗或獨立預覽視窗查看本機前端。Linux 的原生版使用系統瀏覽器開啟連線。
 

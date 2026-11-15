@@ -42,7 +42,7 @@ pnpm dev
 
 `pnpm dev` builds the backend sidecar and opens the native Rust desktop window. Restart it after changing Rust or backend code. Use `pnpm desktop:tauri` to run the previous Angular/Tauri client.
 
-For a browser-only development session:
+To use the browser with the same database, leave the native desktop app running and start Angular in a second terminal:
 
 ```powershell
 pnpm dev:web
@@ -65,7 +65,7 @@ pnpm dist
 
 After editing the Agentboard icon artwork, run `pnpm icons:generate` on Windows to refresh the PNG, ICO and ICNS assets.
 
-The Rust and Tauri clients use the same desktop database and frontend connection records, with one backend allowed per data directory. Native theme, icon, and worker preferences use a separate settings file and start with defaults. Set `ORCHESTRATOR_DESKTOP_DATA_DIR` to use an isolated directory for native development. Browser-only development uses `.data/orchestrator.sqlite` unless `ORCHESTRATOR_DATABASE_PATH` is set.
+The Rust and Tauri clients use the same desktop database and frontend connection records, with one backend allowed per data directory. Native theme, icon, and worker preferences use a separate settings file and start with defaults. Set `ORCHESTRATOR_DESKTOP_DATA_DIR` to use an isolated directory for native development. `pnpm dev` and `pnpm start` use the original browser database at `.data/orchestrator.sqlite` by default. The browser connects to the running native backend and uses that same database and worker. Set `ORCHESTRATOR_DATABASE_PATH` for the native launcher to select another database, or set matching `ORCHESTRATOR_DESKTOP_DATA_DIR` values in both terminals to isolate an entire desktop session. The previous desktop database stays in the app data directory. `pnpm dev:web:isolated` uses `.data/isolated.sqlite` by default.
 
 Local frontend previews can open inside the native window or in a detached preview on Windows and macOS. On Linux the native client opens the connected page in the system browser.
 

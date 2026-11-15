@@ -120,7 +120,10 @@ describe('CytoscapeBranchGraphComponent', () => {
     const expandedActions = expandedModel.elements.filter((element) =>
       String(element.classes).includes('branch-action-menu-item'),
     );
-    expect(expandedActions.length).toBe(6);
+    expect(expandedActions.length).toBe(8);
+    expect(expandedActions.find((element) => element.data.id === 'branch:0:action:review')).toMatchObject({
+      data: { label: 'Review', taskId: 3, featureId: 7 },
+    });
     expect(expandedActions.every((element) => !String(element.classes).includes('branch-action-collapsed'))).toBe(true);
 
     (component as unknown as { toggleDeleteActions(featureId: number): void }).toggleDeleteActions(7);

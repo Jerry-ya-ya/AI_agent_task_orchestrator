@@ -1,8 +1,10 @@
 import { resolve } from 'node:path';
+import { lockRuntimeDatabase } from './database/runtime-lock.js';
 import { OrchestratorRuntime } from './runtime.js';
 
 const port = Number.parseInt(process.env['ORCHESTRATOR_PORT'] ?? '4317', 10);
-const databasePath = process.env['ORCHESTRATOR_DATABASE_PATH'] ?? resolve('.data', 'orchestrator.sqlite');
+const databasePath = resolve(process.env['ORCHESTRATOR_DATABASE_PATH'] ?? '.data/isolated.sqlite');
+const unlock = lockRuntimeDatabase(databasePath);
 const configuredUiPath = process.env['ORCHESTRATOR_UI_PATH'];
 const runtime = new OrchestratorRuntime({
   databasePath,
@@ -20,7 +22,7 @@ async function stop(): Promise<void> {
     return;
   }
   stopping = true;
-  await runtime.stop();
+  try { await runtime.stop(); } finally { unlock(); }
   process.exitCode = 0;
 }
 

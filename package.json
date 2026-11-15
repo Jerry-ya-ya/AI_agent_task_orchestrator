@@ -9,7 +9,8 @@
   },
   "scripts": {
     "dev": "pnpm desktop:dev",
-    "dev:web": "concurrently --kill-others-on-fail \"cross-env ORCHESTRATOR_PORT=4317 tsx src/backend/standalone.ts\" \"ng serve --host 127.0.0.1 --port 4300\"",
+    "dev:web": "concurrently --kill-others-on-fail \"tsx src/backend/browser-bridge.ts\" \"ng serve --host 127.0.0.1 --port 4300\"",
+    "dev:web:isolated": "concurrently --kill-others-on-fail \"cross-env ORCHESTRATOR_PORT=4317 tsx src/backend/standalone.ts\" \"ng serve --host 127.0.0.1 --port 4300\"",
     "desktop:dev": "pnpm build:sidecar && node scripts/native-desktop.mjs dev",
     "desktop:tauri": "tauri dev",
     "dev:frontend": "ng serve --host 127.0.0.1 --port 4300",

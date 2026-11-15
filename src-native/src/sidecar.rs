@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     error::Error,
     fs::{self, File, OpenOptions},
-    io::{self, BufRead, BufReader},
+    io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::mpsc,
@@ -27,6 +27,7 @@ enum StartupMessage {
 pub struct Backend {
     child: Child,
     _lock: File,
+    browser_connection: Option<PathBuf>,
 }
 
 pub fn legacy_directory(config: &Path, title: &str) -> PathBuf {
@@ -76,6 +77,7 @@ impl Backend {
         let mut backend = Self {
             child: command.spawn()?,
             _lock: lock,
+            browser_connection: None,
         };
         let stdout = backend.child.stdout.take().expect("stdout is piped");
         let (ready, startup) = mpsc::sync_channel(1);
@@ -90,14 +92,48 @@ impl Backend {
             }
         });
         match startup.recv_timeout(Duration::from_secs(20))?? {
-            StartupMessage::Ready(connection) => Ok((backend, connection)),
+            StartupMessage::Ready(connection) => {
+                backend.browser_connection =
+                    Some(publish_browser_connection(data_directory, &connection)?);
+                Ok((backend, connection))
+            }
             StartupMessage::Failed { error } => Err(io::Error::other(error).into()),
         }
     }
 }
 
+fn publish_browser_connection(
+    data_directory: &Path,
+    connection: &BackendConnection,
+) -> io::Result<PathBuf> {
+    let path = data_directory.join("browser-connection.json");
+    let temporary = data_directory.join("browser-connection.tmp");
+    let _ = fs::remove_file(&temporary);
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+
+    let result = (|| {
+        let mut file = options.open(&temporary)?;
+        file.write_all(&serde_json::to_vec(connection).map_err(io::Error::other)?)?;
+        drop(file);
+        fs::rename(&temporary, &path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(temporary);
+    }
+    result.map(|()| path)
+}
+
 impl Drop for Backend {
     fn drop(&mut self) {
+        if let Some(path) = self.browser_connection.take() {
+            let _ = fs::remove_file(path);
+        }
         drop(self.child.stdin.take());
         let deadline = Instant::now() + Duration::from_secs(10);
         while matches!(self.child.try_wait(), Ok(None)) && Instant::now() < deadline {

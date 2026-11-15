@@ -32,6 +32,7 @@ export class FeatureMapComponent {
   get maps(): readonly ProjectBranchMap[] { return this.projectMaps; }
   @Input({ required: true }) loading = false;
   @Output() createFeature = new EventEmitter<number>();
+  @Output() registerFeature = new EventEmitter<{ projectId: number; branchName: string }>();
   @Output() taskOpened = new EventEmitter<number>();
   @Output() createTask = new EventEmitter<number>();
   @Output() resetBranch = new EventEmitter<number>();

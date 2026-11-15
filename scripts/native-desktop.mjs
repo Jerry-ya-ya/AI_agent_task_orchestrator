@@ -7,6 +7,12 @@ const manifest = 'src-native/Cargo.toml';
 const extension = process.platform === 'win32' ? '.exe' : '';
 const launcher = `agentboard-native${extension}`;
 const destination = resolve('dist/native');
+const databasePath = process.env.ORCHESTRATOR_DATABASE_PATH
+  ?? (process.env.ORCHESTRATOR_DESKTOP_DATA_DIR ? undefined : resolve('.data/orchestrator.sqlite'));
+const nativeEnv = {
+  ...process.env,
+  ...(databasePath === undefined ? {} : { ORCHESTRATOR_DATABASE_PATH: resolve(databasePath) }),
+};
 
 function run(executable, args, env = process.env) {
   return new Promise((resolve, reject) => {
@@ -17,7 +23,7 @@ function run(executable, args, env = process.env) {
 }
 
 if (mode === 'start') {
-  process.exitCode = await run(join(destination, launcher), []);
+  process.exitCode = await run(join(destination, launcher), [], nativeEnv);
 } else {
   const triple = execFileSync('rustc', ['-vV'], { encoding: 'utf8' }).match(/^host: (.+)$/m)?.[1];
   if (!triple) throw new Error('Could not identify the Rust host target.');
@@ -30,7 +36,7 @@ if (mode === 'start') {
     try {
       await copyFile(sidecar, executable);
       process.exitCode = await run('cargo', ['run', '--locked', '--manifest-path', manifest], {
-        ...process.env,
+        ...nativeEnv,
         ORCHESTRATOR_SIDECAR: executable,
         ORCHESTRATOR_WORKLOG: worklog,
       });

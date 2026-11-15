@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, rename, rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
+import { lockRuntimeDatabase } from './database/runtime-lock.js';
 import { OrchestratorRuntime } from './runtime.js';
 
 async function migrateDesktopData(dataDirectory: string, legacyDirectory: string): Promise<void> {
@@ -38,13 +39,11 @@ async function main(): Promise<void> {
   }
   await migrateDesktopData(dataDirectory, legacyDirectory);
   const token = randomBytes(32).toString('hex');
-  const runtime = new OrchestratorRuntime({
-    databasePath: join(dataDirectory, 'orchestrator.sqlite'),
-    worklogPath,
-    desktopToken: token,
-  });
-
+  const databasePath = resolve(process.env['ORCHESTRATOR_DATABASE_PATH'] ?? join(dataDirectory, 'orchestrator.sqlite'));
+  const unlock = lockRuntimeDatabase(databasePath);
+  let runtime: OrchestratorRuntime | undefined;
   try {
+    runtime = new OrchestratorRuntime({ databasePath, worklogPath, desktopToken: token });
     const baseUrl = await runtime.start();
     process.stdout.write(`${JSON.stringify({ baseUrl, token })}\n`);
     // The parent holds the write end open. EOF also stops the worker after a parent crash.
@@ -54,7 +53,7 @@ async function main(): Promise<void> {
       process.stdin.resume();
     });
   } finally {
-    await runtime.stop();
+    try { await runtime?.stop(); } finally { unlock(); }
   }
 }
 

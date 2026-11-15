@@ -517,6 +517,27 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  async registerExistingFeature(selection: { projectId: number; branchName: string }): Promise<void> {
+    if (this.saving) return;
+    this.saving = true;
+    this.clearError();
+    try {
+      const feature = await firstValueFrom(this.api.createFeature({
+        project_id: selection.projectId,
+        name: selection.branchName,
+        branch_name: selection.branchName,
+      }));
+      this.features = [...this.features, feature];
+      this.openCreateTask(feature.id);
+      await this.refreshBranchMap();
+    } catch (error: unknown) {
+      this.setError(this.errorMessage(error));
+    } finally {
+      this.saving = false;
+      this.changeDetector.markForCheck();
+    }
+  }
+
   async saveFeature(): Promise<void> {
     if (this.featureDraft.project_id === null || this.saving) return;
     this.saving = true;
@@ -1144,6 +1165,11 @@ export class AppComponent implements OnInit, OnDestroy {
   private async restoreWorkerDispatchPreference(): Promise<void> {
     const paused = this.readWorkerDispatchPreference() ?? false;
     try {
+      const health = await firstValueFrom(this.api.getHealth());
+      if (health.sharedDesktop) {
+        this.workerStatus = health.worker;
+        return;
+      }
       const quotaLoopEnabled = this.readQuotaLoopPreference();
       if (typeof this.api.setQuotaLoopEnabled === 'function') {
         await firstValueFrom(this.api.setQuotaLoopEnabled(quotaLoopEnabled));

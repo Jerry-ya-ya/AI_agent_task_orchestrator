@@ -51,7 +51,8 @@ const taskUpdate = z.object({
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one field is required.');
 const featureInput = z.object({
   project_id: z.number().int().positive(),
-  name: z.string().min(1).max(200)
+  name: z.string().min(1).max(200),
+  branch_name: z.string().min(1).max(255).optional(),
 }).strict();
 const branchOrderInput = z.object({
   branch_names: z.array(z.string().min(1).max(255)).max(500)

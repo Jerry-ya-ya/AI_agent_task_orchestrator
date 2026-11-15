@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 
 import {
   CreateProjectInput,
@@ -64,7 +64,12 @@ export class ApiService {
   constructor(private readonly http: HttpClient) {}
 
   getHealth(): Observable<HealthResponse> {
-    return this.http.get<HealthResponse>(`${this.baseUrl}/health`);
+    return this.http.get<HealthResponse>(`${this.baseUrl}/health`, { observe: 'response' }).pipe(
+      map((response) => ({
+        ...response.body!,
+        sharedDesktop: response.headers.get('X-Orchestrator-Shared-Desktop') === '1',
+      })),
+    );
   }
 
   getAgentUsage(force = false): Observable<AgentUsage> {
@@ -119,7 +124,7 @@ export class ApiService {
     return this.http.get<Feature[]>(`${this.baseUrl}/features`);
   }
 
-  createFeature(input: { project_id: number; name: string }): Observable<Feature> {
+  createFeature(input: { project_id: number; name: string; branch_name?: string }): Observable<Feature> {
     return this.http.post<Feature>(`${this.baseUrl}/features`, input);
   }
 

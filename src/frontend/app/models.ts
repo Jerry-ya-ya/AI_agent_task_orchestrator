@@ -183,6 +183,7 @@ export interface WorkerStatus {
 
 export interface HealthResponse {
   ok: boolean;
+  sharedDesktop?: boolean;
   worker: WorkerStatus;
 }
 

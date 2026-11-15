@@ -158,6 +158,7 @@ export interface RetryTaskInput {
 export interface CreateFeatureInput {
   project_id: number;
   name: string;
+  branch_name?: string;
 }
 
 export interface BranchTaskHistory {

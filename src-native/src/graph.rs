@@ -73,8 +73,10 @@ impl GraphView {
             }
         });
         ui.label(
-            RichText::new("Drag the canvas to pan · Scroll to zoom · Use HEAD for branch actions")
-                .color(MUTED),
+            RichText::new(
+                "Drag the canvas to pan · Scroll to zoom · Click HEAD + or … for branch actions",
+            )
+            .color(MUTED),
         );
         let canvas_height = ui.available_height().max(160.0);
         let (rect, response) = ui.allocate_exact_size(
@@ -154,7 +156,7 @@ impl GraphView {
             } else {
                 Color32::from_gray(104)
             };
-            let label_point = label_pos(y);
+            let label_point = label_pos(y) + Vec2::new(32.0, 0.0);
             let branch_label = if lane.is_current {
                 format!("● {}", lane.name)
             } else {
@@ -162,7 +164,33 @@ impl GraphView {
             };
             if rect.contains(label_point) {
                 let label_rect =
-                    Rect::from_min_size(label_point - Vec2::new(1.0, 12.0), Vec2::new(159.0, 24.0));
+                    Rect::from_min_size(label_point - Vec2::new(1.0, 12.0), Vec2::new(127.0, 24.0));
+                let menu_rect = Rect::from_center_size(
+                    label_pos(y) + Vec2::new(12.0, 0.0),
+                    Vec2::new(24.0, 24.0),
+                );
+                let mut menu_ui = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt(("branch-actions", &lane.name))
+                        .max_rect(menu_rect),
+                );
+                menu_ui.set_clip_rect(rect);
+                let menu = menu_ui
+                    .add_sized(menu_rect.size(), egui::Button::new("…"))
+                    .on_hover_text(format!("Actions for {}", lane.name));
+                egui::Popup::menu(&menu).show(|ui| {
+                    lane_menu(
+                        ui,
+                        map,
+                        &lanes,
+                        lane,
+                        index,
+                        protected,
+                        &mut event,
+                        &mut reorder,
+                    );
+                });
+
                 let label_painter = painter.with_clip_rect(label_rect);
                 label_painter.text(
                     label_point,
@@ -280,25 +308,49 @@ impl GraphView {
                 }
             }
             if chart.contains(head) {
-                let hit = node(ui, &lines, head, ("head", &lane.name), color, zoom);
-                caption(&lines, head, "HEAD +", color, zoom);
-                if hit.clicked() {
-                    if let Some(feature) = &lane.feature {
-                        event = Some(GraphEvent::CreateTask(feature.id));
-                    }
+                let available = lane.feature.is_some() || managed_branch(lane);
+                let label = if available { "HEAD +" } else { "HEAD" };
+                let radius = (7.0 * zoom).max(3.0);
+                let hit_rect = Rect::from_center_size(head, Vec2::splat((27.0 * zoom).max(17.0)))
+                    .union(Rect::from_center_size(
+                        head + Vec2::new(0.0, 20.0 * zoom),
+                        Vec2::new(48.0 * zoom.max(0.7), 18.0 * zoom.max(0.7)),
+                    ))
+                    .intersect(chart);
+                let hit = ui.interact(
+                    hit_rect,
+                    ui.scope_id().with(("head", &lane.name)),
+                    if available {
+                        Sense::click()
+                    } else {
+                        Sense::hover()
+                    },
+                );
+                lines.circle(
+                    head,
+                    radius,
+                    if hit.hovered() && available {
+                        color
+                    } else {
+                        CARD
+                    },
+                    Stroke::new(2.0, color),
+                );
+                caption(&lines, head, label, color, zoom);
+                if available {
+                    egui::Popup::menu(&hit).show(|ui| {
+                        lane_menu(
+                            ui,
+                            map,
+                            &lanes,
+                            lane,
+                            index,
+                            protected,
+                            &mut event,
+                            &mut reorder,
+                        );
+                    });
                 }
-                hit.context_menu(|ui| {
-                    lane_menu(
-                        ui,
-                        map,
-                        &lanes,
-                        lane,
-                        index,
-                        protected,
-                        &mut event,
-                        &mut reorder,
-                    )
-                });
             }
         }
         if let Some((from, to)) = reorder {
@@ -365,6 +417,10 @@ fn caption(painter: &egui::Painter, point: Pos2, label: &str, color: Color32, zo
     );
 }
 
+fn managed_branch(lane: &Lane) -> bool {
+    lane.exists && (lane.name.starts_with("feature/") || lane.name.starts_with("agent/"))
+}
+
 fn lane_menu(
     ui: &mut egui::Ui,
     map: &BranchMap,
@@ -379,6 +435,19 @@ fn lane_menu(
         if ui.button("New task").clicked() {
             *event = Some(GraphEvent::CreateTask(feature.id));
             ui.close();
+        }
+        if !lane.tasks.is_empty() {
+            ui.menu_button("Review node", |ui| {
+                for task in lane.tasks.iter().rev() {
+                    if ui.button(format!("#{} {}", task.id, task.title)).clicked() {
+                        *event = Some(GraphEvent::Task(task.id));
+                        ui.close();
+                    }
+                }
+            });
+        } else {
+            ui.add_enabled(false, egui::Button::new("Review node"))
+                .on_disabled_hover_text("This branch has no task checkpoints.");
         }
         if ui
             .add_enabled(
@@ -424,18 +493,35 @@ fn lane_menu(
                 Mutation::delete(format!("/features/{}", feature.id), "Feature deleted")));
             ui.close();
         }
-    } else if lane.exists && ui.button("Delete unconfigured local branch").clicked() {
-        *event = Some(GraphEvent::Confirm(
-            "Delete unconfigured local branch".into(),
-            format!("Delete the local Git ref {}?", lane.name),
-            Mutation {
-                method: "DELETE",
-                path: format!("/projects/{}/unconfigured-branches", map.project.id),
-                body: Some(json!({"branch_name": lane.name})),
-                label: "Local branch deleted".into(),
-            },
-        ));
-        ui.close();
+    } else if managed_branch(lane) {
+        if lane.name.starts_with("feature/") && ui.button("Use as Feature to add tasks").clicked() {
+            *event = Some(GraphEvent::Confirm(
+                "Register existing branch".into(),
+                format!(
+                    "Link {} to a Feature so tasks can be added on this branch?",
+                    lane.name
+                ),
+                Mutation::post(
+                    "/features",
+                    json!({ "project_id": map.project.id, "name": lane.name, "branch_name": lane.name }),
+                    "Feature registered",
+                ),
+            ));
+            ui.close();
+        }
+        if ui.button("Delete unconfigured local branch").clicked() {
+            *event = Some(GraphEvent::Confirm(
+                "Delete unconfigured local branch".into(),
+                format!("Delete the local Git ref {}?", lane.name),
+                Mutation {
+                    method: "DELETE",
+                    path: format!("/projects/{}/unconfigured-branches", map.project.id),
+                    body: Some(json!({"branch_name": lane.name})),
+                    label: "Local branch deleted".into(),
+                },
+            ));
+            ui.close();
+        }
     }
     if ui
         .add_enabled(index > 0, egui::Button::new("Move up"))

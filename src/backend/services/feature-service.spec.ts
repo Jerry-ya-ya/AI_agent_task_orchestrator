@@ -80,6 +80,28 @@ describe('FeatureService', () => {
       .toEqual([secondChineseFeature.branch_name, feature.branch_name, firstChineseFeature.branch_name]);
   });
 
+  it('registers an existing Feature branch without replacing the Git ref', async () => {
+    const projects = new ProjectRepository(database);
+    const features = new FeatureRepository(database);
+    const tasks = new TaskRepository(database, new TaskRunRepository(database));
+    const project = projects.create({ name: 'Existing', repository_path: '/existing', context: '' });
+    const inspectBranches = vi.fn(async () => ({
+      currentBranch: 'main', primaryBranch: 'main', localBranches: ['main', 'feature/existing'],
+    }));
+    const createFeatureBranch = vi.fn();
+    const service = new FeatureService(
+      features, projects, tasks, { inspectBranches, createFeatureBranch } as unknown as GitService,
+    );
+
+    await expect(service.create({
+      project_id: project.id, name: 'Existing', branch_name: 'feature/existing',
+    })).resolves.toMatchObject({ branch_name: 'feature/existing', base_branch: 'main' });
+    expect(createFeatureBranch).not.toHaveBeenCalled();
+    await expect(service.create({
+      project_id: project.id, name: 'Missing', branch_name: 'feature/missing',
+    })).rejects.toThrow('was not found');
+  });
+
   it('generates a stable fallback when normalized branch names collide', () => {
     const generated = createAvailableFeatureBranch('Account settings!', ['FEATURE/account-settings']);
     expect(generated).toMatch(/^feature\/account-settings-[a-f0-9]{8}$/u);

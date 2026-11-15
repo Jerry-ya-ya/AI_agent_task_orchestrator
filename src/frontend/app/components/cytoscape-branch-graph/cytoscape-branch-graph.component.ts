@@ -73,6 +73,7 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
   @Output() taskOpened = new EventEmitter<number>();
   @Output() featureCreationRequested = new EventEmitter<number>();
   @Output() taskCreationRequested = new EventEmitter<number>();
+  @Output() featureRegistrationRequested = new EventEmitter<{ projectId: number; branchName: string }>();
   @Output() branchResetRequested = new EventEmitter<number>();
   @Output() gitBranchDeleteRequested = new EventEmitter<number>();
   @Output() databaseBranchDeleteRequested = new EventEmitter<number>();
@@ -341,6 +342,21 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
           `branch-action-fan branch-action-menu-item${collapsedClass}${missingClass}`, { featureId },
         ));
 
+        const reviewTask = lane.tasks.filter((task) => task.status === 'IN_REVIEW' || task.status === 'REVIEWING').at(-1)
+          ?? lane.tasks.at(-1);
+        const reviewId = `branch:${laneIndex}:action:review`;
+        elements.push(this.node(reviewId, headX + BRANCH_ACTION_GAP + BRANCH_DELETE_ACTION_GAP, y - BRANCH_ACTION_FAN_Y, {
+          label: 'Review',
+          subtitle: reviewTask === undefined ? 'No task checkpoints' : `Task #${reviewTask.id}`,
+          featureId,
+          ...(reviewTask === undefined ? {} : { taskId: reviewTask.id }),
+          color,
+        }, `branch-action-option branch-action-review branch-action-menu-item${collapsedClass}${missingClass}${reviewTask === undefined ? ' branch-action-disabled' : ''}`));
+        elements.push(this.edge(
+          `branch-action-edge:${laneIndex}:review`, pointerId, reviewId, color,
+          `branch-action-fan branch-action-menu-item${collapsedClass}`, { featureId },
+        ));
+
         if (lane.exists) {
           const resetBlocked = this.laneHasProtectedPointerTasks(lane);
           const resetBranchId = `branch:${laneIndex}:action:reset-main`;
@@ -414,6 +430,19 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
           ? ''
           : ' branch-action-collapsed';
         const commonData = { legacyBranchName: lane.name, projectId: this.map.project.id };
+        if (lane.name.startsWith('feature/')) {
+          const registerId = `branch:${laneIndex}:action:register`;
+          elements.push(this.node(registerId, headX + BRANCH_ACTION_GAP, y - BRANCH_ACTION_FAN_Y, {
+            label: '+ Task',
+            subtitle: 'Register this Feature first',
+            color,
+            ...commonData,
+          }, `branch-action-option branch-action-register branch-legacy-action-menu-item${collapsedClass}`));
+          elements.push(this.edge(
+            `branch-action-edge:${laneIndex}:register`, pointerId, registerId, color,
+            `branch-action-fan branch-legacy-action-menu-item${collapsedClass}`, commonData,
+          ));
+        }
         const deleteMenuId = `branch:${laneIndex}:action:delete-legacy`;
         const deleteMenuX = headX + BRANCH_ACTION_GAP;
         elements.push(this.node(deleteMenuId, deleteMenuX, y, {
@@ -516,6 +545,20 @@ export class CytoscapeBranchGraphComponent implements AfterViewInit, OnChanges, 
       if (!Number.isInteger(featureId)) return;
       this.toggleBranchActions(featureId, false);
       this.taskCreationRequested.emit(featureId);
+    });
+    this.graph.on('tap', 'node.branch-action-review', (event) => {
+      const taskId = Number(event.target.data('taskId'));
+      const featureId = Number(event.target.data('featureId'));
+      if (!Number.isInteger(taskId) || taskId <= 0 || !Number.isInteger(featureId)) return;
+      this.toggleBranchActions(featureId, false);
+      this.taskOpened.emit(taskId);
+    });
+    this.graph.on('tap', 'node.branch-action-register', (event) => {
+      const branchName = String(event.target.data('legacyBranchName') ?? '');
+      const projectId = Number(event.target.data('projectId'));
+      if (!branchName.startsWith('feature/') || !Number.isInteger(projectId)) return;
+      this.toggleLegacyBranchActions(branchName, false);
+      this.featureRegistrationRequested.emit({ branchName, projectId });
     });
     this.graph.on('tap', 'node.branch-action-reset', (event) => {
       const featureId = Number(event.target.data('featureId'));
